@@ -737,7 +737,21 @@ gap: 6px;
   const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
   const GOOGLE_MAPS_API_KEY = 'AIzaSyCiblls0PJ8xwc8tZogLVeJ3zMzshbtEQY';
-  const API_BASE_URL = window.LETEC_API_BASE_URL || (window.location.protocol === 'file:' ? 'http://localhost:8000' : '');
+  const API_BASE_URL = window.LETEC_API_BASE_URL || localStorage.getItem('letec_api_base_url') || (window.location.protocol === 'file:' ? 'http://localhost:8000' : '');
+  window.setLeteApiBaseUrl = function(url) {
+    const value = String(url || '').trim();
+    if (!value) {
+      localStorage.removeItem('letec_api_base_url');
+      location.reload();
+      return;
+    }
+    localStorage.setItem('letec_api_base_url', value.replace(/\/$/, ''));
+    location.reload();
+  };
+  window.clearLeteApiBaseUrl = function() {
+    localStorage.removeItem('letec_api_base_url');
+    location.reload();
+  };
     // Fix: usar window.supabase.createClient (não supabase.createClient — evita referência circular)
    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
