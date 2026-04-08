@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Letec · Sistema de Logística v7.8</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Cabinet+Grotesk:wght@400;500;700;800;900&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ═══════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">🔧</div>
+    <div>
+      <div class="logo-text"><span>Letec</span> Log</div>
+      <div class="logo-sub">v7.8 · 2026</div>
+    </div>
+  </div>
+
+  <div class="nav-section-label">Principal</div>
+  <button class="nav-item active" data-nav="dashboard"><span class="ico">📊</span><span>Dashboard</span></button>
+  <button class="nav-item" data-nav="agenda"><span class="ico">📅</span><span>Agenda</span><span class="nav-badge" id="nb-agenda">0</span></button>
+  <button class="nav-item" data-nav="hoje"><span class="ico">🗓</span><span>Hoje</span><span class="nav-badge orange" id="nb-hoje">0</span></button>
+
+  <div class="nav-section-label">Operacional</div>
+  <button class="nav-item" data-nav="roteiro"><span class="ico">📱</span><span>Roteiro do Dia</span><span class="nav-badge" id="nb-roteiro" style="display:none">0</span></button>
+  <button class="nav-item" data-nav="rotas"><span class="ico">🗺</span><span>Rotas & KM</span></button>
+  <button class="nav-item" data-nav="checklist"><span class="ico">✅</span><span>Check List</span></button>
+  <button class="nav-item" data-nav="frota"><span class="ico">🚗</span><span>Frota</span><span class="nav-badge green" id="nb-frota">0</span></button>
+
+  <div class="nav-section-label">Análise</div>
+  <button class="nav-item" data-nav="equipes"><span class="ico">👷</span><span>Equipes</span></button>
+  <button class="nav-item" data-nav="clientes"><span class="ico">🏢</span><span>Clientes</span></button>
+  <button class="nav-item" data-nav="historico"><span class="ico">🗂</span><span>Histórico</span></button>
+
+  <div class="sidebar-footer">
+    <div id="footer-count">415 serviços · Ano inteiro 2026</div>
+    <div id="footer-date" style="color:var(--text4)"></div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══════════════════════════════════ -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-sub" id="page-sub">Visão geral operacional</div>
+    </div>
+    <div class="topbar-sep"></div>
+    <select class="fsel" id="global-mes">
+      <option value="all">Ano inteiro 2026</option>
+      <option value="JAN">Janeiro 2026</option>
+      <option value="FEV">Fevereiro 2026</option>
+      <option value="MAR">Março 2026</option>
+      <option value="ABR">Abril 2026</option>
+      <option value="MAI">Maio 2026</option>
+      <option value="JUN">Junho 2026</option>
+      <option value="JUL">Julho 2026</option>
+      <option value="AGO">Agosto 2026</option>
+      <option value="SET">Setembro 2026</option>
+      <option value="OUT">Outubro 2026</option>
+      <option value="NOV">Novembro 2026</option>
+      <option value="DEZ">Dezembro 2026</option>
+    </select>
+    <button class="topbar-btn" id="btn-changelog">📋 v7.8</button>
+    <span id="sync-indicator" style="font-size:12px;color:var(--text3);margin-left:8px">🟢 Online</span>
+    <button class="topbar-btn primary" id="btn-new-checklist">+ Check List</button>
+    <button class="topbar-btn" id="btn-export-csv">📤 CSV</button>
+  </div>
+
+  <div class="content" id="content">
+    <!-- PÁGINA PLACEHOLDER - será preenchida por JavaScript -->
+    <div id="page-dashboard" class="page active">
+      <!-- ── ZONA 0: Painel de Decisão Rápida ── -->
+      <div id="dash-decisao-rapida" style="margin-bottom:20px"></div>
+
+      <!-- ── ZONA 1: KPIs principais ── -->
+      <div class="grid-kpi mb4" id="dash-kpis"></div>
+
+      <!-- ── ZONA 2: Críticos | Avisos | Capacidade ── -->
+      <div class="grid-3 mb4">
+
+        <!-- Problemas Críticos -->
+        <div class="card" style="border-top:3px solid var(--red)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--red)">🚨 Problemas Críticos</div>
+            <span class="chip chip-red" id="dash-alert-count" style="font-size:11px">0</span>
+          </div>
+          <div id="dash-alerts"></div>
+        </div>
+
+        <!-- Avisos Operacionais -->
+        <div class="card" style="border-top:3px solid var(--orange)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--orange)">⚠️ Avisos Operacionais</div>
+            <span class="chip chip-orange" id="dash-aviso-count" style="font-size:11px">0</span>
+          </div>
+          <div id="dash-avisos"></div>
+        </div>
+
+        <!-- Capacidade da Operação -->
+        <div class="card" style="border-top:3px solid var(--blue)">
+          <div style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--blue2);margin-bottom:14px">📊 Capacidade da Equipe</div>
+          <div id="dash-capacidade"></div>
+        </div>
+      </div>
+
+      <!-- ── ZONA 3: Distribuição + Semana + Horários ── -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px" class="grid-3-resp mb4">
+        <div class="card">
+          <div class="card-label mb2">Serviços por Tipo</div>
+          <div id="dash-equipe-chart"></div>
+        </div>
+        <div class="card">
+          <div class="card-label mb2">Serviços por Semana</div>
+          <div class="bar-wrap" id="dash-bar"></div>
+        </div>
+        <div class="card" style="border-top:2px solid var(--purple)">
+          <div class="card-label mb2">⏰ Picos por Horário</div>
+          <div id="dash-hora-chart"></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:8px">Volume por faixa horária do dia</div>
+        </div>
+      </div>
+
+      <!-- ── ZONA 4: Status + Top Clientes + Frota ── -->
+      <div class="grid-3">
+        <div class="card card-accent">
+          <div class="card-label mb2">Status dos Serviços</div>
+          <div id="dash-status"></div>
+        </div>
+        <div class="card card-green">
+          <div class="card-label mb2">Top 10 Clientes</div>
+          <div id="dash-top-clients"></div>
+        </div>
+        <div class="card">
+          <div class="card-label mb2">Frota & Combustível</div>
+          <div id="dash-frota-km"></div>
+          <div style="height:1px;background:var(--border);margin:12px 0"></div>
+          <div id="dash-fuel"></div>
+        </div>
+      </div>
+
+      <!-- ── ZONA 5: Eficiência de Rotas ── -->
+      <div class="grid-2 mb4">
+        <div class="card">
+          <div class="card-label mb2">📊 Eficiência de Rotas</div>
+          <div id="dash-eficiencia"></div>
+        </div>
+        <div class="card">
+          <div class="card-label mb2">⚡ KM e Combustível</div>
+          <div id="dash-km-stats"></div>
+        </div>
+      </div>
+    </div>
+    <div id="page-agenda" class="page">
+      <div class="toolbar mb3">
+        <div class="flex gap2">
+          <button class="btn btn-sm" id="ag-view-list">📋 Lista</button>
+          <button class="btn btn-sm" id="ag-view-board">📊 Kanban</button>
+          <button class="btn btn-sm" id="ag-view-data">📅 Calendário</button>
+        </div>
+        <div class="flex gap2">
+          <input type="text" class="input" id="ag-search" placeholder="Buscar cliente ou endereço..." style="width:200px">
+          <select class="select" id="ag-tipo">
+            <option value="">Todos os tipos</option>
+          </select>
+          <select class="select" id="ag-status">
+            <option value="">Todos os status</option>
+            <option value="agendado">Agendado</option>
+            <option value="executado">Executado</option>
+            <option value="reagendado">Reagendado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+          <select class="select" id="ag-mes">
+            <option value="">Todos os meses</option>
+          </select>
+        </div>
+      </div>
+      <div id="ag-subtitle" class="text-muted mb3"></div>
+      <div id="ag-count" class="text-muted mb3"></div>
+      <div id="ag-list-view">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Data</th>
+              <th>Dia</th>
+              <th>Tipo</th>
+              <th>Cliente</th>
+              <th>Endereço</th>
+              <th>Horário</th>
+              <th>Equipe</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="agenda-tbody"></tbody>
+        </table>
+      </div>
+      <div id="ag-kanban-view" style="display:none">
+        <div id="ag-kanban-cols" class="grid-4 gap3"></div>
+      </div>
+      <div id="ag-data-view" style="display:none"></div>
+    </div>
+    <div id="page-hoje" class="page">
+      <div class="toolbar mb3">
+        <div class="flex gap2">
+          <button class="btn btn-sm" id="btn-hoje-prev">⬅️ Anterior</button>
+          <button class="btn btn-sm" id="btn-hoje-today">📅 Hoje</button>
+          <button class="btn btn-sm" id="btn-hoje-next">Próximo ➡️</button>
+          <button class="btn btn-primary btn-sm" id="btn-hoje-new">+ Novo Serviço</button>
+        </div>
+        <div class="flex gap2">
+          <input type="date" class="input" id="hoje-date">
+        </div>
+      </div>
+      <div id="hoje-title" class="page-title mb2"></div>
+      <div id="hoje-count" class="text-muted mb3"></div>
+      <div id="hoje-services" class="grid gap2"></div>
+    </div>
+    <div id="page-roteiro" class="page"></div>
+    <div id="page-rotas" class="page"></div>
+    <div id="page-checklist" class="page"></div>
+    <div id="page-frota" class="page"></div>
+    <div id="page-equipes" class="page"></div>
+    <div id="page-clientes" class="page"></div>
+    <div id="page-historico" class="page"></div>
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title" id="modal-title">Detalhes</div>
+    <div id="modal-body"></div>
+    <div class="flex gap2 mt3">
+      <button class="btn btn-ghost btn-sm" id="btn-modal-close">Fechar</button>
+      <button class="btn btn-danger btn-sm" id="modal-del" style="display:none">🗑 Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ROTEIRO WHATSAPP -->
+<div class="modal-bg" id="rot-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title" id="rot-modal-title" style="padding:18px 20px;border-bottom:1px solid var(--border);font-family:var(--display);font-size:15px;font-weight:800">Roteiro WhatsApp</div>
+    <div style="padding:16px 20px;flex:1;overflow-y:auto">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Texto pronto para copiar e colar no WhatsApp da equipe 📱</div>
+      <textarea id="rot-modal-txt" style="width:100%;min-height:360px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:14px;font-family:var(--mono);font-size:12px;color:var(--text);line-height:1.8;resize:vertical;outline:none" readonly></textarea>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px">
+      <button class="btn btn-green" id="btn-rot-copy-modal">📋 Copiar Texto</button>
+      <button class="btn btn-ghost" id="btn-rot-close-modal">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-wrap" id="toasts"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

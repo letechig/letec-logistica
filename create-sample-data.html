@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Sample Services</title>
+</head>
+<body>
+    <h1>Creating Sample Services</h1>
+    <div id="result"></div>
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        const supabase = createClient('https://zqrztixmrpnpehppylyr.supabase.co', 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq');
+
+        const sampleServices = [
+            {
+                id: Date.now() + 1,
+                data: '2026-04-07',
+                cliente: 'Cliente A',
+                endereco: 'Rua A, 123',
+                horario: '08:00',
+                tiposervico: 'Manutenção',
+                tipos: ['Manutenção'],
+                equipe: 'Equipe 1',
+                veiculo: 'Veículo 1',
+                os: 'OS001',
+                observacoes: 'Primeiro serviço de teste',
+                status: 'agendado'
+            },
+            {
+                id: Date.now() + 2,
+                data: '2026-04-08',
+                cliente: 'Cliente B',
+                endereco: 'Rua B, 456',
+                horario: '10:00',
+                tiposervico: 'Instalação',
+                tipos: ['Instalação'],
+                equipe: 'Equipe 2',
+                veiculo: 'Veículo 2',
+                os: 'OS002',
+                observacoes: 'Segundo serviço de teste',
+                status: 'executado'
+            },
+            {
+                id: Date.now() + 3,
+                data: '2026-04-06',
+                cliente: 'Cliente C',
+                endereco: 'Rua C, 789',
+                horario: '14:00',
+                tiposervico: 'Reparo',
+                tipos: ['Reparo'],
+                equipe: 'Equipe 1',
+                veiculo: 'Veículo 1',
+                os: 'OS003',
+                observacoes: 'Terceiro serviço de teste',
+                status: 'agendado'
+            }
+        ];
+
+        async function createTableAndInsert() {
+            try {
+                // First try to insert - this will fail if table doesn't exist
+                const { data, error } = await supabase
+                    .from('services')
+                    .insert(sampleServices);
+
+                if (error) {
+                    if (error.code === 'PGRST116') {
+                        document.getElementById('result').innerHTML = `
+                            <p style="color:red">❌ Tabela 'services' não existe no Supabase.</p>
+                            <p>Execute este SQL no painel do Supabase para criar a tabela:</p>
+                            <pre style="background:#f5f5f5;padding:10px;border-radius:5px;">
+CREATE TABLE services (
+  id BIGINT PRIMARY KEY,
+  data DATE,
+  cliente TEXT,
+  endereco TEXT,
+  horario TEXT,
+  tiposervico TEXT,
+  tipos TEXT[],
+  equipe TEXT,
+  veiculo TEXT,
+  os TEXT,
+  observacoes TEXT,
+  status TEXT DEFAULT 'agendado'
+);
+                            </pre>
+                            <p>Depois recarregue esta página para inserir os dados de teste.</p>
+                        `;
+                    } else {
+                        document.getElementById('result').innerHTML = `<p style="color:red">Erro ao inserir: ${error.message}</p>`;
+                    }
+                } else {
+                    document.getElementById('result').innerHTML = `<p style="color:green">✅ Serviços de teste criados com sucesso!</p>`;
+                }
+            } catch (e) {
+                document.getElementById('result').innerHTML = `<p style="color:red">Erro: ${e.message}</p>`;
+            }
+        }
+
+        createTableAndInsert();
+    </script>
+</body>
+</html>

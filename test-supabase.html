@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase Test</title>
+</head>
+<body>
+    <h1>Testing Supabase Connection</h1>
+    <div id="result"></div>
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        const supabase = createClient('https://zqrztixmrpnpehppylyr.supabase.co', 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq');
+
+        async function testConnection() {
+            try {
+                const { data, error } = await supabase.from('services').select('*').limit(1);
+                if (error) {
+                    document.getElementById('result').innerHTML = `<p style="color:red">Error: ${error.message}</p>`;
+                    if (error.code === 'PGRST116') {
+                        document.getElementById('result').innerHTML += '<p>The services table does not exist. You need to create it in Supabase.</p>';
+                    }
+                } else {
+                    document.getElementById('result').innerHTML = `<p style="color:green">✅ Supabase connected! Services table exists. Found ${data.length} records.</p>`;
+                }
+            } catch (e) {
+                document.getElementById('result').innerHTML = `<p style="color:red">Connection error: ${e.message}</p>`;
+            }
+        }
+
+        testConnection();
+    </script>
+</body>
+</html>
