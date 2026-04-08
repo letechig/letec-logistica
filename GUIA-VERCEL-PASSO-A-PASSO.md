@@ -35,16 +35,17 @@
 
 6. Abra o **PowerShell** em `c:\Users\letec\Downloads\logistica`
 
-7. Cole os comandos que você copiou. Será algo assim:
+7. Cole os comandos que você copiou. Se der erro de identidade, rode antes:
 ```powershell
-git config --global user.name "Seu Nome"
-git config --global user.email "seu@email.com"
+git config user.name "Seu Nome"
+git config user.email "seu-email-do-github@exemplo.com"
 git add .
 git commit -m "Initial commit"
 git branch -M main
-git remote add origin https://github.com/SEU_USUARIO/letec-logistica.git
 git push -u origin main
 ```
+
+Se aparecer "remote origin already exists", nao rode `git remote add origin` novamente.
 
 8. Pressione **Enter** e espere terminar. Pronto! Seu código está no GitHub!
 
@@ -64,10 +65,10 @@ git push -u origin main
 
 1. No Vercel, você verá a página inicial. Clique em **"New Project"**
 2. Em "Import Git Repository", escolha **seu repositório** `letec-logistica`
-3. Quando aparece a página de configuração, **mudança uma coisa importante**:
+3. Quando aparecer a página de configuração, **mude uma coisa importante**:
    - Procure por **"Root Directory"**
-   - Mude de **raiz** para **`refactored`**
-   - (Isso porque seu HTML está em `refactored/index.html`)
+   - Mude para **`frontend`**
+   - (Essa pasta usa o arquivo oficial auditado que foi ajustado: `letec_v76_auditado.html`, publicado como `frontend/index.html`)
 
 4. Deixe tudo o mais como está e clique **"Deploy"**
 
@@ -80,6 +81,12 @@ git push -u origin main
 ---
 
 ## PARTE 3: Configurar o Backend no Render
+
+## Qual frontend esta valendo agora?
+
+- O frontend oficial para deploy e o de [frontend/index.html](frontend/index.html).
+- Esse arquivo foi gerado a partir da versao auditada [letec_v76_auditado.html](letec_v76_auditado.html), que e onde fizemos os ajustes de roteiro e proxy.
+- Arquivos antigos/nao usados foram arquivados em [archive/nao-usados](archive/nao-usados).
 
 ### Por que Render?
 
