@@ -613,6 +613,141 @@ td.bold { color: var(--text); font-weight: 600; }
   .grid-kpi { grid-template-columns:1fr 1fr; }
   .fr-2,.fr-3,.fr-4 { grid-template-columns:1fr; }
 }
+/* ─── MOBILE (≤480px) ─────────────────────────── */
+/* Sidebar overlay + drawer */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 49;
+}
+.sidebar-overlay.open { display: block; }
+/* Hamburger button in topbar */
+.mob-hamburger {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  border: 1px solid var(--border2);
+  border-radius: var(--r2);
+  background: var(--card);
+  cursor: pointer;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+/* Bottom navigation bar */
+.mob-bottom-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: 60px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  z-index: 48;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 4px;
+}
+.mob-nav-item {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px;
+  flex: 1;
+  padding: 8px 2px;
+  border: none; background: none;
+  cursor: pointer;
+  color: var(--text3);
+  font-size: 10px;
+  font-family: var(--body);
+  border-radius: var(--r2);
+  transition: color .15s;
+  position: relative;
+}
+.mob-nav-item .mob-ico { font-size: 20px; line-height: 1; }
+.mob-nav-item.active { color: var(--blue2); }
+.mob-nav-item .mob-badge {
+  position: absolute; top: 4px; right: 10px;
+  background: var(--red); color: white;
+  font-size: 9px; font-family: var(--mono);
+  padding: 0 4px; border-radius: 99px;
+  min-width: 14px; text-align: center;
+  display: none;
+}
+.mob-nav-item .mob-badge.vis { display: block; }
+.mob-nav-item .mob-label { font-size: 9px; line-height: 1; }
+/* Agenda filter collapse */
+.ag-filter-toggle {
+  display: none;
+  align-items: center; gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--border2);
+  border-radius: var(--r2);
+  background: var(--card);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; color: var(--text2);
+  margin-bottom: 8px;
+}
+.ag-filter-fields { transition: max-height .25s ease, opacity .25s; }
+.ag-filter-fields.collapsed { max-height: 0 !important; overflow: hidden; opacity: 0; }
+@media(max-width:480px) {
+  /* Sidebar becomes full drawer */
+  .sidebar {
+    width: 240px !important;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 50;
+    top: 0; bottom: 0;
+  }
+  .sidebar.mob-open { transform: translateX(0); }
+  .logo-text,.logo-sub,.nav-item span:not(.ico),.nav-badge,.nav-section-label,.sidebar-footer { display: flex !important; }
+  .nav-badge { display: flex !important; }
+  .nav-section-label { display: block !important; }
+  .sidebar-footer { display: flex !important; flex-direction: column; }
+  /* Main fills full width */
+  .main { margin-left: 0 !important; padding-bottom: 64px; }
+  /* Topbar adjustments */
+  .mob-hamburger { display: flex; }
+  .topbar { gap: 6px; padding: 0 10px; }
+  .topbar-sep { display: none; }
+  #sync-indicator { display: none !important; }
+  .topbar-btn[onclick*="showChangelog"] { display: none; }
+  .topbar-btn[onclick*="exportCSV"] { display: none; }
+  #page-sub { display: none; }
+  #global-mes { max-width: 130px; font-size: 11px; }
+  .topbar-btn.primary { font-size: 11px; padding: 5px 8px; }
+  .topbar-btn.primary::before { content: "+"; }
+  .topbar-title { font-size: 14px; }
+  /* Bottom nav */
+  .mob-bottom-nav { display: flex; }
+  /* Agenda: filter toggle */
+  .ag-filter-toggle { display: flex; }
+  .ag-filter-fields { max-height: 500px; opacity: 1; }
+  /* Agenda view buttons: compact */
+  #page-agenda .flex.ic.sb { flex-wrap: wrap; gap: 8px; }
+  #page-agenda .flex.gap2 { flex-wrap: wrap; gap: 6px; }
+  /* Tables: horizontal scroll */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 600px; }
+  /* Dashboard KPIs: 1 column */
+  .grid-kpi { grid-template-columns: 1fr !important; }
+  /* Cards: full width */
+  .grid-2,.grid-3,.grid-2-3,.grid-3-2,.grid-3-resp { grid-template-columns: 1fr !important; }
+  .kanban { grid-template-columns: 1fr !important; }
+  .fr-2,.fr-3,.fr-4 { grid-template-columns: 1fr !important; }
+  /* Content padding */
+  .content { padding: 12px 10px; }
+  /* Section title */
+  .section-title { font-size: 16px; }
+  /* Cards */
+  .card { padding: 14px; }
+  /* Filter bar */
+  .filter-bar { flex-wrap: wrap; gap: 6px; }
+  .filter-bar .finput { min-width: 0; width: 100%; }
+  .filter-bar .fsel { min-width: 0; flex: 1; }
+  /* Roteiro cards */
+  .rot-card { padding: 10px; }
+  /* Modal full height */
+  .modal { width: 100% !important; max-width: 100% !important; margin: 0 !important; border-radius: var(--r) var(--r) 0 0 !important; max-height: 90vh !important; }
+  .modal-bg { align-items: flex-end !important; padding: 0 !important; }
+}
 
 /* ─── CALENDÁRIO MENSAL (Agenda · Por Data) ──────────────── */
 .cal-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; }
@@ -904,7 +1039,11 @@ async function carregarTecnicos(){
 <body>
 
 <!-- ═══ SIDEBAR ═══════════════════════════════ -->
-<aside class="sidebar">
+<!-- ═══ SIDEBAR OVERLAY (mobile) ═══════════════ -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="mobCloseSidebar()"></div>
+
+<!-- ═══ SIDEBAR ═══════════════════════════════ -->
+<aside class="sidebar" id="main-sidebar">
   <div class="sidebar-logo">
     <div class="logo-mark">🔧</div>
     <div>
@@ -945,6 +1084,7 @@ async function carregarTecnicos(){
       <div class="topbar-title" id="page-title">Dashboard</div>
       <div class="topbar-sub" id="page-sub">Visão geral operacional</div>
     </div>
+    <button class="mob-hamburger" onclick="mobToggleSidebar()" aria-label="Menu">☰</button>
     <div class="topbar-sep"></div>
     <select class="fsel" id="global-mes" onchange="applyMesFilter()">
       <option value="all">Ano inteiro 2026</option>
@@ -970,6 +1110,27 @@ async function carregarTecnicos(){
   </div>
 
   <div class="content">
+
+<!-- ═══ BOTTOM NAV (mobile) ════════════════════ -->
+<nav class="mob-bottom-nav" id="mob-bottom-nav">
+  <button class="mob-nav-item active" id="mn-dashboard" onclick="mobNav('dashboard',this)">
+    <span class="mob-ico">📊</span><span class="mob-label">Início</span>
+  </button>
+  <button class="mob-nav-item" id="mn-agenda" onclick="mobNav('agenda',this)">
+    <span class="mob-ico">📅</span><span class="mob-label">Agenda</span>
+    <span class="mob-badge" id="mn-badge-agenda"></span>
+  </button>
+  <button class="mob-nav-item" id="mn-hoje" onclick="mobNav('hoje',this)">
+    <span class="mob-ico">🗓</span><span class="mob-label">Hoje</span>
+    <span class="mob-badge" id="mn-badge-hoje"></span>
+  </button>
+  <button class="mob-nav-item" id="mn-roteiro" onclick="mobNav('roteiro',this)">
+    <span class="mob-ico">📱</span><span class="mob-label">Roteiro</span>
+  </button>
+  <button class="mob-nav-item" id="mn-rotas" onclick="mobNav('rotas',this)">
+    <span class="mob-ico">🗺</span><span class="mob-label">Rotas</span>
+  </button>
+</nav>
 
     <!-- ═══ DASHBOARD ═══ -->
     <div id="page-dashboard" class="page active">
@@ -1101,6 +1262,8 @@ async function carregarTecnicos(){
       </div>
       <div class="filter-bar">
         <input class="finput" id="ag-search" placeholder="🔍  Buscar cliente, endereço..." oninput="renderAgenda()">
+        <button class="ag-filter-toggle" id="ag-filter-toggle" onclick="agToggleFilters()">🔽 Filtros <span id="ag-filter-badge"></span></button>
+        <div class="ag-filter-fields" id="ag-filter-fields" style="display:contents">
         <select class="fsel" id="ag-tipo" onchange="renderAgenda()">
           <option value="">Todos os tipos</option>
           <optgroup label="Pragas">
@@ -1147,6 +1310,7 @@ async function carregarTecnicos(){
           <option value="NOV">Novembro</option>
           <option value="DEZ">Dezembro</option>
         </select>
+        </div>
         <div class="text-muted" id="ag-count"></div>
       </div>
 
@@ -7011,6 +7175,75 @@ async function salvarTipoServico() {
 async function toggleTipoServico(id, ativo) { try { const { error } = await supabaseClient.from('service_types').update({ ativo }).eq('id', id); if (error) throw error; toast(ativo ? '✅ Tipo ativado' : '⚠️ Tipo desativado', 'ok'); await carregarTiposServicoConfig(); await carregarTiposServico(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
 async function excluirTipoServico(id) { if (!confirm('Excluir este tipo?')) return; try { const { error } = await supabaseClient.from('service_types').delete().eq('id', id); if (error) throw error; toast('🗑 Tipo excluído', 'ok'); await carregarTiposServicoConfig(); await carregarTiposServico(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
 
+
+// ════════════════════════════════════════════════
+// MOBILE — Navegação, Drawer e Filtros
+// ════════════════════════════════════════════════
+
+function mobIsMobile() { return window.innerWidth <= 480; }
+
+function mobToggleSidebar() {
+  const sb = document.getElementById('main-sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  if (!sb) return;
+  if (sb.classList.contains('mob-open')) { mobCloseSidebar(); }
+  else { sb.classList.add('mob-open'); if(ov) ov.classList.add('open'); }
+}
+function mobCloseSidebar() {
+  const sb = document.getElementById('main-sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  if (sb) sb.classList.remove('mob-open');
+  if (ov) ov.classList.remove('open');
+}
+function mobNav(page, btn) {
+  nav(page, null);
+  document.querySelectorAll('.mob-nav-item').forEach(el => el.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  mobCloseSidebar();
+}
+function mobSyncBottomNav(page) {
+  document.querySelectorAll('.mob-nav-item').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('mn-' + page);
+  if (el) el.classList.add('active');
+  const syncBadge = (srcId, dstId) => {
+    const src = document.getElementById(srcId);
+    const dst = document.getElementById(dstId);
+    if (!src || !dst) return;
+    dst.textContent = src.textContent;
+    dst.classList.toggle('vis', src.textContent !== '0' && src.textContent !== '');
+  };
+  syncBadge('nb-agenda', 'mn-badge-agenda');
+  syncBadge('nb-hoje',   'mn-badge-hoje');
+}
+
+// Patch nav() to sync bottom nav and set mobile Agenda default view
+const _navOriginal = nav;
+nav = function(page, btn) {
+  _navOriginal(page, btn);
+  mobSyncBottomNav(page);
+  if (page === 'agenda' && mobIsMobile()) agSetView('data');
+};
+
+// Filter toggle for Agenda on mobile
+let _agFiltersOpen = false;
+function agToggleFilters() {
+  const fields = document.getElementById('ag-filter-fields');
+  const btn    = document.getElementById('ag-filter-toggle');
+  if (!fields) return;
+  _agFiltersOpen = !_agFiltersOpen;
+  if (_agFiltersOpen) {
+    fields.style.display = 'contents';
+    if (btn) btn.innerHTML = '🔼 Filtros';
+  } else {
+    fields.style.display = 'none';
+    if (btn) btn.innerHTML = '🔽 Filtros';
+  }
+}
+window.addEventListener('resize', () => {
+  const fields = document.getElementById('ag-filter-fields');
+  if (!fields) return;
+  if (!mobIsMobile()) { fields.style.display = 'contents'; _agFiltersOpen = false; }
+});
 
 window.addEventListener('load', async () => {
   console.log('🚀 Letec Log v7.8 - Modo Produção iniciado');
