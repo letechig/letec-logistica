@@ -41,6 +41,45 @@ function buildMatrixUrl(origins, destinations) {
   return `https://maps.googleapis.com/maps/api/distancematrix/json?${search.toString()}`;
 }
 
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeCustomerName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\b(LTDA|EIRELI|MEI|ME|EPP|S\/?A|SA)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function findDuplicateCustomer({ id, nome, telefone }) {
+  const nomeNormalizado = normalizeCustomerName(nome);
+  const telefoneNormalizado = normalizePhone(telefone);
+
+  const { data, error } = await supabase
+    .from('customers')
+    .select('id,nome,telefone,nome_normalizado')
+    .eq('ativo', true);
+
+  if (error) throw error;
+
+  return (data || []).find(item => {
+    const sameRecord = id && Number(item.id) === Number(id);
+    if (sameRecord) return false;
+
+    const itemNomeNorm = item.nome_normalizado || normalizeCustomerName(item.nome);
+    const itemTelNorm = normalizePhone(item.telefone);
+
+    if (nomeNormalizado && itemNomeNorm === nomeNormalizado) return true;
+    if (telefoneNormalizado && itemTelNorm && itemTelNorm === telefoneNormalizado) return true;
+    return false;
+  });
+}
+
 // Middleware
 app.use(helmet());
 app.use(cors(corsOptions));
@@ -153,10 +192,245 @@ app.get('/api/service-types', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('service_types')
-      .select('*');
+      .select('*')
+      .order('nome', { ascending: true });
 
     if (error) throw error;
     res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/service-types', async (req, res) => {
+  try {
+    const { nome, sigla, duracao_minutos, cor, categoria, tipo_atendimento, duracao_contrato_meses } = req.body;
+    if (!nome || !sigla) {
+      return res.status(400).json({ error: 'Nome e sigla são obrigatórios' });
+    }
+
+    const tipoAtendimento = (tipo_atendimento || 'eventual').toLowerCase();
+    if (!['eventual', 'contrato'].includes(tipoAtendimento)) {
+      return res.status(400).json({ error: 'tipo_atendimento deve ser eventual ou contrato' });
+    }
+
+    const duracaoContratoMeses = tipoAtendimento === 'contrato'
+      ? (Number.parseInt(duracao_contrato_meses, 10) || null)
+      : null;
+
+    if (tipoAtendimento === 'contrato' && (!duracaoContratoMeses || duracaoContratoMeses < 1)) {
+      return res.status(400).json({ error: 'Duração do contrato (meses) é obrigatória para atendimento por contrato' });
+    }
+
+    const siglaUp = sigla.toUpperCase().trim();
+    const { data, error } = await supabase
+      .from('service_types')
+      .insert([{
+        nome: nome.trim(),
+        sigla: siglaUp,
+        duracao_minutos: duracao_minutos || 60,
+        cor: cor || '#94a3b8',
+        categoria: categoria || 'geral',
+        tipo_atendimento: tipoAtendimento,
+        duracao_contrato_meses: duracaoContratoMeses,
+        ativo: true
+      }])
+      .select();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Já existe um tipo com este nome ou sigla' });
+      throw error;
+    }
+    res.status(201).json(data[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/service-types/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nome, sigla, duracao_minutos, cor, categoria, tipo_atendimento, duracao_contrato_meses } = req.body;
+    if (!nome || !sigla) {
+      return res.status(400).json({ error: 'Nome e sigla são obrigatórios' });
+    }
+
+    const tipoAtendimento = (tipo_atendimento || 'eventual').toLowerCase();
+    if (!['eventual', 'contrato'].includes(tipoAtendimento)) {
+      return res.status(400).json({ error: 'tipo_atendimento deve ser eventual ou contrato' });
+    }
+
+    const duracaoContratoMeses = tipoAtendimento === 'contrato'
+      ? (Number.parseInt(duracao_contrato_meses, 10) || null)
+      : null;
+
+    if (tipoAtendimento === 'contrato' && (!duracaoContratoMeses || duracaoContratoMeses < 1)) {
+      return res.status(400).json({ error: 'Duração do contrato (meses) é obrigatória para atendimento por contrato' });
+    }
+
+    const { data, error } = await supabase
+      .from('service_types')
+      .update({
+        nome: nome.trim(),
+        sigla: sigla.toUpperCase().trim(),
+        duracao_minutos: duracao_minutos || 60,
+        cor: cor || '#94a3b8',
+        categoria: categoria || 'geral',
+        tipo_atendimento: tipoAtendimento,
+        duracao_contrato_meses: duracaoContratoMeses
+      })
+      .eq('id', id)
+      .select();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Já existe um tipo com este nome ou sigla' });
+      throw error;
+    }
+    if (!data.length) return res.status(404).json({ error: 'Tipo não encontrado' });
+    res.json(data[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/service-types/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from('service_types').delete().eq('id', id);
+    if (error) throw error;
+    res.json({ message: 'Tipo removido com sucesso' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// CUSTOMERS CRUD
+app.get('/api/customers', async (req, res) => {
+  try {
+    const { search } = req.query;
+    let query = supabase
+      .from('customers')
+      .select('*')
+      .eq('ativo', true)
+      .order('nome', { ascending: true });
+    
+    if (search) {
+      query = query.ilike('nome', `%${search}%`);
+    }
+    
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/customers', async (req, res) => {
+  try {
+    const { nome, telefone, endereco, tipo, cpf_cnpj, observacoes } = req.body;
+    const telefoneNormalizado = normalizePhone(telefone);
+    const nomeNormalizado = normalizeCustomerName(nome);
+    
+    if (!nome || !telefoneNormalizado) {
+      return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
+    }
+
+    const duplicate = await findDuplicateCustomer({ nome, telefone: telefoneNormalizado });
+    if (duplicate) {
+      return res.status(409).json({
+        error: `Cliente potencialmente duplicado: ${duplicate.nome}`,
+        duplicateId: duplicate.id
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('customers')
+      .insert([{
+        nome,
+        nome_normalizado: nomeNormalizado,
+        telefone: telefoneNormalizado,
+        endereco,
+        tipo: tipo || 'PF',
+        cpf_cnpj,
+        observacoes,
+        ativo: true
+      }])
+      .select();
+
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Telefone já cadastrado. Verifique se o cliente já existe.' });
+      }
+      throw error;
+    }
+    
+    res.status(201).json(data[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/customers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nome, telefone, endereco, tipo, cpf_cnpj, observacoes } = req.body;
+    const telefoneNormalizado = normalizePhone(telefone);
+    const nomeNormalizado = normalizeCustomerName(nome);
+
+    if (!nome || !telefoneNormalizado) {
+      return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
+    }
+
+    const duplicate = await findDuplicateCustomer({ id, nome, telefone: telefoneNormalizado });
+    if (duplicate) {
+      return res.status(409).json({
+        error: `Cliente potencialmente duplicado: ${duplicate.nome}`,
+        duplicateId: duplicate.id
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('customers')
+      .update({
+        nome,
+        nome_normalizado: nomeNormalizado,
+        telefone: telefoneNormalizado,
+        endereco,
+        tipo,
+        cpf_cnpj,
+        observacoes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', parseInt(id))
+      .select();
+
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Telefone já cadastrado por outro cliente' });
+      }
+      throw error;
+    }
+    if (!data.length) return res.status(404).json({ error: 'Cliente não encontrado' });
+    
+    res.json(data[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/customers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .update({ ativo: false, updated_at: new Date().toISOString() })
+      .eq('id', parseInt(id))
+      .select();
+
+    if (error) throw error;
+    if (!data.length) return res.status(404).json({ error: 'Cliente não encontrado' });
+    
+    res.json({ message: 'Cliente removido com sucesso' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
