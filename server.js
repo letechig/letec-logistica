@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
@@ -18,8 +19,28 @@ const corsOptions = {
     if (!allowedOrigins.length) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error(`Origin not allowed by CORS: ${origin}`));
-  }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
 };
+
+// Rate limiting middleware
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 100,                   // limit each IP to 100 requests per windowMs
+  message: 'Muitas requisições deste endereço IP, tente novamente mais tarde',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/api/health'  // Allow health checks
+});
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 30,                    // limit each IP to 30 requests for write operations
+  message: 'Muitas requisições de escrita, tente novamente em alguns minutos',
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 function parseMatrixLocations(value) {
   return String(value || '')
@@ -80,10 +101,37 @@ async function findDuplicateCustomer({ id, nome, telefone }) {
   });
 }
 
-// Middleware
-app.use(helmet());
+// Middleware - ORDER IS CRITICAL FOR SECURITY
+// 1. Security headers first
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "maps.googleapis.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", String(process.env.SUPABASE_URL || '')],
+      frameSrc: ["maps.google.com"]
+    }
+  },
+  strictTransportSecurity: {
+    maxAge: 31536000,  // 1 year
+    includeSubDomains: true,
+    preload: true
+  },
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: { policy: 'no-referrer' }
+}));
+
+// 2. CORS policies
 app.use(cors(corsOptions));
-app.use(express.json());
+
+// 3. Body parsing
+app.use(express.json({ limit: '1mb' }));
+
+// 4. Global rate limiting (applies to all routes except /api/health)
+app.use(globalLimiter);
 
 // Supabase client
 const supabase = createClient(
@@ -202,7 +250,7 @@ app.get('/api/service-types', async (req, res) => {
   }
 });
 
-app.post('/api/service-types', async (req, res) => {
+app.post('/api/service-types', strictLimiter, async (req, res) => {
   try {
     const { nome, sigla, duracao_minutos, cor, categoria, tipo_atendimento, duracao_contrato_meses } = req.body;
     if (!nome || !sigla) {
@@ -242,11 +290,12 @@ app.post('/api/service-types', async (req, res) => {
     }
     res.status(201).json(data[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[POST /api/service-types] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao criar tipo de serviço' });
   }
 });
 
-app.put('/api/service-types/:id', async (req, res) => {
+app.put('/api/service-types/:id', strictLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { nome, sigla, duracao_minutos, cor, categoria, tipo_atendimento, duracao_contrato_meses } = req.body;
@@ -287,18 +336,20 @@ app.put('/api/service-types/:id', async (req, res) => {
     if (!data.length) return res.status(404).json({ error: 'Tipo não encontrado' });
     res.json(data[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[PUT /api/service-types/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao atualizar tipo de serviço' });
   }
 });
 
-app.delete('/api/service-types/:id', async (req, res) => {
+app.delete('/api/service-types/:id', strictLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { error } = await supabase.from('service_types').delete().eq('id', id);
     if (error) throw error;
     res.json({ message: 'Tipo removido com sucesso' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[DELETE /api/service-types/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao remover tipo de serviço' });
   }
 });
 
@@ -312,19 +363,22 @@ app.get('/api/customers', async (req, res) => {
       .eq('ativo', true)
       .order('nome', { ascending: true });
     
-    if (search) {
-      query = query.ilike('nome', `%${search}%`);
+    if (search && typeof search === 'string') {
+      // Sanitize search input to prevent injection
+      const safeSearch = search.trim().substring(0, 100);
+      query = query.ilike('nome', `%${safeSearch}%`);
     }
     
     const { data, error } = await query;
     if (error) throw error;
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[GET /api/customers] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar clientes' });
   }
 });
 
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', strictLimiter, async (req, res) => {
   try {
     const { nome, telefone, endereco, tipo, cpf_cnpj, observacoes } = req.body;
     const telefoneNormalizado = normalizePhone(telefone);
@@ -345,10 +399,10 @@ app.post('/api/customers', async (req, res) => {
     const { data, error } = await supabase
       .from('customers')
       .insert([{
-        nome,
+        nome: nome.trim(),
         nome_normalizado: nomeNormalizado,
         telefone: telefoneNormalizado,
-        endereco,
+        endereco: endereco ? endereco.trim() : null,
         tipo: tipo || 'PF',
         cpf_cnpj,
         observacoes,
@@ -365,11 +419,12 @@ app.post('/api/customers', async (req, res) => {
     
     res.status(201).json(data[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[POST /api/customers] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao criar cliente' });
   }
 });
 
-app.put('/api/customers/:id', async (req, res) => {
+app.put('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { nome, telefone, endereco, tipo, cpf_cnpj, observacoes } = req.body;
@@ -391,16 +446,16 @@ app.put('/api/customers/:id', async (req, res) => {
     const { data, error } = await supabase
       .from('customers')
       .update({
-        nome,
+        nome: nome.trim(),
         nome_normalizado: nomeNormalizado,
         telefone: telefoneNormalizado,
-        endereco,
+        endereco: endereco ? endereco.trim() : null,
         tipo,
         cpf_cnpj,
         observacoes,
         updated_at: new Date().toISOString()
       })
-      .eq('id', parseInt(id))
+      .eq('id', parseInt(id, 10))
       .select();
 
     if (error) {
@@ -413,18 +468,19 @@ app.put('/api/customers/:id', async (req, res) => {
     
     res.json(data[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[PUT /api/customers/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao atualizar cliente' });
   }
 });
 
-app.delete('/api/customers/:id', async (req, res) => {
+app.delete('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     
     const { data, error } = await supabase
       .from('customers')
       .update({ ativo: false, updated_at: new Date().toISOString() })
-      .eq('id', parseInt(id))
+      .eq('id', parseInt(id, 10))
       .select();
 
     if (error) throw error;
@@ -432,19 +488,36 @@ app.delete('/api/customers/:id', async (req, res) => {
     
     res.json({ message: 'Cliente removido com sucesso' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[DELETE /api/customers/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao remover cliente' });
   }
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  if (err.message && err.message.startsWith('Origin not allowed by CORS:')) {
-    return res.status(403).json({ error: err.message });
+  console.error('[Error]', err.message || err);
+  
+  // Rate limit errors
+  if (err.status === 429) {
+    return res.status(429).json({ error: 'Muitas requisições. Tente novamente mais tarde.' });
   }
-  res.status(500).json({ error: 'Something went wrong!' });
+  
+  // CORS errors
+  if (err.message && err.message.startsWith('Origin not allowed by CORS:')) {
+    return res.status(403).json({ error: 'Origem não autorizada' });
+  }
+  
+  // Default error - never leak stack traces in production
+  res.status(err.status || 500).json({ 
+    error: process.env.NODE_ENV === 'production' 
+      ? 'Erro interno do servidor' 
+      : err.message 
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`[Server] Letec Logistics Backend running on port ${PORT}`);
+  console.log(`[Security] Helmet.js enabled with CSP and HSTS`);
+  console.log(`[Limits] Global: 100 req/15min | Write: 30 req/15min`);
+  console.log(`[CORS] Allowed origins: ${allowedOrigins.length ? allowedOrigins.join(', ') : 'All (development mode)'}`);
 });

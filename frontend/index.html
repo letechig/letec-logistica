@@ -870,6 +870,92 @@ gap: 6px;
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+  // ═════════════════════════════════════════════════════════════════════════════
+  // 🔒 XSS PROTECTION: Sanitization and Safe DOM methods
+  // ═════════════════════════════════════════════════════════════════════════════
+  
+  /**
+   * Escapes HTML special characters to prevent XSS attacks
+   * @param {string} unsafe - User input string
+   * @returns {string} Escaped HTML-safe string
+   */
+  window.sanitizeHtml = function(unsafe) {
+    if (!unsafe) return '';
+    return String(unsafe)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;')
+      .replace(/\//g, '&#x2F;');
+  };
+
+  /**
+   * Safe method to set text content (prevents XSS)
+   * @param {Element} el - DOM element
+   * @param {string} text - Text content (will be automatically escaped)
+   */
+  window.setTextSafe = function(el, text) {
+    if (!el) return;
+    el.textContent = text;  // textContent automatically escapes
+  };
+
+  /**
+   * Safe method to set HTML with sanitized content
+   * @param {Element} el - DOM element
+   * @param {string} html - HTML string (will be sanitized)
+   */
+  window.setHtmlSafe = function(el, html) {
+    if (!el) return;
+    const temp = document.createElement('div');
+    temp.innerHTML = html;  // Parse HTML
+    // Remove any script tags and onclick handlers
+    const scripts = temp.querySelectorAll('script');
+    scripts.forEach(s => s.remove());
+    temp.querySelectorAll('[onclick]').forEach(el => el.removeAttribute('onclick'));
+    el.innerHTML = temp.innerHTML;
+  };
+
+  /**
+   * Safe method to set attribute with validation
+   * @param {Element} el - DOM element
+   * @param {string} attr - Attribute name
+   * @param {string} value - Attribute value
+   */
+  window.setAttrSafe = function(el, attr, value) {
+    if (!el) return;
+    // Block dangerous attributes
+    if (['onclick', 'onerror', 'onload', 'onmouseover'].includes(attr.toLowerCase())) {
+      console.warn(`[Security] Blocked dangerous attribute: ${attr}`);
+      return;
+    }
+    el.setAttribute(attr, String(value || ''));
+  };
+
+  /**
+   * Create safe text node (prevents XSS)
+   * @param {string} text - Text content
+   * @returns {Text} Text node
+   */
+  window.createTextNodeSafe = function(text) {
+    return document.createTextNode(text);
+  };
+
+  /**
+   * Validate URL to prevent javascript: and data: schemes
+   * @param {string} url - URL to validate
+   * @returns {string} Safe URL or empty string
+   */
+  window.getUrlSafe = function(url) {
+    if (!url) return '';
+    const str = String(url).trim();
+    if (str.startsWith('javascript:') || str.startsWith('data:')) {
+      console.warn(`[Security] Blocked dangerous URL: ${str.substring(0, 20)}...`);
+      return '';
+    }
+    return str;
+  };
+
   const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
   const GOOGLE_MAPS_API_KEY = 'AIzaSyCiblls0PJ8xwc8tZogLVeJ3zMzshbtEQY';
