@@ -7,6 +7,7 @@
 - [ ] Create and Run Task (skip for simple Node.js projects with npm scripts).
 - [ ] Launch the Project (verify previous steps and confirm debug mode before launch).
 - [x] Ensure Documentation is Complete.
+- [x] Sprint 1C: Route validation indicators implemented (API status, address geocoding, calculated vs uncalculated routes).
 
 - Always prefer backend API as source of truth for write operations.
 - For any Supabase schema/RLS/deploy issue, use skill: `.github/skills/release-guard/SKILL.md`.

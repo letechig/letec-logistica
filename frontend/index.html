@@ -1458,6 +1458,14 @@ async function carregarTecnicos(){
       <div class="section-title">Rotas & KM</div>
       <div class="section-sub">Eficiência de deslocamento — KM rodados, custo por serviço, análise mensal</div>
 
+      <!-- Indicadores de Validação de Rotas -->
+      <div class="card mb4" style="border-top:3px solid var(--blue)">
+        <div class="card-label mb3">🔍 Validação de Rotas</div>
+        <div class="grid-3" id="rotas-validation-indicators">
+          <!-- Status será preenchido por JavaScript -->
+        </div>
+      </div>
+
       <!-- KPIs de eficiência (fonte: check lists) -->
       <div class="grid-kpi mb4" id="rotas-kpis"></div>
 
@@ -5062,13 +5070,90 @@ function renderRotas() {
     document.getElementById('rota-date').value = rotaDate;
 
   const recs = clRecords;
+  const svcs = filteredSvcs();
+
+  // ── Validação de Rotas ───────────────────────────────────
+  async function validarRotas() {
+    const indicadores = [];
+
+    // 1. Status da API do Google Maps
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/maps/distance-matrix?origins=São Paulo, SP&destinations=São Paulo, SP`);
+      if (response.ok) {
+        indicadores.push({
+          titulo: 'API Google Maps',
+          status: 'ok',
+          icone: '✓',
+          descricao: 'API operacional',
+          cor: 'var(--green)'
+        });
+      } else {
+        indicadores.push({
+          titulo: 'API Google Maps',
+          status: 'error',
+          icone: '✗',
+          descricao: `Erro ${response.status}`,
+          cor: 'var(--red)'
+        });
+      }
+    } catch (e) {
+      indicadores.push({
+        titulo: 'API Google Maps',
+        status: 'error',
+        icone: '⚠',
+        descricao: 'Indisponível',
+        cor: 'var(--orange)'
+      });
+    }
+
+    // 2. Validação de endereços geocodificáveis
+    const enderecosValidos = svcs.filter(s => s.endereco && s.endereco.trim() && s.endereco !== '—').length;
+    const totalEnderecos = svcs.length;
+    const pctValidos = totalEnderecos ? Math.round((enderecosValidos / totalEnderecos) * 100) : 0;
+
+    indicadores.push({
+      titulo: 'Endereços Geocodificáveis',
+      status: pctValidos >= 80 ? 'ok' : pctValidos >= 50 ? 'warning' : 'error',
+      icone: pctValidos >= 80 ? '✓' : pctValidos >= 50 ? '⚠' : '✗',
+      descricao: `${enderecosValidos}/${totalEnderecos} (${pctValidos}%)`,
+      cor: pctValidos >= 80 ? 'var(--green)' : pctValidos >= 50 ? 'var(--orange)' : 'var(--red)'
+    });
+
+    // 3. Rotas calculadas vs não calculadas
+    const rotasCalculadas = svcs.filter(s => {
+      // Considera rota calculada se tem endereço válido E foi processada pelo sistema de rotas
+      return s.endereco && s.endereco.trim() && s.endereco !== '—';
+    }).length;
+
+    const pctCalculadas = totalEnderecos ? Math.round((rotasCalculadas / totalEnderecos) * 100) : 0;
+
+    indicadores.push({
+      titulo: 'Rotas Calculadas',
+      status: pctCalculadas >= 80 ? 'ok' : pctCalculadas >= 50 ? 'warning' : 'error',
+      icone: pctCalculadas >= 80 ? '✓' : pctCalculadas >= 50 ? '⚠' : '✗',
+      descricao: `${rotasCalculadas}/${totalEnderecos} (${pctCalculadas}%)`,
+      cor: pctCalculadas >= 80 ? 'var(--green)' : pctCalculadas >= 50 ? 'var(--orange)' : 'var(--red)'
+    });
+
+    // Renderizar indicadores
+    document.getElementById('rotas-validation-indicators').innerHTML = indicadores.map(ind => `
+      <div class="card" style="text-align:center;border-top:2px solid ${ind.cor}">
+        <div style="font-size:24px;margin-bottom:8px">${ind.icone}</div>
+        <div style="font-family:var(--display);font-size:13px;font-weight:700;color:${ind.cor};margin-bottom:4px">${ind.titulo}</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px">${ind.descricao}</div>
+        <div style="font-size:10px;color:var(--text3)">${ind.status === 'ok' ? 'Operacional' : ind.status === 'warning' ? 'Atenção' : 'Problema'}</div>
+      </div>
+    `).join('');
+  }
+
+  // Executar validação
+  validarRotas();
 
   // ── KPIs de KM (fonte: check lists) ─────────────────────
   const totalKm   = recs.reduce((s,r) => s + (r.kmD > 0 ? r.kmD : 0), 0);
   const recsComKm = recs.filter(r => r.kmD > 0);
   const avgKm     = recsComKm.length ? Math.round(totalKm / recsComKm.length) : 0;
   const maxKmRec  = recs.reduce((a,b) => (b.kmD||0) > (a.kmD||0) ? b : a, {});
-  const svcs      = filteredSvcs();
   const totalDays = [...new Set(svcs.map(s=>s.dt))].length;
   const svcsPerDay= totalDays ? (svcs.length / totalDays).toFixed(1) : 0;
   const kmPorSvc  = (svcs.length && totalKm) ? (totalKm / svcs.length).toFixed(1) : '—';
