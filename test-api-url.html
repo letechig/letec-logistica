@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste API_BASE_URL</title>
+</head>
+<body>
+    <h1>Teste da Configuração API_BASE_URL</h1>
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+
+        function log(msg, success = true) {
+            const div = document.createElement('div');
+            div.innerHTML = (success ? '✅' : '❌') + ' ' + msg;
+            div.style.color = success ? 'green' : 'red';
+            div.style.margin = '5px';
+            results.appendChild(div);
+        }
+
+        // Teste da configuração API_BASE_URL
+        const API_BASE_URL = window.LETEC_API_BASE_URL || localStorage.getItem('letec_api_base_url') || (window.location.protocol === 'file:' ? 'http://localhost:8000' : window.location.origin);
+
+        log(`API_BASE_URL: "${API_BASE_URL}"`);
+        log(`window.location.origin: "${window.location.origin}"`);
+        log(`window.location.protocol: "${window.location.protocol}"`);
+
+        // Teste de construção de URL
+        try {
+            const url = new URL(`${API_BASE_URL}/api/customers`);
+            log(`URL construída com sucesso: ${url.href}`, true);
+        } catch (error) {
+            log(`Erro na construção da URL: ${error.message}`, false);
+        }
+
+        // Teste de fetch
+        async function testFetch() {
+            try {
+                log('Testando fetch para /api/customers...');
+                const response = await fetch(`${API_BASE_URL}/api/customers`);
+                log(`Resposta: ${response.status} ${response.statusText}`, response.ok);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`Dados recebidos: ${Array.isArray(data) ? data.length + ' clientes' : 'Objeto'}`, true);
+                }
+            } catch (error) {
+                log(`Erro no fetch: ${error.message}`, false);
+            }
+        }
+
+        // Executar teste após um delay
+        setTimeout(testFetch, 500);
+    </script>
+</body>
+</html>

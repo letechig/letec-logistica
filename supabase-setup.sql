@@ -138,6 +138,23 @@ CREATE TABLE IF NOT EXISTS customers (
   nome_normalizado TEXT,
   telefone         TEXT,
   endereco         TEXT,
+  endereco_completo TEXT,
+  rua              TEXT,
+  numero           TEXT,
+  bairro           TEXT,
+  cidade           TEXT,
+  complemento      TEXT,
+  referencia       TEXT,
+  latitude         DECIMAL(10,8),
+  longitude        DECIMAL(11,8),
+  tipo_local       TEXT,
+  restricoes_operacionais TEXT,
+  nivel_urgencia_padrao TEXT DEFAULT 'normal' CHECK (nivel_urgencia_padrao IN ('normal', 'urgente', 'crítico')),
+  observacoes_operacionais TEXT,
+  cliente_recorrente BOOLEAN DEFAULT false,
+  periodicidade    TEXT CHECK (periodicidade IN ('semanal', 'quinzenal', 'mensal', 'bimestral', 'trimestral', 'semestral', 'anual')),
+  data_ultimo_servico TIMESTAMP WITH TIME ZONE,
+  categoria        TEXT DEFAULT 'eventual' CHECK (categoria IN ('contrato', 'eventual')),
   tipo             TEXT DEFAULT 'PF',
   cpf_cnpj         TEXT,
   ativo            BOOLEAN DEFAULT true,
@@ -149,6 +166,15 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE INDEX IF NOT EXISTS idx_customers_nome      ON customers(LOWER(nome));
 CREATE INDEX IF NOT EXISTS idx_customers_nome_norm ON customers(nome_normalizado);
+CREATE INDEX IF NOT EXISTS idx_customers_categoria ON customers(categoria);
+CREATE INDEX IF NOT EXISTS idx_customers_tipo_local ON customers(tipo_local);
+CREATE INDEX IF NOT EXISTS idx_customers_bairro    ON customers(bairro);
+CREATE INDEX IF NOT EXISTS idx_customers_urgencia  ON customers(nivel_urgencia_padrao);
+CREATE INDEX IF NOT EXISTS idx_customers_ativo     ON customers(ativo);
+
+-- Migração: atualizar registros existentes com valores padrão
+UPDATE customers SET categoria = 'eventual' WHERE categoria IS NULL;
+UPDATE customers SET tipo = 'PF' WHERE tipo IS NULL OR tipo = '';
 
 -- ─── 5. Migração: importar clientes únicos de services ───────────────
 INSERT INTO customers (nome, nome_normalizado, endereco, tipo, observacoes)

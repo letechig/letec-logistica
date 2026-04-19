@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
@@ -77,6 +78,23 @@ function normalizeCustomerName(value) {
     .trim();
 }
 
+function buildCustomerAddress({ rua, numero, bairro, cidade, complemento, referencia }) {
+  const parts = [];
+  if (rua) parts.push(String(rua).trim());
+  if (numero) parts.push(String(numero).trim());
+  const main = parts.filter(Boolean).join(', ');
+  const secondary = [];
+  if (bairro) secondary.push(String(bairro).trim());
+  if (cidade) secondary.push(String(cidade).trim());
+  let address = main;
+  if (secondary.length) {
+    address += (address ? ' - ' : '') + secondary.join(' - ');
+  }
+  if (complemento) address += ` / ${String(complemento).trim()}`;
+  if (referencia) address += ` / ${String(referencia).trim()}`;
+  return address.trim() || null;
+}
+
 async function findDuplicateCustomer({ id, nome, telefone }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
@@ -107,11 +125,20 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "maps.googleapis.com"],
+      scriptSrc: ["'self'", "maps.googleapis.com", "cdn.jsdelivr.net", "'unsafe-inline'"],
+      scriptSrcElem: ["'self'", "maps.googleapis.com", "cdn.jsdelivr.net", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'", "'unsafe-hashes'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrcElem: ["'self'", "'unsafe-inline'", "https:", "fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", String(process.env.SUPABASE_URL || '')],
-      frameSrc: ["maps.google.com"]
+      fontSrc: ["'self'", "https:", "data:", "fonts.gstatic.com"],
+      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", "https://zqrztixmrpnpehppylyr.supabase.co", "https://cdn.jsdelivr.net"],
+      frameSrc: ["maps.google.com"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: []
     }
   },
   strictTransportSecurity: {
@@ -146,6 +173,11 @@ app.get('/api/health', (req, res) => {
     message: 'Letec Logistics Backend is running',
     mapsProxy: !!process.env.GOOGLE_MAPS_API_KEY
   });
+});
+
+// Serve frontend
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
 });
 
 app.get('/api/maps/distance-matrix', async (req, res) => {
@@ -356,7 +388,7 @@ app.delete('/api/service-types/:id', strictLimiter, async (req, res) => {
 // CUSTOMERS CRUD
 app.get('/api/customers', async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, tipo_local, bairro, nivel_urgencia_padrao, cliente_recorrente } = req.query;
     let query = supabase
       .from('customers')
       .select('*')
@@ -364,9 +396,16 @@ app.get('/api/customers', async (req, res) => {
       .order('nome', { ascending: true });
     
     if (search && typeof search === 'string') {
-      // Sanitize search input to prevent injection
       const safeSearch = search.trim().substring(0, 100);
-      query = query.ilike('nome', `%${safeSearch}%`);
+      query = query.or(
+        `nome.ilike.%${safeSearch}%,telefone.ilike.%${safeSearch}%,endereco.ilike.%${safeSearch}%,bairro.ilike.%${safeSearch}%,tipo_local.ilike.%${safeSearch}%`
+      );
+    }
+    if (tipo_local) query = query.eq('tipo_local', tipo_local);
+    if (bairro) query = query.ilike('bairro', `%${String(bairro).trim()}%`);
+    if (nivel_urgencia_padrao) query = query.eq('nivel_urgencia_padrao', nivel_urgencia_padrao);
+    if (cliente_recorrente !== undefined) {
+      query = query.eq('cliente_recorrente', String(cliente_recorrente) === 'true');
     }
     
     const { data, error } = await query;
@@ -380,12 +419,50 @@ app.get('/api/customers', async (req, res) => {
 
 app.post('/api/customers', strictLimiter, async (req, res) => {
   try {
-    const { nome, telefone, endereco, tipo, cpf_cnpj, observacoes } = req.body;
+    const {
+      nome,
+      telefone,
+      endereco,
+      endereco_completo,
+      latitude,
+      longitude,
+      categoria,
+      periodicidade,
+      tipo,
+      cpf_cnpj,
+      observacoes,
+      tipo_local,
+      restricoes_operacionais,
+      nivel_urgencia_padrao,
+      observacoes_operacionais,
+      rua,
+      numero,
+      bairro,
+      cidade,
+      complemento,
+      referencia,
+      cliente_recorrente,
+      data_ultimo_servico
+    } = req.body;
+
     const telefoneNormalizado = normalizePhone(telefone);
     const nomeNormalizado = normalizeCustomerName(nome);
-    
+    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, complemento, referencia });
+    const enderecoFinal = endereco ? endereco.trim() : enderecoEstruturado;
+    const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
+    const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
+    const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
+
     if (!nome || !telefoneNormalizado) {
       return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
+    }
+
+    if (categoria === 'contrato' && !periodicidade) {
+      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes de contrato' });
+    }
+
+    if (clienteRecorrente && !periodicidade) {
+      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes recorrentes' });
     }
 
     const duplicate = await findDuplicateCustomer({ nome, telefone: telefoneNormalizado });
@@ -402,7 +479,23 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
         nome: nome.trim(),
         nome_normalizado: nomeNormalizado,
         telefone: telefoneNormalizado,
-        endereco: endereco ? endereco.trim() : null,
+        endereco: enderecoFinal,
+        endereco_completo: enderecoCompletoFinal,
+        rua: rua ? rua.trim() : null,
+        numero: numero ? String(numero).trim() : null,
+        bairro: bairro ? bairro.trim() : null,
+        cidade: cidade ? cidade.trim() : null,
+        complemento: complemento ? complemento.trim() : null,
+        referencia: referencia ? referencia.trim() : null,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
+        tipo_local: tipo_local ? tipo_local.trim() : null,
+        restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
+        nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
+        observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
+        cliente_recorrente: clienteRecorrente,
+        periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
+        data_ultimo_servico: dataUltimoServicoISO,
         tipo: tipo || 'PF',
         cpf_cnpj,
         observacoes,
@@ -427,12 +520,50 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
 app.put('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
     const { id } = req.params;
-    const { nome, telefone, endereco, tipo, cpf_cnpj, observacoes } = req.body;
+    const {
+      nome,
+      telefone,
+      endereco,
+      endereco_completo,
+      latitude,
+      longitude,
+      categoria,
+      periodicidade,
+      tipo,
+      cpf_cnpj,
+      observacoes,
+      tipo_local,
+      restricoes_operacionais,
+      nivel_urgencia_padrao,
+      observacoes_operacionais,
+      rua,
+      numero,
+      bairro,
+      cidade,
+      complemento,
+      referencia,
+      cliente_recorrente,
+      data_ultimo_servico
+    } = req.body;
+
     const telefoneNormalizado = normalizePhone(telefone);
     const nomeNormalizado = normalizeCustomerName(nome);
+    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, complemento, referencia });
+    const enderecoFinal = endereco ? endereco.trim() : enderecoEstruturado;
+    const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
+    const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
+    const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
 
     if (!nome || !telefoneNormalizado) {
       return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
+    }
+
+    if (categoria === 'contrato' && !periodicidade) {
+      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes de contrato' });
+    }
+
+    if (clienteRecorrente && !periodicidade) {
+      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes recorrentes' });
     }
 
     const duplicate = await findDuplicateCustomer({ id, nome, telefone: telefoneNormalizado });
@@ -449,7 +580,24 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
         nome: nome.trim(),
         nome_normalizado: nomeNormalizado,
         telefone: telefoneNormalizado,
-        endereco: endereco ? endereco.trim() : null,
+        endereco: enderecoFinal,
+        endereco_completo: enderecoCompletoFinal,
+        rua: rua ? rua.trim() : null,
+        numero: numero ? String(numero).trim() : null,
+        bairro: bairro ? bairro.trim() : null,
+        cidade: cidade ? cidade.trim() : null,
+        complemento: complemento ? complemento.trim() : null,
+        referencia: referencia ? referencia.trim() : null,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
+        tipo_local: tipo_local ? tipo_local.trim() : null,
+        restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
+        nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
+        observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
+        cliente_recorrente: clienteRecorrente,
+        periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
+        data_ultimo_servico: dataUltimoServicoISO,
+        categoria: categoria || 'eventual',
         tipo,
         cpf_cnpj,
         observacoes,
@@ -490,6 +638,180 @@ app.delete('/api/customers/:id', strictLimiter, async (req, res) => {
   } catch (error) {
     console.error('[DELETE /api/customers/:id] Error:', error.message);
     res.status(500).json({ error: 'Falha ao remover cliente' });
+  }
+});
+
+// GEOCODING ENDPOINT
+app.get('/api/geocode', async (req, res) => {
+  try {
+    const { address } = req.query;
+    
+    if (!address || typeof address !== 'string' || address.trim().length < 3) {
+      return res.status(400).json({ error: 'Endereço deve ter pelo menos 3 caracteres' });
+    }
+    
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Google Maps API key não configurada' });
+    }
+    
+    const encodedAddress = encodeURIComponent(address.trim());
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${apiKey}&region=br&language=pt-BR`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.status !== 'OK') {
+      return res.status(400).json({ 
+        error: 'Endereço não encontrado', 
+        details: data.status,
+        suggestions: data.results?.slice(0, 3).map(r => r.formatted_address) || []
+      });
+    }
+    
+    const result = data.results[0];
+    const location = result.geometry.location;
+    
+    res.json({
+      endereco_completo: result.formatted_address,
+      latitude: location.lat,
+      longitude: location.lng,
+      place_id: result.place_id,
+      tipos: result.types
+    });
+    
+  } catch (error) {
+    console.error('[GET /api/geocode] Error:', error.message);
+    res.status(500).json({ error: 'Falha na geocodificação' });
+  }
+});
+
+// DUPLICATES MANAGEMENT
+app.get('/api/customers/duplicates', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id,nome,telefone,nome_normalizado')
+      .eq('ativo', true)
+      .order('nome');
+
+    if (error) throw error;
+
+    const duplicates = [];
+    const seen = new Map();
+
+    for (const customer of data) {
+      const key = customer.nome_normalizado || normalizeCustomerName(customer.nome);
+      const telKey = normalizePhone(customer.telefone);
+
+      if (seen.has(key)) {
+        const existing = seen.get(key);
+        if (!existing.group) {
+          existing.group = [existing.customer];
+          duplicates.push(existing);
+        }
+        existing.group.push(customer);
+      } else if (seen.has(telKey)) {
+        const existing = seen.get(telKey);
+        if (!existing.group) {
+          existing.group = [existing.customer];
+          duplicates.push(existing);
+        }
+        existing.group.push(customer);
+      } else {
+        seen.set(key, { customer, group: null });
+        if (telKey) seen.set(telKey, { customer, group: null });
+      }
+    }
+
+    // Filter only groups with actual duplicates
+    const actualDuplicates = duplicates.filter(d => d.group && d.group.length > 1);
+
+    res.json(actualDuplicates);
+  } catch (error) {
+    console.error('[GET /api/customers/duplicates] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar duplicatas' });
+  }
+});
+
+app.post('/api/customers/merge', strictLimiter, async (req, res) => {
+  try {
+    const { primaryId, duplicateIds, keepFields } = req.body;
+    
+    if (!primaryId || !Array.isArray(duplicateIds) || duplicateIds.length === 0) {
+      return res.status(400).json({ error: 'IDs primário e duplicatas são obrigatórios' });
+    }
+    
+    // Get all customers involved
+    const allIds = [primaryId, ...duplicateIds];
+    const { data: customers, error: fetchError } = await supabase
+      .from('customers')
+      .select('*')
+      .in('id', allIds);
+    
+    if (fetchError) throw fetchError;
+    if (customers.length !== allIds.length) {
+      return res.status(404).json({ error: 'Um ou mais clientes não encontrados' });
+    }
+    
+    const primary = customers.find(c => c.id === primaryId);
+    if (!primary) return res.status(404).json({ error: 'Cliente primário não encontrado' });
+    
+    // Merge data based on keepFields preference
+    const merged = { ...primary };
+    const duplicates = customers.filter(c => c.id !== primaryId);
+    
+    for (const dup of duplicates) {
+      // Merge fields if primary is empty and duplicate has data
+      if (!merged.endereco && dup.endereco) merged.endereco = dup.endereco;
+      if (!merged.endereco_completo && dup.endereco_completo) merged.endereco_completo = dup.endereco_completo;
+      if (!merged.latitude && dup.latitude) merged.latitude = dup.latitude;
+      if (!merged.longitude && dup.longitude) merged.longitude = dup.longitude;
+      if (!merged.cpf_cnpj && dup.cpf_cnpj) merged.cpf_cnpj = dup.cpf_cnpj;
+      if (!merged.observacoes && dup.observacoes) merged.observacoes = dup.observacoes;
+      
+      // Append observations
+      if (dup.observacoes && dup.observacoes !== merged.observacoes) {
+        merged.observacoes = (merged.observacoes || '') + '\n[Merged from duplicate: ' + dup.observacoes + ']';
+      }
+    }
+    
+    // Update primary customer
+    const { error: updateError } = await supabase
+      .from('customers')
+      .update({
+        endereco: merged.endereco,
+        endereco_completo: merged.endereco_completo,
+        latitude: merged.latitude,
+        longitude: merged.longitude,
+        cpf_cnpj: merged.cpf_cnpj,
+        observacoes: merged.observacoes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', primaryId);
+    
+    if (updateError) throw updateError;
+    
+    // Soft delete duplicates
+    const { error: deleteError } = await supabase
+      .from('customers')
+      .update({ 
+        ativo: false, 
+        observacoes: (merged.observacoes || '') + '\n[Merged into customer ID: ' + primaryId + ']',
+        updated_at: new Date().toISOString()
+      })
+      .in('id', duplicateIds);
+    
+    if (deleteError) throw deleteError;
+    
+    res.json({ 
+      message: `Clientes mesclados com sucesso. ${duplicateIds.length} duplicata(s) removida(s).`,
+      primaryCustomer: merged
+    });
+    
+  } catch (error) {
+    console.error('[POST /api/customers/merge] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao mesclar clientes' });
   }
 });
 
