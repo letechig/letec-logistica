@@ -2,9 +2,13 @@
 
 Este documento define a implantacao de producao em duas fases, com validacao e rollback.
 
+Checklist rapido antes de publicar:
+
+- Consulte `CHECKLIST-PUBLICACAO.md`
+
 ## Arquitetura alvo
 
-- Frontend: Vercel (pasta `refactored/`)
+- Frontend: Vercel (pasta `frontend/`)
 - Backend API: Render (arquivo `render.yaml`) ou plataforma equivalente
 - Banco: Supabase
 - Roteirizacao: Google Distance Matrix via proxy backend (`/api/maps/distance-matrix`)
@@ -22,7 +26,7 @@ Este documento define a implantacao de producao em duas fases, com validacao e r
   - `ALLOWED_ORIGINS` com dominio do frontend de staging
 
 2. Frontend (Vercel)
-- Criar projeto com Root Directory: `refactored`
+- Criar projeto com Root Directory: `frontend`
 - Deploy da branch de staging
 - Obter URL do preview/staging
 
