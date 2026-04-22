@@ -36,6 +36,7 @@ Nao publique sem validar localmente se a mudanca envolver:
 - mexer em `onclick="..."`
 - mover ou renomear arquivos em `frontend/js`
 - alterar inicializacao de `window.nav` ou outras funcoes globais
+- mudar funcao listada em `GLOBAL-FUNCTIONS-MAP.md`
 
 ## 5. Publicacao
 
