@@ -1,4 +1,4 @@
-﻿window.testarSupabase = async function() {
+window.testarSupabase = async function() {
   try {
     const { data, error } = await supabaseClient.from('services').select('*').limit(1);
     if (error) throw error;
