@@ -3420,7 +3420,7 @@ const PAGE_META = {
   config:     { title:'Configurações',        sub:'Gerencie técnicos, veículos e tipos de serviço' }
 };
 
-function nav(page, btn) {
+window.nav = function(page, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
@@ -5839,7 +5839,6 @@ function openServiceFromClient(clientId) {
   
   // Restaurar a função original
   openNewSvc = originalOpenNewSvc;
-}
 }
 
 function openClientModal(clientId = null) {
@@ -8429,9 +8428,11 @@ function mobSyncBottomNav(page) {
 }
 
 // Patch nav() to sync bottom nav and set mobile Agenda default view
-const _navOriginal = nav;
-nav = function(page, btn) {
-  _navOriginal(page, btn);
+const _navOriginal = window.nav;
+window.nav = function(page, btn) {
+  if (typeof _navOriginal === 'function') {
+    _navOriginal(page, btn);
+  }
   mobSyncBottomNav(page);
   if (page === 'agenda' && mobIsMobile()) agSetView('data');
 };
