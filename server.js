@@ -175,6 +175,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Static frontend assets
+app.use('/js', express.static(path.join(__dirname, 'frontend', 'js')));
+
 // Serve frontend
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
