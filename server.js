@@ -78,6 +78,78 @@ function normalizeCustomerName(value) {
     .trim();
 }
 
+function normalizeLooseText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeAddress(value) {
+  return normalizeLooseText(value)
+    .replace(/\bAVENIDA\b/g, 'AV')
+    .replace(/\bRUA\b/g, 'R')
+    .replace(/\bESTRADA\b/g, 'EST')
+    .replace(/\bRODOVIA\b/g, 'ROD')
+    .replace(/\bDOUTOR\b/g, 'DR')
+    .replace(/\bPROFESSOR\b/g, 'PROF')
+    .replace(/\bCONDOMINIO\b/g, 'COND')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildCustomerAddressFingerprint(customer = {}) {
+  const cep = String(customer.cep || '').replace(/\D/g, '');
+  const structured = [customer.rua, customer.numero, customer.bairro, customer.cidade]
+    .filter(Boolean)
+    .map(part => String(part).trim())
+    .join(' ');
+  const fallback = customer.endereco_completo || customer.endereco || '';
+  const normalized = normalizeAddress(structured || fallback);
+  if (cep && normalized) return `${cep}|${normalized}`;
+  return normalized || cep;
+}
+
+function hasRelatedCustomerNames(leftName, rightName) {
+  const left = normalizeCustomerName(leftName);
+  const right = normalizeCustomerName(rightName);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length >= 3 && right.includes(left)) return true;
+  if (right.length >= 3 && left.includes(right)) return true;
+  return false;
+}
+
+function areDuplicateCustomers(left, right) {
+  const leftPhone = normalizePhone(left.telefone);
+  const rightPhone = normalizePhone(right.telefone);
+  if (leftPhone && rightPhone && leftPhone === rightPhone) return true;
+
+  const leftName = left.nome_normalizado || normalizeCustomerName(left.nome);
+  const rightName = right.nome_normalizado || normalizeCustomerName(right.nome);
+  if (leftName && rightName && leftName === rightName) return true;
+  const relatedNames = hasRelatedCustomerNames(left.nome, right.nome);
+
+  const leftAddress = buildCustomerAddressFingerprint(left);
+  const rightAddress = buildCustomerAddressFingerprint(right);
+  if (leftAddress && rightAddress && leftAddress === rightAddress && relatedNames) return true;
+
+  const leftCep = String(left.cep || '').replace(/\D/g, '');
+  const rightCep = String(right.cep || '').replace(/\D/g, '');
+  if (leftCep && rightCep && leftCep === rightCep && relatedNames) return true;
+
+  const leftStreet = normalizeAddress(left.rua || left.endereco_completo || left.endereco);
+  const rightStreet = normalizeAddress(right.rua || right.endereco_completo || right.endereco);
+  if (leftStreet && rightStreet && (leftStreet === rightStreet || leftStreet.includes(rightStreet) || rightStreet.includes(leftStreet))) {
+    return relatedNames;
+  }
+
+  return false;
+}
+
 function buildCustomerAddress({ rua, numero, bairro, cidade, complemento, referencia }) {
   const parts = [];
   if (rua) parts.push(String(rua).trim());
@@ -232,10 +304,20 @@ app.get('/api/maps/distance-matrix', async (req, res) => {
 // Example routes for logistics operations
 app.get('/api/services', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const cliente = String(req.query.cliente || '').trim();
+
+    let query = supabase
       .from('services')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('date', { ascending: false, nullsFirst: false })
+      .limit(limit);
+
+    if (cliente) {
+      query = query.ilike('cliente', `%${cliente}%`);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     res.json(data);
@@ -734,41 +816,41 @@ app.get('/api/customers/duplicates', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('customers')
-      .select('id,nome,telefone,nome_normalizado')
+      .select('*')
       .eq('ativo', true)
       .order('nome');
 
     if (error) throw error;
 
-    const duplicates = [];
-    const seen = new Map();
+    const customers = data || [];
+    const visited = new Set();
+    const actualDuplicates = [];
 
-    for (const customer of data) {
-      const key = customer.nome_normalizado || normalizeCustomerName(customer.nome);
-      const telKey = normalizePhone(customer.telefone);
+    for (let i = 0; i < customers.length; i += 1) {
+      if (visited.has(i)) continue;
 
-      if (seen.has(key)) {
-        const existing = seen.get(key);
-        if (!existing.group) {
-          existing.group = [existing.customer];
-          duplicates.push(existing);
+      const groupIndexes = [i];
+      const queue = [i];
+      visited.add(i);
+
+      while (queue.length) {
+        const currentIndex = queue.shift();
+        const current = customers[currentIndex];
+
+        for (let j = 0; j < customers.length; j += 1) {
+          if (visited.has(j)) continue;
+          if (!areDuplicateCustomers(current, customers[j])) continue;
+          visited.add(j);
+          queue.push(j);
+          groupIndexes.push(j);
         }
-        existing.group.push(customer);
-      } else if (seen.has(telKey)) {
-        const existing = seen.get(telKey);
-        if (!existing.group) {
-          existing.group = [existing.customer];
-          duplicates.push(existing);
-        }
-        existing.group.push(customer);
-      } else {
-        seen.set(key, { customer, group: null });
-        if (telKey) seen.set(telKey, { customer, group: null });
+      }
+
+      if (groupIndexes.length > 1) {
+        const group = groupIndexes.map(index => customers[index]);
+        actualDuplicates.push({ customer: group[0], group });
       }
     }
-
-    // Filter only groups with actual duplicates
-    const actualDuplicates = duplicates.filter(d => d.group && d.group.length > 1);
 
     res.json(actualDuplicates);
   } catch (error) {
