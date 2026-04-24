@@ -2,13 +2,20 @@
 
 Data da auditoria: 2026-04-24
 
-Atualizacao da etapa 1: os IDs duplicados `tecnicos-container` e `tipos-container` foram corrigidos em `frontend/index.html`; a checagem estatica passou a retornar `duplicate ids 0`.
+Atualizacao de progresso:
+
+- etapa 1 concluida: os IDs duplicados `tecnicos-container` e `tipos-container` foram corrigidos em `frontend/index.html`; a checagem estatica passou a retornar `duplicate ids 0`
+- etapa 2 concluida: `openServiceFromClient()` deixou de sobrescrever `openNewSvc()` e passou a usar preenchimento inicial explicito
+- clientes: modal de cliente corrigido, fluxo de CEP migrado para backend e historico operacional alinhado com os status reais do sistema
+- duplicatas: deteccao e fluxo de revisao foram refinados
+- legado: `extrairTecnicos`, `calcularTempoServicoLegacy`, `getSvcs` e `getCLs` foram removidas do `frontend/index.html` por nao terem uso interno
+- roteiro: o fluxo atual usa copiar/WhatsApp direto por equipe e no lote; nao foram encontrados vestigios ativos do `rot-modal`
 
 ## Resumo executivo
 
 Esta auditoria trata `frontend/index.html` como a fonte oficial do frontend. Os arquivos `letec_v76_auditado.html`, `frontend/js/app.js` e `frontend/js/api.js` foram considerados somente como comparacao e risco de deriva.
 
-O arquivo oficial passa em uma checagem basica de sintaxe dos scripts inline, e os handlers inline principais (`onclick`, `onchange`, `oninput`, `onblur`) nao apontam para funcoes globais ausentes. Os riscos mais relevantes encontrados sao duplicacao de IDs no DOM, divergencia entre o HTML oficial e os arquivos JS externos, codigo legado aparentemente orfao, e alteracoes locais ja existentes em `frontend/index.html` que removem o antigo modal de roteiro.
+O arquivo oficial passa em uma checagem basica de sintaxe dos scripts inline, e os handlers inline principais (`onclick`, `onchange`, `oninput`, `onblur`) nao apontam para funcoes globais ausentes. Os riscos mais relevantes remanescentes sao divergencia entre o HTML oficial e os arquivos JS externos, dependencia de handlers inline globais, e a necessidade de manter esta auditoria sincronizada com as correcoes ja aplicadas no arquivo oficial.
 
 Estado inicial observado:
 
@@ -19,12 +26,11 @@ Estado inicial observado:
 ## Validacoes executadas
 
 - Parsing dos scripts inline com `new Function`.
-  - `inline scripts 2`
-  - `script 1 OK 11034`
-  - `script 2 OK 318845`
+  - estado inicial: `inline scripts 2`
+  - estado atual: `script 1 OK`, `script 2 OK`, `script 3 OK`
 - Checagem estatica de IDs duplicados.
-  - `3 tecnicos-container`
-  - `2 tipos-container`
+  - estado inicial: `3 tecnicos-container`, `2 tipos-container`
+  - estado atual: nenhum ID duplicado encontrado
 - Checagem de handlers inline contra funcoes globais declaradas.
   - `inline calls 77`
   - `missing raw 1 if`
@@ -62,7 +68,7 @@ Estado inicial observado:
 - Recomendacao: manter o registro como excecao conhecida nas proximas auditorias.
 - Seguro corrigir agora: nao precisa correcao.
 
-#### Medio: `openServiceFromClient()` substitui temporariamente `openNewSvc`
+#### Medio: `openServiceFromClient()` substituia temporariamente `openNewSvc`
 
 - Local:
   - `frontend/index.html:5794` define `openServiceFromClient(clientId)`.
@@ -70,9 +76,10 @@ Estado inicial observado:
   - `frontend/index.html:5803` sobrescreve `openNewSvc`.
   - `frontend/index.html:5830` restaura `openNewSvc`.
 - Evidencia: a funcao altera uma funcao global para pre-preencher o modal de novo servico.
-- Impacto provavel: a abordagem funciona em fluxo feliz, mas e fragil. Se `openNewSvc()` passar a ser assincrona, disparar erro, ou abrir outro fluxo aninhado, a funcao global pode ficar em estado inesperado ou o preenchimento pode falhar.
-- Recomendacao: transformar `openNewSvc` para aceitar parametros opcionais de preenchimento, por exemplo `openNewSvc({ cliente, endereco, focoData: true })`, removendo a sobrescrita temporaria.
-- Seguro corrigir agora: sim, mas deve ser tratado como refatoracao pequena e testado em Clientes -> criar servico.
+- Impacto provavel: a abordagem anterior funcionava em fluxo feliz, mas era fragil. Se `openNewSvc()` passasse a ser assincrona, disparasse erro, ou abrisse outro fluxo aninhado, a funcao global poderia ficar em estado inesperado ou o preenchimento falhar.
+- Recomendacao: concluida. `openNewSvc()` agora aceita parametros opcionais de preenchimento inicial.
+- Status: corrigido.
+- Seguro corrigir agora: concluido e validado no fluxo Clientes -> criar servico.
 
 ### Duplicacoes
 
@@ -89,7 +96,7 @@ Estado inicial observado:
 
 ### Codigo morto ou legado
 
-#### Baixo: funcoes com uma unica referencia podem ser legado
+#### Baixo: funcoes com uma unica referencia podiam ser legado
 
 - Local:
   - `frontend/index.html:2418` define `extrairTecnicos(servico)`.
@@ -98,8 +105,9 @@ Estado inicial observado:
   - `frontend/index.html:3119` define `getCLs()`.
 - Evidencia: busca estatica por referencias encontrou apenas a propria definicao dessas funcoes.
 - Impacto provavel: baixo no runtime atual. Elas podem existir para compatibilidade manual/debug, mas tambem podem confundir manutencao e mascarar codigo antigo.
-- Recomendacao: antes de remover, confirmar se sao chamadas pelo console, por testes externos ou por HTML gerado dinamicamente que a busca estatica nao detecta. Se nao houver uso externo, remover ou mover para uma secao marcada como legado/debug.
-- Seguro corrigir agora: depende de confirmacao. Nao remover sem validar uso operacional.
+- Recomendacao: antes de remover, confirmar se sao chamadas pelo console, por testes externos ou por HTML gerado dinamicamente que a busca estatica nao detecta.
+- Status: corrigido. A validacao adicional mostrou uso apenas na propria definicao, em arquivo arquivado e em versoes antigas. As funcoes foram removidas do `frontend/index.html`.
+- Seguro corrigir agora: concluido.
 
 ### Alteracoes locais ja existentes
 
@@ -109,9 +117,10 @@ Estado inicial observado:
   - O diff atual remove o bloco `<!-- MODAL ROTEIRO WHATSAPP -->`.
   - As funcoes atuais de roteiro direto permanecem em `frontend/index.html:7456`, `frontend/index.html:7463` e `frontend/index.html:7470`.
 - Evidencia: `Select-String` nao encontrou `rot-modal` no arquivo atual; o diff mostra a remocao do modal com `rot-modal-title`, `rot-modal-txt`, botao copiar e botao fechar.
-- Impacto provavel: se alguma parte do app ainda tentar abrir o modal antigo, o fluxo quebrara por elemento inexistente. Na leitura atual, o roteiro parece usar copia direta e abertura de WhatsApp por link, entao a remocao pode ser intencional.
-- Recomendacao: validar manualmente Roteiro do Dia -> Gerar Roteiro -> Copiar equipe -> WhatsApp equipe -> Enviar tudo -> Copiar tudo. Se tudo funcionar, registrar a remocao como limpeza concluida.
-- Seguro corrigir agora: nao requer correcao imediata se o fluxo atual estiver funcionando; requer teste manual.
+- Impacto provavel: na leitura atual do codigo ativo, o risco residual e baixo. O roteiro usa copia direta e abertura de WhatsApp por link, sem chamadas restantes para `rot-modal`.
+- Recomendacao: manter a remocao e validar manualmente Roteiro do Dia -> Gerar Roteiro -> Copiar equipe -> WhatsApp equipe -> Enviar tudo -> Copiar tudo quando houver rodada de testes operacionais.
+- Status: sem quebra aparente no codigo; pendente apenas validacao manual completa.
+- Seguro corrigir agora: nao requer correcao.
 
 #### Baixo: `confirmAction()` centraliza confirmacoes nativas
 
@@ -119,7 +128,7 @@ Estado inicial observado:
   - `frontend/index.html:6832` define `confirmAction(message)`.
   - Chamadas aparecem em exclusoes, mesclagem de duplicatas e marcar todos como executados.
 - Evidencia: chamadas em `frontend/index.html:5245`, `frontend/index.html:6005`, `frontend/index.html:6348`, `frontend/index.html:6379`, `frontend/index.html:6778`, `frontend/index.html:8177`, `frontend/index.html:8217` e `frontend/index.html:8353`.
-- Impacto provavel: baixo. Hoje `confirmAction()` apenas delega para `window.confirm`, entao o comportamento funcional deve ser equivalente ao `confirm()` anterior.
+- Impacto provavel: baixo. Hoje `confirmAction()` apenas delega para `window.confirm`, e a busca atual no codigo ativo nao encontrou `confirm()` solto fora dessa funcao.
 - Recomendacao: manter como ponto de extensao se a intencao for substituir confirmacoes nativas por modal proprio no futuro. Se nao houver plano, registrar em comentario curto para evitar confusao.
 - Seguro corrigir agora: nao precisa correcao.
 
@@ -145,8 +154,7 @@ Executar estes fluxos no navegador depois de qualquer correcao:
 
 ## Proximos passos sugeridos
 
-1. Corrigir primeiro os IDs duplicados dos containers de tipos e tecnicos.
-2. Refatorar `openServiceFromClient()` para passar dados iniciais a `openNewSvc()` sem sobrescrever funcao global.
-3. Validar o fluxo de Roteiro do Dia e decidir se a remocao de `rot-modal` deve permanecer.
-4. Decidir oficialmente o destino de `frontend/js/app.js` e `frontend/js/api.js`: remover como legado ou migrar o HTML para usa-los.
-5. Depois das correcoes, repetir as tres checagens estaticas desta auditoria.
+1. Validar manualmente o fluxo completo de `Roteiro do Dia` e, se tudo estiver certo, marcar a remocao de `rot-modal` como encerrada.
+2. Decidir oficialmente o destino de `frontend/js/app.js` e `frontend/js/api.js`: remover como legado ou migrar o HTML para usa-los.
+3. Considerar uma etapa futura para reduzir dependencia de handlers inline globais.
+4. Repetir periodicamente as checagens estaticas desta auditoria apos mudancas estruturais no `frontend/index.html`.

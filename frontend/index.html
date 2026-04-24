@@ -2478,9 +2478,40 @@ function getHorarioServicoMin(servico) {
 function formatarHoraDoDia(totalMin) {
   if (totalMin === null || totalMin === undefined || Number.isNaN(totalMin)) return '--:--';
   const min = Math.max(0, Math.round(totalMin));
-  const hh = String(Math.floor(min / 60)).padStart(2, '0');
-  const mm = String(min % 60).padStart(2, '0');
+  const minutoDoDia = min % 1440;
+  const hh = String(Math.floor(minutoDoDia / 60)).padStart(2, '0');
+  const mm = String(minutoDoDia % 60).padStart(2, '0');
   return `${hh}:${mm}`;
+}
+
+function decomporHorarioOperacional(totalMin) {
+  if (totalMin === null || totalMin === undefined || Number.isNaN(totalMin)) {
+    return { totalMin: null, minuteOfDay: null, dayOffset: 0, time: '--:--', label: '--:--' };
+  }
+  const absMin = Math.max(0, Math.round(Number(totalMin) || 0));
+  const dayOffset = Math.floor(absMin / 1440);
+  const minuteOfDay = absMin % 1440;
+  const time = formatarHoraDoDia(absMin);
+  const label = dayOffset > 0 ? `${time} (D+${dayOffset})` : time;
+  return { totalMin: absMin, minuteOfDay, dayOffset, time, label };
+}
+
+function formatarHorarioOperacional(totalMin) {
+  return decomporHorarioOperacional(totalMin).label;
+}
+
+function formatarJanelaOperacional(inicioMin, fimMin) {
+  const inicio = decomporHorarioOperacional(inicioMin);
+  const fim = decomporHorarioOperacional(fimMin);
+  if (inicio.totalMin === null || fim.totalMin === null) return '--:--';
+  if (inicio.dayOffset === fim.dayOffset) {
+    return `${inicio.time}-${fim.time}${fim.dayOffset > 0 ? ` (D+${fim.dayOffset})` : ''}`;
+  }
+  return `${inicio.label}-${fim.label}`;
+}
+
+function formatarOffsetOperacional(dayOffset) {
+  return dayOffset > 0 ? `D+${dayOffset}` : 'D0';
 }
 
 function formatarMinutosHM(totalMin) {
@@ -2577,6 +2608,9 @@ const ALMOCO_MIN             = 60;
 const JORNADA_MIN            = JORNADA_BRUTA_MIN - ALMOCO_MIN;
 const INICIO_EXPEDIENTE_MIN  = 8 * 60;
 const TEMPO_MEDIO_SERVICO_PADRAO = 120;
+const DESVIO_HORARIO_WARN_MIN = 15;
+const DESLOCAMENTO_EXTREMO_MIN = 90;
+const DESLOCAMENTO_EXTREMO_KM = 40;
 
 const CONFIG = {
 jornadaMin: JORNADA_MIN,
@@ -2612,12 +2646,108 @@ function extrairBairroProxy(addr) {
   return candidato || partes[1] || partes[0] || texto;
 }
 
+function normalizarEnderecoOperacional(addr) {
+  return normalizarNome(String(addr || ''))
+    .replace(/\b(estrada|est|est\.|avenida|av|av\.|rua|r\.|alameda|travessa|rodovia|rod|rod\.)\b/g, ' ')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extrairNumeroEndereco(addr) {
+  const match = String(addr || '').match(/\b(\d{1,6})\b/);
+  return match ? match[1] : '';
+}
+
+function extrairTokensEnderecoOperacional(addr) {
+  const stopwords = new Set(['de','da','do','das','dos','sao','paulo','sp','cep']);
+  return normalizarEnderecoOperacional(addr)
+    .split(' ')
+    .map(t => t.trim())
+    .filter(t => t.length >= 4 && !stopwords.has(t));
+}
+
+function tokensEnderecoParecidos(tokensA, tokensB) {
+  if (!tokensA.length || !tokensB.length) return false;
+  return tokensA.some(a => tokensB.some(b => a === b || a.slice(0, 4) === b.slice(0, 4)));
+}
+
+function isSameOperationalAddress(addr1, addr2) {
+  const a1 = String(addr1 || '').trim();
+  const a2 = String(addr2 || '').trim();
+  if (!a1 || !a2) return false;
+
+  const normalizedA = normalizarEnderecoOperacional(a1);
+  const normalizedB = normalizarEnderecoOperacional(a2);
+  if (normalizedA && normalizedA === normalizedB) return true;
+
+  const numeroA = extrairNumeroEndereco(a1);
+  const numeroB = extrairNumeroEndereco(a2);
+  const bairroA = normalizarNome(extrairBairroProxy(a1));
+  const bairroB = normalizarNome(extrairBairroProxy(a2));
+  const tokensA = extrairTokensEnderecoOperacional(a1);
+  const tokensB = extrairTokensEnderecoOperacional(a2);
+
+  if (numeroA && numeroB && numeroA === numeroB && tokensEnderecoParecidos(tokensA, tokensB)) return true;
+  if (numeroA && numeroB && numeroA === numeroB && bairroA && bairroA === bairroB) return true;
+  return false;
+}
+
+function isSameOperationalStop(servicoA, servicoB) {
+  if (!servicoA || !servicoB) return false;
+  const enderecoA = servicoA.endereco || '';
+  const enderecoB = servicoB.endereco || '';
+  if (isSameOperationalAddress(enderecoA, enderecoB)) return true;
+
+  const osA = normalizarNome(servicoA.OS || servicoA.os || '');
+  const osB = normalizarNome(servicoB.OS || servicoB.os || '');
+  if (osA && osB && osA === osB && isSameOperationalAddress(enderecoA, enderecoB)) return true;
+
+  const clienteA = normalizarNome(servicoA.cliente || servicoA.cl || '');
+  const clienteB = normalizarNome(servicoB.cliente || servicoB.cl || '');
+  return !!clienteA && clienteA === clienteB && isSameOperationalAddress(enderecoA, enderecoB);
+}
+
+function groupConsecutiveOperationalStops(sequencia) {
+  const grupos = [];
+  (sequencia || []).forEach(item => {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && isSameOperationalStop(ultimo.items[ultimo.items.length - 1].servico, item.servico)) {
+      ultimo.items.push(item);
+      ultimo.fimSugeridoMin = item.fimSugeridoMin;
+      ultimo.totalDuracaoMin += item.duracaoServicoMin || 0;
+      ultimo.warningReasons = uniqueReasons([...(ultimo.warningReasons || []), ...(item.warningReasons || [])]);
+      ultimo.blockReasons = uniqueReasons([...(ultimo.blockReasons || []), ...(item.blockReasons || [])]);
+      ultimo.severity = ultimo.blockReasons.length ? 'block' : ultimo.warningReasons.length ? 'warn' : 'ok';
+      return;
+    }
+
+    grupos.push({
+      key: `stop-${grupos.length + 1}`,
+      inicioSugeridoMin: item.inicioSugeridoMin,
+      fimSugeridoMin: item.fimSugeridoMin,
+      deslocamentoMin: item.deslocamentoMin || 0,
+      km: item.km || 0,
+      bairro: item.bairro || '',
+      servicoBase: item.servico,
+      items: [item],
+      totalDuracaoMin: item.duracaoServicoMin || 0,
+      warningReasons: [...(item.warningReasons || [])],
+      blockReasons: [...(item.blockReasons || [])],
+      severity: item.severity || 'ok',
+    });
+  });
+
+  return grupos.map((grupo, index) => ({ ...grupo, ordem: index + 1 }));
+}
+
 // ── Estimar distância entre dois endereços (km) ──
 function estimateDistance(addr1, addr2) {
   const a1 = (addr1 || '').trim();
   const a2 = (addr2 || '').trim();
   if (!a1 || !a2) return 25;
   if (a1.toLowerCase() === a2.toLowerCase()) return 0; // mesmo endereço
+  if (isSameOperationalAddress(a1, a2)) return 0;
 
   const n1 = extrairBairroProxy(a1);
   const n2 = extrairBairroProxy(a2);
@@ -2627,6 +2757,7 @@ function estimateDistance(addr1, addr2) {
 }
 
 function calcularTempoDeslocamento(origem, destino) {
+  if (isSameOperationalAddress(origem, destino)) return 0;
   const km = estimateDistance(origem, destino);
   if (km <= 0) return TEMPO_DESLOCAMENTO_MIN;
   if (km <= 5) return 20;
@@ -2742,9 +2873,204 @@ function calcularTempoServicoBase(servico) {
   return Math.max(tempoBase * multiplier, 30);
 }
 
+function uniqueReasons(reasons) {
+  return [...new Set((reasons || []).filter(Boolean))];
+}
+
+function addReason(list, reason) {
+  if (!reason) return;
+  if (!list.includes(reason)) list.push(reason);
+}
+
+function getServiceDateValue(servico) {
+  return servico?.dt || servico?.date || servico?.data || '';
+}
+
+function shiftDate(dateStr, deltaDays) {
+  if (!dateStr) return '';
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() + deltaDays);
+  return d.toISOString().split('T')[0];
+}
+
+function getRouteSeverityLabel(severity) {
+  if (severity === 'block') return 'Bloqueado';
+  if (severity === 'warn') return 'Atenção';
+  return 'OK';
+}
+
+function getRouteSeverityColor(severity) {
+  if (severity === 'block') return 'var(--red)';
+  if (severity === 'warn') return 'var(--orange)';
+  return 'var(--green)';
+}
+
+function getRouteSeverityBg(severity) {
+  if (severity === 'block') return 'var(--red-bg)';
+  if (severity === 'warn') return 'var(--orange-bg)';
+  return 'var(--green-bg)';
+}
+
+function classificarJanelaOperacional(item) {
+  const horarioAgendadoInfo = item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined
+    ? decomporHorarioOperacional(item.horarioAgendadoMin)
+    : null;
+  const inicioInfo = decomporHorarioOperacional(item.inicioSugeridoMin);
+  const fimInfo = decomporHorarioOperacional(item.fimSugeridoMin);
+  const warningReasons = [];
+  const blockReasons = [];
+
+  if (horarioAgendadoInfo) {
+    const atraso = item.inicioSugeridoMin - horarioAgendadoInfo.totalMin;
+    if (atraso > DESVIO_HORARIO_WARN_MIN) addReason(warningReasons, 'Conflito logístico');
+  }
+  if (fimInfo.dayOffset > 0) addReason(warningReasons, `Sequência avança para ${formatarOffsetOperacional(fimInfo.dayOffset)}`);
+  if (item.deslocamentoMin > DESLOCAMENTO_EXTREMO_MIN || Number(item.km || 0) > DESLOCAMENTO_EXTREMO_KM) {
+    addReason(blockReasons, 'Inviável por deslocamento extremo');
+  }
+
+  return {
+    ...item,
+    horarioAgendadoInfo,
+    inicioInfo,
+    fimInfo,
+    inicioDayOffset: inicioInfo.dayOffset,
+    fimDayOffset: fimInfo.dayOffset,
+    warningReasons,
+    blockReasons,
+    severity: blockReasons.length ? 'block' : warningReasons.length ? 'warn' : 'ok',
+  };
+}
+
+function avaliarDescansoMinimoRota(servicos, primeiroInicioMin) {
+  if (!Array.isArray(servicos) || !servicos.length) return [];
+  const dt = getServiceDateValue(servicos[0]);
+  if (!dt) return [];
+
+  const prevDate = shiftDate(dt, -1);
+  const techIds = [...new Set(
+    servicos.flatMap(s => getServiceTecnicosIds(s)).map(id => String(id)).filter(Boolean)
+  )];
+  if (!techIds.length) return [];
+
+  const reasons = [];
+  techIds.forEach(techId => {
+    const prevSvcs = services
+      .filter(s => getServiceDateValue(s) === prevDate)
+      .filter(s => getServiceTecnicosIds(s).map(id => String(id)).includes(techId))
+      .map(s => {
+        const inicio = getHorarioServicoMin(s);
+        if (inicio === null) return null;
+        return {
+          servico: s,
+          fim: inicio + calcularTempoServico(s),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.fim - a.fim);
+
+    const ultimo = prevSvcs[0];
+    if (!ultimo) return;
+
+    const inicioMinHoje = (ultimo.fim + 600) - 1440;
+    const inicioPermitido = Math.max(inicioMinHoje, INICIO_EXPEDIENTE_MIN);
+    if (primeiroInicioMin < inicioPermitido) {
+      addReason(reasons, 'Inviável por descanso mínimo');
+    }
+  });
+
+  return reasons;
+}
+
+function normalizarSequenciaOperacional(sequencia) {
+  return [...(sequencia || [])]
+    .sort((a, b) => {
+      const inicioA = Number(a?.inicioSugeridoMin);
+      const inicioB = Number(b?.inicioSugeridoMin);
+      if (inicioA !== inicioB) return inicioA - inicioB;
+
+      const agA = a?.horarioAgendadoMin ?? Number.POSITIVE_INFINITY;
+      const agB = b?.horarioAgendadoMin ?? Number.POSITIVE_INFINITY;
+      if (agA !== agB) return agA - agB;
+
+      return (a?.ordem || 0) - (b?.ordem || 0);
+    })
+    .map((item, index) => ({ ...item, ordem: index + 1 }));
+}
+
+function enriquecerDiagnosticoRota(rotaBase, servicosOriginais) {
+  const sequencia = normalizarSequenciaOperacional((rotaBase.sequencia || []).map(classificarJanelaOperacional));
+  const warningReasons = uniqueReasons(sequencia.flatMap(item => item.warningReasons || []));
+  const blockReasons = uniqueReasons(sequencia.flatMap(item => item.blockReasons || []));
+
+  if ((Number(rotaBase.tempoTotalMin) || 0) > JORNADA_MIN) {
+    addReason(blockReasons, 'Inviável por jornada');
+  }
+
+  const descansoReasons = avaliarDescansoMinimoRota(servicosOriginais || [], sequencia[0]?.inicioSugeridoMin ?? null);
+  descansoReasons.forEach(reason => addReason(blockReasons, reason));
+
+  const severity = blockReasons.length ? 'block' : warningReasons.length ? 'warn' : 'ok';
+  return {
+    ...rotaBase,
+    sequencia,
+    warningReasons: uniqueReasons(warningReasons),
+    blockReasons: uniqueReasons(blockReasons),
+    severity,
+  };
+}
+
+function construirMensagemDiagnostico(result, prefixoBloqueio) {
+  const blocks = uniqueReasons(result?.blocks || []);
+  const warnings = uniqueReasons(result?.warnings || []);
+  if (blocks.length) return `${prefixoBloqueio}: ${blocks.join(' · ')}`;
+  if (warnings.length) return `Atenção: ${warnings.join(' · ')}`;
+  return '';
+}
+
+function getTargetGroupId(servico) {
+  const ids = [...new Set(getServiceTecnicosIds(servico).map(id => String(id)).filter(Boolean))].sort();
+  if (!ids.length) return 'sem-equipe';
+  return ids.length > 1 ? `shared:${ids.join('|')}` : ids[0];
+}
+
+async function simularAgendamentoOperacional(servico, options = {}) {
+  const ignoreId = options.ignoreId ?? null;
+  const dt = getServiceDateValue(servico);
+  const baseDaySvcs = services.filter(s => getServiceDateValue(s) === dt)
+    .filter(s => {
+      if (ignoreId !== null && sameId(s.id, ignoreId)) return false;
+      if (sameId(s.id, servico.id)) return false;
+      return true;
+    });
+  const simSvcs = [servico, ...baseDaySvcs];
+  const grupos = rotAgruparPorTecnico(simSvcs);
+  const targetGroupId = getTargetGroupId(servico);
+  const grupo = grupos.find(g => g.id === targetGroupId) || {
+    id: targetGroupId,
+    svcs: [servico],
+    sharedServiceKeys: [],
+    sharedLabelByKey: {}
+  };
+  const rota = await rotMontarRotaOtimizadaGoogle(grupo.svcs, {
+    sharedServiceKeys: grupo.sharedServiceKeys || [],
+    sharedLabelByKey: grupo.sharedLabelByKey || {}
+  });
+  const item = (rota.sequencia || []).find(entry => sameId(entry.servico?.id, servico.id)) || null;
+  const warnings = uniqueReasons([...(rota.warningReasons || []), ...(item?.warningReasons || [])]);
+  const blocks = uniqueReasons([...(rota.blockReasons || []), ...(item?.blockReasons || [])]);
+  return {
+    severity: blocks.length ? 'block' : warnings.length ? 'warn' : 'ok',
+    warnings,
+    blocks,
+    rota,
+    item,
+  };
+}
+
 function montarRotaTecnico(servicos) {
   if (!Array.isArray(servicos) || !servicos.length) {
-    return {
+    return enriquecerDiagnosticoRota({
       sequencia: [],
       tempoServicoMin: 0,
       tempoDeslocamentoMin: 0,
@@ -2754,7 +3080,7 @@ function montarRotaTecnico(servicos) {
       tempoMedioServico: TEMPO_MEDIO_SERVICO_PADRAO,
       servicosExtras: Math.floor(JORNADA_MIN / TEMPO_MEDIO_SERVICO_PADRAO),
       livreMin: JORNADA_MIN,
-    };
+    }, servicos);
   }
 
   const ordenados = otimizarSequenciaServicos(servicos);
@@ -2770,12 +3096,12 @@ function montarRotaTecnico(servicos) {
 
     if (index > 0) cursor += deslocamentoMin;
 
-    const horarioPlanejadoMin = getHorarioServicoMin(servico);
-    if (horarioPlanejadoMin !== null) cursor = Math.max(cursor, horarioPlanejadoMin);
+    const horarioAgendadoMin = getHorarioServicoMin(servico);
+    if (horarioAgendadoMin !== null) cursor = Math.max(cursor, horarioAgendadoMin);
 
-    const inicioEstimadoMin = cursor;
-    const fimEstimadoMin = inicioEstimadoMin + duracaoServicoMin;
-    cursor = fimEstimadoMin;
+    const inicioSugeridoMin = cursor;
+    const fimSugeridoMin = inicioSugeridoMin + duracaoServicoMin;
+    cursor = fimSugeridoMin;
 
     return {
       servico,
@@ -2784,9 +3110,12 @@ function montarRotaTecnico(servicos) {
       deslocamentoMin,
       km,
       duracaoServicoMin,
-      horarioPlanejadoMin,
-      inicioEstimadoMin,
-      fimEstimadoMin,
+      horarioAgendadoMin,
+      horarioPlanejadoMin: horarioAgendadoMin,
+      inicioSugeridoMin,
+      fimSugeridoMin,
+      inicioEstimadoMin: inicioSugeridoMin,
+      fimEstimadoMin: fimSugeridoMin,
     };
   });
 
@@ -2800,7 +3129,7 @@ function montarRotaTecnico(servicos) {
   const livreMin = Math.max(0, JORNADA_MIN - tempoTotalMin);
   const ocupacaoPct = JORNADA_MIN > 0 ? Math.round((tempoTotalMin / JORNADA_MIN) * 100) : 0;
 
-  return {
+  return enriquecerDiagnosticoRota({
     sequencia,
     tempoServicoMin,
     tempoDeslocamentoMin,
@@ -2810,7 +3139,7 @@ function montarRotaTecnico(servicos) {
     tempoMedioServico,
     servicosExtras: tempoMedioServico > 0 ? Math.max(0, Math.floor(livreMin / tempoMedioServico)) : 0,
     livreMin,
-  };
+  }, servicos);
 }
 
 // ── Tempo total consumido por um array de serviços ──
@@ -4632,28 +4961,38 @@ async function salvarEdicaoSvc(id) {
     document.querySelectorAll('#ed-tipos-container input:checked')
   ).map(el => el.value);
 
+  const candidato = { ...s };
+
   // Atualizar campos canônicos
-  if(novaData)  { s.dt = novaData; s.data = novaData;
+  if(novaData)  { candidato.dt = novaData; candidato.data = novaData;
     const d = new Date(novaData+'T12:00:00');
-    s.dw = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][d.getDay()];
-    s.ms = ['','JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'][d.getMonth()+1];
+    candidato.dw = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][d.getDay()];
+    candidato.ms = ['','JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'][d.getMonth()+1];
   }
-  if(novoHr  !== undefined) { s.horario = novoHr; s.hr = novoHr; }
-  if(novoCl)    { s.cliente = novoCl; s.cl = novoCl; }
-  if(novoEnd !== undefined) { s.endereco = novoEnd; }
+  if(novoHr  !== undefined) { candidato.horario = novoHr; candidato.hr = novoHr; }
+  if(novoCl)    { candidato.cliente = novoCl; candidato.cl = novoCl; }
+  if(novoEnd !== undefined) { candidato.endereco = novoEnd; }
   // Atualiza tipos[] + tipoServico (string combo para exibição e legado)
   if(tiposSel.length > 0) {
-    s.tipos       = tiposSel;
-    s.tipoServico = tiposSel.join(' + ');
-    s.sc          = novoSc || tiposSel[0];
+    candidato.tipos       = tiposSel;
+    candidato.tipoServico = tiposSel.join(' + ');
+    candidato.sc          = novoSc || tiposSel[0];
   }
-  if(novoSt)    { s.status = novoSt; s.st = novoSt; }
-  s.tecnicos_ids = tecnicos_ids;
-  if(novaEq  !== undefined) { s.equipe = novaEq; }
-  if(novoVei)   { s.veiculo = novoVei; }
-  if(novoOS  !== undefined) { s.OS = novoOS; s.os = novoOS; }
-  if(novoSc  !== undefined) { s.sc = novoSc || s.sc; }
-  if(novaObs !== undefined) { s.observacoes = novaObs; s.obs = novaObs; }
+  if(novoSt)    { candidato.status = novoSt; candidato.st = novoSt; }
+  candidato.tecnicos_ids = tecnicos_ids;
+  if(novaEq  !== undefined) { candidato.equipe = novaEq; }
+  if(novoVei)   { candidato.veiculo = novoVei; }
+  if(novoOS  !== undefined) { candidato.OS = novoOS; candidato.os = novoOS; }
+  if(novoSc  !== undefined) { candidato.sc = novoSc || candidato.sc; }
+  if(novaObs !== undefined) { candidato.observacoes = novaObs; candidato.obs = novaObs; }
+
+  const avaliacao = await simularAgendamentoOperacional(candidato, { ignoreId: id });
+  if (avaliacao.severity === 'block') {
+    toast(construirMensagemDiagnostico(avaliacao, '⛔ Edição bloqueada'), 'err');
+    return;
+  }
+
+  Object.assign(s, candidato);
 
   // 1. Salvar localmente (sempre)
   saveSvcs();
@@ -4662,7 +5001,11 @@ async function salvarEdicaoSvc(id) {
   updateBadges();
   const pageRenders = {agenda:renderAgenda, hoje:renderHoje, rotas:renderRotas, equipes:renderEquipes};
   if(pageRenders[currentPage]) pageRenders[currentPage]();
-  toast('✓ Serviço atualizado', 'ok');
+  if (avaliacao.severity === 'warn') {
+    toast(construirMensagemDiagnostico(avaliacao, '⚠ Serviço atualizado com alerta'), 'warn');
+  } else {
+    toast('✓ Serviço atualizado', 'ok');
+  }
   // 2. Persistir no Supabase (duplo, sem bloquear UI)
   if (USAR_SUPABASE) { await atualizarServicoSupabase(s, previousService); }
 }
@@ -6586,6 +6929,12 @@ async function confirmNewSvc(){
     cl, hr: horario, sc: tipoFirst, eq: '', st: 'agendado', obs: observacoes
   };
 
+  const avaliacao = await simularAgendamentoOperacional(newS);
+  if (avaliacao.severity === 'block') {
+    toast(construirMensagemDiagnostico(avaliacao, '⛔ Agendamento bloqueado'), 'err');
+    return;
+  }
+
   // Adicionar ao array
   services.unshift(newS);
   
@@ -6598,7 +6947,11 @@ async function confirmNewSvc(){
   updateFooter();
   
   // Feedback ao usuário
-  toast(`✅ Serviço criado! (${tipoServico})`,'ok');
+  if (avaliacao.severity === 'warn') {
+    toast(`⚠ Serviço criado com alerta: ${avaliacao.warnings.join(' · ')}`,'warn');
+  } else {
+    toast(`✅ Serviço criado! (${tipoServico})`,'ok');
+  }
   
   // Re-renderizar página atual
   if(currentPage==='agenda') renderAgenda();
@@ -6967,6 +7320,10 @@ async function rotGoogleDistanceBatch(origem, destinos) {
   const uncachedIdx = [];
 
   destinosFmt.forEach((dest, idx) => {
+    if (isSameOperationalAddress(origemFmt, dest)) {
+      results[idx] = { km: 0, min: 0 };
+      return;
+    }
     const cacheKey = `${origemFmt}|${dest}`;
     const cached = rotDistanceCache.get(cacheKey);
     if (cached) {
@@ -7027,14 +7384,14 @@ function rotBuildFallbackRoute(servicos) {
     const idaMin = Math.max(TEMPO_DESLOCAMENTO_MIN, Number(calcularTempoDeslocamento(ROT_BASE_PLUS_CODE, unico.endereco || '')) || TEMPO_DESLOCAMENTO_MIN);
     const voltaMin = Math.max(TEMPO_DESLOCAMENTO_MIN, Number(calcularTempoDeslocamento(unico.endereco || '', ROT_BASE_PLUS_CODE)) || TEMPO_DESLOCAMENTO_MIN);
     const duracaoServicoMin = calcularTempoServico(unico);
-    const horarioPlanejadoMin = getHorarioServicoMin(unico);
-    const inicioEstimadoMin = Math.max(INICIO_EXPEDIENTE_MIN + idaMin, horarioPlanejadoMin ?? 0);
-    const fimEstimadoMin = inicioEstimadoMin + duracaoServicoMin;
+    const horarioAgendadoMin = getHorarioServicoMin(unico);
+    const inicioSugeridoMin = Math.max(INICIO_EXPEDIENTE_MIN + idaMin, horarioAgendadoMin ?? 0);
+    const fimSugeridoMin = inicioSugeridoMin + duracaoServicoMin;
     const tempoDeslocamentoMin = idaMin + voltaMin;
     const tempoTotalMin = duracaoServicoMin + tempoDeslocamentoMin;
     const kmTotal = Number((idaKm + voltaKm).toFixed(1));
 
-    return {
+    return enriquecerDiagnosticoRota({
       sequencia: [{
         servico: unico,
         ordem: 1,
@@ -7042,9 +7399,12 @@ function rotBuildFallbackRoute(servicos) {
         deslocamentoMin: idaMin,
         km: idaKm,
         duracaoServicoMin,
-        horarioPlanejadoMin,
-        inicioEstimadoMin,
-        fimEstimadoMin,
+        horarioAgendadoMin,
+        horarioPlanejadoMin: horarioAgendadoMin,
+        inicioSugeridoMin,
+        fimSugeridoMin,
+        inicioEstimadoMin: inicioSugeridoMin,
+        fimEstimadoMin: fimSugeridoMin,
         compartilhado: false,
         compartilhadoLabel: ''
       }],
@@ -7060,7 +7420,7 @@ function rotBuildFallbackRoute(servicos) {
       idaVolta: { idaKm, idaMin, voltaKm, voltaMin },
       rotaOtimizadaDisponivel: false,
       rotaAviso: ROT_FALLBACK_MSG,
-    };
+    }, servicos);
   }
 
   const rota = montarRotaTecnico(servicos || []);
@@ -7089,16 +7449,16 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
       const voltaMin = Math.max(TEMPO_DESLOCAMENTO_MIN, Number(volta?.min || TEMPO_DESLOCAMENTO_MIN));
 
       const duracaoServicoMin = calcularTempoServico(unico);
-      const horarioPlanejadoMin = getHorarioServicoMin(unico);
-      const inicioEstimadoMin = Math.max(INICIO_EXPEDIENTE_MIN + idaMin, horarioPlanejadoMin ?? 0);
-      const fimEstimadoMin = inicioEstimadoMin + duracaoServicoMin;
+      const horarioAgendadoMin = getHorarioServicoMin(unico);
+      const inicioSugeridoMin = Math.max(INICIO_EXPEDIENTE_MIN + idaMin, horarioAgendadoMin ?? 0);
+      const fimSugeridoMin = inicioSugeridoMin + duracaoServicoMin;
       const tempoDeslocamentoMin = idaMin + voltaMin;
       const tempoTotalMin = duracaoServicoMin + tempoDeslocamentoMin;
       const kmTotal = Number((idaKm + voltaKm).toFixed(1));
       const serviceKey = rotServiceKey(unico);
       const compartilhado = (meta.sharedServiceKeys || []).includes(serviceKey);
 
-      return {
+      return enriquecerDiagnosticoRota({
         sequencia: [{
           servico: unico,
           ordem: 1,
@@ -7106,9 +7466,12 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
           deslocamentoMin: idaMin,
           km: idaKm,
           duracaoServicoMin,
-          horarioPlanejadoMin,
-          inicioEstimadoMin,
-          fimEstimadoMin,
+          horarioAgendadoMin,
+          horarioPlanejadoMin: horarioAgendadoMin,
+          inicioSugeridoMin,
+          fimSugeridoMin,
+          inicioEstimadoMin: inicioSugeridoMin,
+          fimEstimadoMin: fimSugeridoMin,
           compartilhado,
           compartilhadoLabel: meta.sharedLabelByKey?.[serviceKey] || ''
         }],
@@ -7124,7 +7487,7 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
         idaVolta: { idaKm, idaMin, voltaKm, voltaMin },
         rotaOtimizadaDisponivel: true,
         rotaAviso: '',
-      };
+      }, servicos);
     }
 
     const restantes = [...servicos];
@@ -7143,6 +7506,7 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
     const primeiro = restantes.splice(inicio, 1)[0];
     let cursor = getHorarioServicoMin(primeiro) ?? INICIO_EXPEDIENTE_MIN;
     const duracaoPrimeiro = calcularTempoServico(primeiro);
+    const horarioAgendadoPrimeiro = getHorarioServicoMin(primeiro);
 
     sequencia.push({
       servico: primeiro,
@@ -7151,7 +7515,10 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
       deslocamentoMin: 0,
       km: 0,
       duracaoServicoMin: duracaoPrimeiro,
-      horarioPlanejadoMin: getHorarioServicoMin(primeiro),
+      horarioAgendadoMin: horarioAgendadoPrimeiro,
+      horarioPlanejadoMin: horarioAgendadoPrimeiro,
+      inicioSugeridoMin: cursor,
+      fimSugeridoMin: cursor + duracaoPrimeiro,
       inicioEstimadoMin: cursor,
       fimEstimadoMin: cursor + duracaoPrimeiro,
       compartilhado: (meta.sharedServiceKeys || []).includes(rotServiceKey(primeiro)),
@@ -7172,7 +7539,11 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
         const chegada = cursor + desloc.min;
         const espera = h !== null ? Math.max(0, h - chegada) : 0;
         const atraso = h !== null ? Math.max(0, chegada - h) : 0;
-        const score = desloc.min + (atraso * 2) + (espera * 0.3);
+        const ultimoServico = sequencia[sequencia.length - 1]?.servico || null;
+        const mesmoLocal = isSameOperationalStop(ultimoServico, cand);
+        const score = mesmoLocal
+          ? (desloc.min * 0.1) + (atraso * 0.15) + (espera * 0.05) - 500
+          : desloc.min + (atraso * 2) + (espera * 0.3);
         if (score < melhorScore) {
           melhorScore = score;
           escolha = idx;
@@ -7181,11 +7552,11 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
 
       const proximo = restantes.splice(escolha, 1)[0];
       const trecho = distancias[escolha] || { km: 0, min: TEMPO_DESLOCAMENTO_MIN };
-      const horarioPlanejadoMin = getHorarioServicoMin(proximo);
-      let inicioEstimadoMin = cursor + trecho.min;
-      if (horarioPlanejadoMin !== null) inicioEstimadoMin = Math.max(inicioEstimadoMin, horarioPlanejadoMin);
+      const horarioAgendadoMin = getHorarioServicoMin(proximo);
+      let inicioSugeridoMin = cursor + trecho.min;
+      if (horarioAgendadoMin !== null) inicioSugeridoMin = Math.max(inicioSugeridoMin, horarioAgendadoMin);
       const duracaoServicoMin = calcularTempoServico(proximo);
-      const fimEstimadoMin = inicioEstimadoMin + duracaoServicoMin;
+      const fimSugeridoMin = inicioSugeridoMin + duracaoServicoMin;
 
       sequencia.push({
         servico: proximo,
@@ -7194,14 +7565,17 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
         deslocamentoMin: trecho.min,
         km: Number((trecho.km || 0).toFixed(1)),
         duracaoServicoMin,
-        horarioPlanejadoMin,
-        inicioEstimadoMin,
-        fimEstimadoMin,
+        horarioAgendadoMin,
+        horarioPlanejadoMin: horarioAgendadoMin,
+        inicioSugeridoMin,
+        fimSugeridoMin,
+        inicioEstimadoMin: inicioSugeridoMin,
+        fimEstimadoMin: fimSugeridoMin,
         compartilhado: (meta.sharedServiceKeys || []).includes(rotServiceKey(proximo)),
         compartilhadoLabel: meta.sharedLabelByKey?.[rotServiceKey(proximo)] || ''
       });
 
-      cursor = fimEstimadoMin;
+      cursor = fimSugeridoMin;
     }
 
     const tempoServicoMin = sequencia.reduce((acc, item) => acc + item.duracaoServicoMin, 0);
@@ -7212,7 +7586,7 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
     const livreMin = Math.max(0, JORNADA_MIN - tempoTotalMin);
     const ocupacaoPct = JORNADA_MIN > 0 ? Math.round((tempoTotalMin / JORNADA_MIN) * 100) : 0;
 
-    return {
+    return enriquecerDiagnosticoRota({
       sequencia,
       tempoServicoMin,
       tempoDeslocamentoMin,
@@ -7226,7 +7600,7 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
       idaVolta: null,
       rotaOtimizadaDisponivel: true,
       rotaAviso: '',
-    };
+    }, servicos);
   } catch (e) {
     console.warn('Roteiro Google fallback:', e?.message || e);
     return rotBuildFallbackRoute(servicos);
@@ -7234,28 +7608,38 @@ async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
 }
 
 function rotMontarTextoWhatsApp(eq, data) {
-  const linhas = eq.sequencia.map(item => {
-    const F = sf(item.servico);
-    const maps = item.servico.endereco ? ` - https://maps.google.com/?q=${encodeURIComponent(item.servico.endereco + ', São Paulo')}` : '';
-    const deslocamento = item.ordem > 1 ? ` → ${item.deslocamentoMin} min | ${rotKmFmt(item.km)} km` : '';
-    const compartilhado = item.compartilhado ? ' [Compartilhado]' : '';
-    const bairro = item.bairro && item.bairro !== 'Sem endereço' ? ` - ${item.bairro}` : '';
-    const os = F.os && F.os !== '—' ? ` - OS ${F.os}` : '';
-    return `${item.ordem}. ${formatarHoraDoDia(item.inicioEstimadoMin)}-${formatarHoraDoDia(item.fimEstimadoMin)}${deslocamento} - ${F.cliente}${compartilhado} - ${F.tipo || F.tipoLabel || '—'}${os}${bairro}${maps}`;
+  const paradas = groupConsecutiveOperationalStops(eq.sequencia);
+  const linhas = paradas.map(parada => {
+    const base = sf(parada.servicoBase);
+    const maps = parada.servicoBase?.endereco ? ` - https://maps.google.com/?q=${encodeURIComponent(parada.servicoBase.endereco + ', São Paulo')}` : '';
+    const deslocamento = parada.ordem > 1 ? ` → ${parada.deslocamentoMin} min | ${rotKmFmt(parada.km)} km` : '';
+    const bairro = parada.bairro && parada.bairro !== 'Sem endereço' ? ` - ${parada.bairro}` : '';
+    const janela = formatarJanelaOperacional(parada.inicioSugeridoMin, parada.fimSugeridoMin);
+    const titulo = `${parada.ordem}. ${janela}${deslocamento} - ${base.cliente}${bairro}${maps}`;
+    const tarefas = parada.items.map(item => {
+      const F = sf(item.servico);
+      const os = F.os && F.os !== '—' ? `OS ${F.os}` : 'sem OS';
+      const hr = item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined ? formatarHoraDoDia(item.horarioAgendadoMin) : 'sem horário';
+      return `   - ${hr} · ${F.tipo || F.tipoLabel || '—'} · ${os}`;
+    }).join('\n');
+    return `${titulo}\n${tarefas}`;
   }).join('\n');
 
   const idaVoltaTxt = eq.idaVoltaAplicada && eq.idaVolta
     ? `\nIda + Volta (Base ${ROT_BASE_PLUS_CODE}): ida ${eq.idaVolta.idaMin} min | ${rotKmFmt(eq.idaVolta.idaKm)} km · volta ${eq.idaVolta.voltaMin} min | ${rotKmFmt(eq.idaVolta.voltaKm)} km`
     : '';
 
+  const observacoes = uniqueReasons([...(eq.blockReasons || []), ...(eq.warningReasons || [])]);
+  const observacoesTxt = observacoes.length ? `\nObservações operacionais: ${observacoes.join(' · ')}` : '';
+
   return `TÉCNICO: ${eq.equipe}
 Veículo: ${eq.veiculo || '—'}
 Data: ${rotFmtData(data)}
-Resumo: ${eq.sequencia.length} serviço(s) · ${formatarMinutosHM(eq.tempoTotalMin)} totais · ${eq.kmTotal} km aprox. · ocupação ${eq.ocupacaoPct}%
+Resumo: ${eq.sequencia.length} serviço(s) · ${paradas.length} parada(s) · ${formatarMinutosHM(eq.tempoTotalMin)} totais · ${eq.kmTotal} km aprox. · ocupação ${eq.ocupacaoPct}%
 
 Sequência sugerida:
 ${linhas}
-${idaVoltaTxt}
+${idaVoltaTxt}${observacoesTxt}
 
 KM total estimado: ${rotKmFmt(eq.kmTotal)} km | Tempo deslocamento: ${Math.round(eq.tempoDeslocamentoMin || 0)} min`;
 }
@@ -7264,48 +7648,60 @@ KM total estimado: ${rotKmFmt(eq.kmTotal)} km | Tempo deslocamento: ${Math.round
 async function rotGerarDoSistema() {
   const data = document.getElementById('rot-data')?.value;
   if (!data) { toast('Selecione uma data', 'err'); return; }
+  try {
+    const daySvcs = services.filter(s => getServiceDateValue(s) === data);
+    if (!daySvcs.length) {
+      rotDados = [];
+      document.getElementById('rot-kpis').style.display  = 'none';
+      document.getElementById('rot-actions').style.display = 'none';
+      document.getElementById('rot-sugestao-wrap').style.display = 'none';
+      document.getElementById('rot-empty').style.display = 'block';
+      document.getElementById('rot-sugestao-grid').innerHTML = '';
+      document.getElementById('rot-equipes-grid').innerHTML = '';
+      return;
+    }
 
-  const daySvcs = services.filter(s => s.dt === data);
-  if (!daySvcs.length) {
+    const grupos = rotAgruparPorTecnico(daySvcs);
+    const rotas = await Promise.all(grupos.map(grupo => rotMontarRotaOtimizadaGoogle(grupo.svcs, {
+      sharedServiceKeys: grupo.sharedServiceKeys || [],
+      sharedLabelByKey: grupo.sharedLabelByKey || {}
+    })));
+
+    rotDados = grupos.map((grupo, idx) => {
+      const rota = rotas[idx];
+      const veiculo = rotVeiculoPreferencial(grupo.svcs, grupo.veiculo);
+      const enriched = { ...grupo, veiculo, ...rota };
+      return { ...enriched, whatsappText: rotMontarTextoWhatsApp(enriched, data) };
+    });
+
+    // KPIs
+    const exec = daySvcs.filter(s=>(s.status||s.st)==='executado').length;
+    const pend = daySvcs.length - exec;
+    const tempoTotal = rotDados.reduce((acc, eq) => acc + eq.tempoTotalMin, 0);
+    const kmTotal = Math.round(rotDados.reduce((acc, eq) => acc + eq.kmTotal, 0));
+    document.getElementById('rot-kpis').style.display       = '';
+    document.getElementById('rot-actions').style.display    = 'flex';
+    document.getElementById('rot-empty').style.display      = 'none';
+    document.getElementById('rot-kpi-total').textContent    = daySvcs.length;
+    document.getElementById('rot-kpi-equipes').textContent  = rotDados.length;
+    document.getElementById('rot-kpi-exec').textContent     = exec;
+    document.getElementById('rot-kpi-pend').textContent     = pend;
+    document.getElementById('rot-kpi-tempo').textContent    = formatarMinutosHM(tempoTotal);
+    document.getElementById('rot-kpi-km').textContent       = `${kmTotal} km`;
+
+    rotRenderizarSugestoes(rotDados);
+    rotRenderizarLocal(rotDados, data);
+  } catch (e) {
+    console.error('Erro ao gerar roteiro do dia:', e);
+    rotDados = [];
     document.getElementById('rot-kpis').style.display  = 'none';
     document.getElementById('rot-actions').style.display = 'none';
     document.getElementById('rot-sugestao-wrap').style.display = 'none';
     document.getElementById('rot-empty').style.display = 'block';
     document.getElementById('rot-sugestao-grid').innerHTML = '';
     document.getElementById('rot-equipes-grid').innerHTML = '';
-    return;
+    toast(`Erro ao gerar roteiro: ${e.message || e}`, 'err');
   }
-
-  const grupos = rotAgruparPorTecnico(daySvcs);
-  const rotas = await Promise.all(grupos.map(grupo => rotMontarRotaOtimizadaGoogle(grupo.svcs, {
-    sharedServiceKeys: grupo.sharedServiceKeys || [],
-    sharedLabelByKey: grupo.sharedLabelByKey || {}
-  })));
-
-  rotDados = grupos.map((grupo, idx) => {
-    const rota = rotas[idx];
-    const veiculo = rotVeiculoPreferencial(grupo.svcs, grupo.veiculo);
-    const enriched = { ...grupo, veiculo, ...rota };
-    return { ...enriched, whatsappText: rotMontarTextoWhatsApp(enriched, data) };
-  });
-
-  // KPIs
-  const exec = daySvcs.filter(s=>(s.status||s.st)==='executado').length;
-  const pend = daySvcs.length - exec;
-  const tempoTotal = rotDados.reduce((acc, eq) => acc + eq.tempoTotalMin, 0);
-  const kmTotal = Math.round(rotDados.reduce((acc, eq) => acc + eq.kmTotal, 0));
-  document.getElementById('rot-kpis').style.display       = '';
-  document.getElementById('rot-actions').style.display    = 'flex';
-  document.getElementById('rot-empty').style.display      = 'none';
-  document.getElementById('rot-kpi-total').textContent    = daySvcs.length;
-  document.getElementById('rot-kpi-equipes').textContent  = rotDados.length;
-  document.getElementById('rot-kpi-exec').textContent     = exec;
-  document.getElementById('rot-kpi-pend').textContent     = pend;
-  document.getElementById('rot-kpi-tempo').textContent    = formatarMinutosHM(tempoTotal);
-  document.getElementById('rot-kpi-km').textContent       = `${kmTotal} km`;
-
-  rotRenderizarSugestoes(rotDados);
-  rotRenderizarLocal(rotDados, data);
 }
 
 function rotRenderizarSugestoes(equipes) {
@@ -7324,18 +7720,24 @@ function rotRenderizarSugestoes(equipes) {
 
   grid.innerHTML = equipes.map((eq, gi) => {
     const cor = eq.equipe.startsWith('⚠') ? '#94a3b8' : paleta[gi % paleta.length];
+    const severityColor = getRouteSeverityColor(eq.severity);
+    const severityBg = getRouteSeverityBg(eq.severity);
+    const severityLabel = getRouteSeverityLabel(eq.severity);
+    const diagnostico = uniqueReasons([...(eq.blockReasons || []), ...(eq.warningReasons || [])]);
     return `<div class="card" style="padding:16px;border-top:3px solid ${cor}">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-family:var(--display);font-size:15px;font-weight:800;color:${cor}">${eq.equipe}</div>
           <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">🚗 ${eq.veiculo || '—'} · ${eq.sequencia.length} parada(s)</div>
           ${eq.rotaAviso ? `<div style="margin-top:5px;font-size:10px;color:var(--orange);font-family:var(--mono)">${eq.rotaAviso}</div>` : ''}
+          <div style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;background:${severityBg};color:${severityColor};font-size:10px;font-family:var(--mono);font-weight:700">${severityLabel}</div>
         </div>
         <div style="text-align:right">
           <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:${cor}">${eq.ocupacaoPct}%</div>
           <div style="font-size:10px;color:var(--text3)">ocupação</div>
         </div>
       </div>
+      ${diagnostico.length ? `<div style="margin:-2px 0 12px 0;font-size:10px;color:${severityColor};font-family:var(--mono)">${diagnostico.join(' · ')}</div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
         <div style="padding:8px;background:var(--surface);border-radius:var(--r2);text-align:center">
@@ -7355,6 +7757,7 @@ function rotRenderizarSugestoes(equipes) {
       <div style="display:flex;flex-direction:column;gap:8px">
         ${eq.sequencia.map(item => {
           const F = sf(item.servico);
+          const itemReasons = uniqueReasons([...(item.blockReasons || []), ...(item.warningReasons || [])]);
           return `
             ${item.ordem > 1 ? `<div style="margin-left:36px;font-size:10px;color:var(--text3);font-family:var(--mono)">↳ ${item.deslocamentoMin} min | ${rotKmFmt(item.km)} km</div>` : ''}
             <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2)">
@@ -7362,9 +7765,11 @@ function rotRenderizarSugestoes(equipes) {
               <div style="min-width:0;flex:1">
                 <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:2px">
                   <span style="font-weight:700;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.cliente}</span>
-                  <span style="font-family:var(--mono);font-size:10px;color:${cor};flex-shrink:0">${formatarHoraDoDia(item.inicioEstimadoMin)}-${formatarHoraDoDia(item.fimEstimadoMin)}</span>
+                  <span style="font-family:var(--mono);font-size:10px;color:${cor};flex-shrink:0">${formatarJanelaOperacional(item.inicioSugeridoMin, item.fimSugeridoMin)}</span>
                 </div>
                 <div style="font-size:10px;color:var(--text2)">${F.tipo || F.tipoLabel || '—'} · ${item.bairro} · ${formatarMinutosHM(item.duracaoServicoMin)}</div>
+                <div style="font-size:10px;color:var(--text3);margin-top:2px">Agendado: ${item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined ? formatarHoraDoDia(item.horarioAgendadoMin) : '—'} · Sugestão: ${formatarJanelaOperacional(item.inicioSugeridoMin, item.fimSugeridoMin)}</div>
+                ${itemReasons.length ? `<div style="font-size:10px;color:${item.severity === 'block' ? 'var(--red)' : 'var(--orange)'};margin-top:2px;font-family:var(--mono)">${itemReasons.join(' · ')}</div>` : ''}
                 ${item.servico.endereco ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${item.servico.endereco}</div>` : ''}
               </div>
             </div>`;
@@ -7385,6 +7790,10 @@ function rotRenderizarLocal(equipes, data) {
     const cor    = eq.equipe.startsWith('⚠') ? '#94a3b8' : paleta[gi % paleta.length];
     const textoId = `rot-txt-${gi}`;
     const texto   = eq.whatsappText;
+    const severityColor = getRouteSeverityColor(eq.severity);
+    const severityBg = getRouteSeverityBg(eq.severity);
+    const severityLabel = getRouteSeverityLabel(eq.severity);
+    const diagnostico = uniqueReasons([...(eq.blockReasons || []), ...(eq.warningReasons || [])]);
 
     return `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column">
       <!-- Cabeçalho -->
@@ -7394,12 +7803,14 @@ function rotRenderizarLocal(equipes, data) {
             <div style="font-family:var(--display);font-size:14px;font-weight:800;color:${cor}">${eq.equipe}</div>
             ${eq.veiculo ? `<div style="font-family:var(--mono);font-size:10px;color:var(--text3)">🚗 ${eq.veiculo}</div>` : ''}
             ${eq.rotaAviso ? `<div style="margin-top:4px;font-size:10px;color:var(--orange);font-family:var(--mono)">${eq.rotaAviso}</div>` : ''}
+            <div style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;background:${severityBg};color:${severityColor};font-size:10px;font-family:var(--mono);font-weight:700">${severityLabel}</div>
           </div>
           <div style="text-align:right">
             <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:${cor}">${eq.sequencia.length}</div>
             <div style="font-size:10px;color:var(--text3)">serviços</div>
           </div>
         </div>
+        ${diagnostico.length ? `<div style="margin-bottom:8px;font-size:10px;color:${severityColor};font-family:var(--mono)">${diagnostico.join(' · ')}</div>` : ''}
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
           <div style="padding:7px;background:var(--surface);border-radius:var(--r2);text-align:center">
             <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">${eq.sequencia.length}</div>
@@ -7419,7 +7830,7 @@ function rotRenderizarLocal(equipes, data) {
       <div style="padding:10px 14px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface)">
         <div style="font-family:var(--display);font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">Rota Otimizada</div>
         <div style="font-size:10px;color:var(--text2);line-height:1.6">
-          ${eq.sequencia.map(item => `${item.ordem} → ${sanitize(sf(item.servico).cliente || '—')}`).join(' · ')}
+          ${groupConsecutiveOperationalStops(eq.sequencia).map(parada => `${parada.ordem} → ${sanitize(sf(parada.servicoBase).cliente || '—')}${parada.items.length > 1 ? ` (${parada.items.length} tarefas)` : ''}`).join(' · ')}
         </div>
         <div style="margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--text3)">KM total estimado: ${rotKmFmt(eq.kmTotal)} km</div>
         ${eq.idaVoltaAplicada && eq.idaVolta ? `<div style="margin-top:4px;font-family:var(--mono);font-size:10px;color:var(--text2)">Ida + Volta: ${rotKmFmt(eq.idaVolta.idaKm + eq.idaVolta.voltaKm)} km (${eq.idaVolta.idaMin + eq.idaVolta.voltaMin} min)</div>` : ''}
@@ -7427,17 +7838,31 @@ function rotRenderizarLocal(equipes, data) {
 
       <!-- Lista de serviços -->
       <div style="padding:10px 14px;display:flex;flex-direction:column;gap:6px;flex:1">
-        ${eq.sequencia.map(item => {
-          const F  = sf(item.servico);
-          const st = ST_META[F.status]||{chip:'chip-gray',label:F.status};
-          return `${item.ordem > 1 ? `<div style="margin-left:52px;font-size:10px;color:var(--text3);font-family:var(--mono)">↳ ${item.deslocamentoMin} min | ${rotKmFmt(item.km)} km</div>` : ''}<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);min-width:62px;flex-shrink:0">${formatarHoraDoDia(item.inicioEstimadoMin)}</span>
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.cliente}${item.compartilhado ? ' · <span style="font-size:9px;color:var(--orange)">Compartilhado</span>' : ''}</div>
-              <div style="font-family:var(--mono);font-size:10px;color:${cor}">${F.tipo||'—'}${F.os&&F.os!=='—'?' · OS '+F.os:''} · ${item.bairro}</div>
-              ${item.servico.endereco ? `<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${item.servico.endereco}</div>` : ''}
+        ${groupConsecutiveOperationalStops(eq.sequencia).map(parada => {
+          const base = sf(parada.servicoBase);
+          const stopReasons = uniqueReasons([...(parada.blockReasons || []), ...(parada.warningReasons || [])]);
+          return `${parada.ordem > 1 ? `<div style="margin-left:52px;font-size:10px;color:var(--text3);font-family:var(--mono)">↳ ${parada.deslocamentoMin} min | ${rotKmFmt(parada.km)} km</div>` : ''}<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <span style="font-family:var(--mono);font-size:11px;color:var(--text3);min-width:92px;flex-shrink:0">${formatarJanelaOperacional(parada.inicioSugeridoMin, parada.fimSugeridoMin)}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${base.cliente}${parada.items.length > 1 ? ` · <span style="font-size:9px;color:${cor}">${parada.items.length} tarefas</span>` : ''}</div>
+                <div style="font-size:10px;color:var(--text3)">📍 ${parada.servicoBase?.endereco || '—'}</div>
+                ${stopReasons.length ? `<div style="font-size:10px;color:${parada.severity === 'block' ? 'var(--red)' : 'var(--orange)'};font-family:var(--mono);margin-top:2px">${stopReasons.join(' · ')}</div>` : ''}
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+                  ${parada.items.map(item => {
+                    const F  = sf(item.servico);
+                    const st = ST_META[F.status]||{chip:'chip-gray',label:F.status};
+                    return `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2)">
+                      <span style="font-family:var(--mono);font-size:10px;color:var(--text3);min-width:52px;flex-shrink:0">${item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined ? formatarHoraDoDia(item.horarioAgendadoMin) : '—'}</span>
+                      <div style="flex:1;min-width:0">
+                        <div style="font-family:var(--mono);font-size:10px;color:${cor}">${F.tipo||'—'}${F.os&&F.os!=='—'?' · OS '+F.os:''}${item.bairro ? ` · ${item.bairro}` : ''}</div>
+                      </div>
+                      <span class="chip ${st.chip}" style="font-size:9px;flex-shrink:0">${st.label}</span>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </div>
             </div>
-            <span class="chip ${st.chip}" style="font-size:9px;flex-shrink:0">${st.label}</span>
           </div>`;
         }).join('')}
       </div>
