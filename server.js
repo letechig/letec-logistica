@@ -388,6 +388,46 @@ app.delete('/api/service-types/:id', strictLimiter, async (req, res) => {
   }
 });
 
+app.get('/api/cep/:cep', async (req, res) => {
+  try {
+    const cep = String(req.params.cep || '').replace(/\D/g, '');
+    if (cep.length !== 8) {
+      return res.status(400).json({ error: 'CEP deve ter 8 dígitos' });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' }
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: payload.erro ? 'CEP não encontrado' : 'Falha ao consultar CEP',
+          details: payload
+        });
+      }
+
+      if (payload.erro) {
+        return res.status(404).json({ error: 'CEP não encontrado' });
+      }
+
+      return res.json(payload);
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    const isAbort = error.name === 'AbortError';
+    return res.status(isAbort ? 504 : 500).json({
+      error: isAbort ? 'Consulta de CEP expirou' : error.message
+    });
+  }
+});
+
 // CUSTOMERS CRUD
 app.get('/api/customers', async (req, res) => {
   try {

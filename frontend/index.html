@@ -1951,6 +1951,13 @@ async function carregarTecnicos(){
             <option value="outro">Outro</option>
           </select>
         </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Tipo de pessoa</label>
+          <select id="cli-form-tipo" class="fsel" style="width:100%">
+            <option value="PF">Pessoa física</option>
+            <option value="PJ">Pessoa jurídica</option>
+          </select>
+        </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap">
           <div style="flex:1">
             <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Rua</label>
@@ -4438,11 +4445,7 @@ function showDayDetail(dt) {
 // ── Ações rápidas do modal de dia ──────────────────────────
 function openNewSvcData(dt) {
   // Abre o modal de novo serviço já pré-preenchido com a data clicada
-  openNewSvc();
-  setTimeout(() => {
-    const el = document.getElementById('ns-dt');
-    if (el && dt) el.value = dt;
-  }, 80);
+  openNewSvc({ data: dt });
 }
 function irParaDia(dt) {
   // Navega para a aba Hoje com a data do dia clicado
@@ -5797,37 +5800,16 @@ function openServiceFromClient(clientId) {
     toast('Cliente não encontrado', 'err');
     return;
   }
-  
-  // Modificar temporariamente a função openNewSvc para preencher os campos
-  const originalOpenNewSvc = openNewSvc;
-  openNewSvc = function() {
-    // Chamar a função original
-    originalOpenNewSvc();
-    
-    // Preencher os campos imediatamente após o modal ser criado
-    setTimeout(() => {
-      const nsCl = document.getElementById('ns-cl');
-      const nsEnd = document.getElementById('ns-end');
-      const nsDt = document.getElementById('ns-dt');
-      
-      if (nsCl) nsCl.value = cliente.nome;
-      if (nsEnd) nsEnd.value = cliente.endereco_completo || cliente.endereco || '';
-      
-      // Se o cliente tem urgência crítica, pode sugerir tipos específicos
-      if (cliente.nivel_urgencia_padrao === 'crítico') {
-        toast('Cliente com urgência crítica - considere serviços prioritários', 'warn');
-      }
-      
-      // Focar no campo de data
-      if (nsDt) nsDt.focus();
-    }, 50);
-  };
-  
-  // Abrir modal de novo serviço
-  openNewSvc();
-  
-  // Restaurar a função original
-  openNewSvc = originalOpenNewSvc;
+
+  openNewSvc({
+    cliente: cliente.nome || '',
+    endereco: buildServiceAddressFromClient(cliente),
+    focarData: true
+  });
+
+  if (cliente.nivel_urgencia_padrao === 'crítico') {
+    toast('Cliente com urgência crítica - considere serviços prioritários', 'warn');
+  }
 }
 
 function openClientModal(clientId = null) {
@@ -5938,12 +5920,12 @@ async function buscarCepCliente() {
   try {
     toast('🔍 Buscando endereço...', 'ok');
     
-    // Usar API do ViaCEP (gratuita e confiável)
-    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    // Usa o backend como proxy para evitar bloqueio por CSP no navegador
+    const response = await fetch(`${API_BASE_URL}/api/cep/${cep}`);
     const data = await response.json();
     
-    if (data.erro) {
-      toast('CEP não encontrado', 'err');
+    if (!response.ok) {
+      toast(data.error || 'CEP não encontrado', 'err');
       return;
     }
     
@@ -5980,21 +5962,29 @@ async function buscarCepCliente() {
 async function verificarDuplicatasCliente() {
   const nome = document.getElementById('cli-form-nome').value.trim();
   const telefone = document.getElementById('cli-form-tel').value.trim();
+  const cep = document.getElementById('cli-form-cep').value.trim().replace(/\D/g, '');
+  const enderecoCompleto = document.getElementById('cli-form-end').value.trim().toLowerCase();
   
-  if (!nome || !telefone) return; // Só verifica se tem nome e telefone
+  if (!nome) return true;
   
   try {
     // Buscar clientes similares por nome e telefone
     const response = await fetch(`${API_BASE_URL}/api/customers?search=${encodeURIComponent(nome)}&limit=10`);
-    if (!response.ok) return;
+    if (!response.ok) return true;
     
     const customers = await response.json();
+    const nomeNorm = nome.toLowerCase();
+    const telefoneNorm = telefone.replace(/\D/g, '');
     
-    // Filtrar duplicatas (mesmo nome ou telefone, excluindo o cliente sendo editado)
+    // Filtrar duplicatas (mesmo nome, telefone, CEP ou endereço, excluindo o cliente sendo editado)
     const duplicates = customers.filter(c => 
       c.id !== (clienteEditando?.id || 0) && 
-      (c.nome.toLowerCase().includes(nome.toLowerCase()) || 
-       c.telefone.replace(/\D/g, '') === telefone.replace(/\D/g, ''))
+      (
+        c.nome.toLowerCase().includes(nomeNorm) ||
+        (telefoneNorm && (c.telefone || '').replace(/\D/g, '') === telefoneNorm) ||
+        (cep && String(c.cep || '').replace(/\D/g, '') === cep) ||
+        (enderecoCompleto && String(c.endereco_completo || c.endereco || '').trim().toLowerCase() === enderecoCompleto)
+      )
     );
     
     if (duplicates.length > 0) {
@@ -6004,11 +5994,13 @@ async function verificarDuplicatasCliente() {
       // Mostrar modal de duplicatas se houver
       if (confirmAction(`Encontramos ${duplicates.length} possível(is) duplicata(s). Deseja visualizar?`)) {
         openDuplicatesModal();
-        // TODO: Filtrar duplicatas por nome/telefone
+        return false;
       }
     }
+    return true;
   } catch (error) {
     console.error('Erro verificar duplicatas:', error);
+    return true;
   }
 }
 
@@ -6064,7 +6056,7 @@ async function saveClient() {
     const categoria = document.getElementById('cli-form-categoria').value;
     const recorrente = document.getElementById('cli-form-recorrente').checked;
     const periodicidade = (categoria === 'contrato' || recorrente) ? document.getElementById('cli-form-periodicidade').value : null;
-    const tipo = document.getElementById('cli-form-tipo').value;
+    const tipo = document.getElementById('cli-form-tipo')?.value || 'PF';
     const tipo_local = document.getElementById('cli-form-tipo-local').value;
     const rua = document.getElementById('cli-form-rua').value.trim();
     const numero = document.getElementById('cli-form-numero').value.trim();
@@ -6099,7 +6091,8 @@ async function saveClient() {
     
     // Verificar duplicatas antes de salvar (apenas para novos clientes)
     if (!clienteEditando) {
-      await verificarDuplicatasCliente();
+      const canContinue = await verificarDuplicatasCliente();
+      if (!canContinue) return;
     }
     
     const payload = {
@@ -6191,6 +6184,18 @@ function buildClientAddress({ rua, numero, bairro, cidade, complemento, referenc
   if (complemento) parts.push(complemento);
   if (referencia) parts.push(`Ref: ${referencia}`);
   return parts.join(', ');
+}
+
+function buildServiceAddressFromClient(cliente = {}) {
+  const enderecoBase = String(
+    cliente.endereco_completo ||
+    cliente.endereco ||
+    buildClientAddress(cliente)
+  ).trim();
+  const cep = String(cliente.cep || '').trim();
+  if (!cep) return enderecoBase;
+  if (!enderecoBase) return `CEP: ${cep}`;
+  return `${enderecoBase} - CEP: ${cep}`;
 }
 
 async function geocodeClientAddress() {
@@ -6490,19 +6495,25 @@ function clearImp(){['imp-dt','imp-mot','imp-ass','imp-kms','imp-kmc','imp-hs','
 // ════════════════════════════════════════════════
 // NEW SERVICE MODAL
 // ════════════════════════════════════════════════
-function openNewSvc(){
+function openNewSvc(initialData = {}){
   carregarCatalogosServico();
+  const defaults = {
+    data: initialData.data || new Date().toISOString().split('T')[0],
+    cliente: initialData.cliente || '',
+    endereco: initialData.endereco || '',
+    focarData: !!initialData.focarData
+  };
   document.getElementById('modal-title').textContent='+ Novo Serviço';
   document.getElementById('modal-body').innerHTML=`
     <div class="form-row fr-2 mb3">
-      <div class="field"><label>Data</label><input type="date" id="ns-dt" value="${new Date().toISOString().split('T')[0]}"></div>
+      <div class="field"><label>Data</label><input type="date" id="ns-dt" value="${defaults.data}"></div>
       <div class="field"><label>Horário</label><input type="time" id="ns-hr"></div>
     </div>
     <div class="form-row mb3">
-      <div class="field"><label>Cliente / Condomínio</label><input type="text" id="ns-cl" placeholder="Nome do cliente"></div>
+      <div class="field"><label>Cliente / Condomínio</label><input type="text" id="ns-cl" value="${sanitize(defaults.cliente)}" placeholder="Nome do cliente"></div>
     </div>
     <div class="form-row mb3">
-      <div class="field"><label>Endereço completo</label><input type="text" id="ns-end" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo"></div>
+      <div class="field"><label>Endereço completo</label><input type="text" id="ns-end" value="${sanitize(defaults.endereco)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo"></div>
     </div>
     <div class="form-row fr-2 mb3">
       <div class="field"><label>Tipo(s) de Serviço</label>
@@ -6533,6 +6544,9 @@ function openNewSvc(){
   carregarTecnicos().then(() => renderTecnicos([], 'ns-tecnicos-container'));
   renderTiposCheckbox([], 'ns-tipos-container');
   bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
+  if (defaults.focarData) {
+    document.getElementById('ns-dt')?.focus();
+  }
 }
 async function confirmNewSvc(){
   const dt=document.getElementById('ns-dt')?.value;
