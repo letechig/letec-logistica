@@ -857,13 +857,13 @@ td.bold { color: var(--text); font-weight: 600; }
   .cal-month-stat-val { font-size:18px; }
 }
 
-#tecnicos-container {
+.tecnicos-container {
 display: grid;
 grid-template-columns: repeat(2, 1fr);
 gap: 8px;
 }
 
-#tecnicos-container label {
+.tecnicos-container label {
 display: flex;
 gap: 6px;
 }
@@ -2063,21 +2063,6 @@ async function carregarTecnicos(){
     <div class="flex gap2" style="padding:16px 0;border-top:1px solid var(--border);margin-top:16px">
       <button class="btn btn-ghost btn-sm" onclick="closeDuplicatesModal()">Fechar</button>
       <button class="btn btn-primary btn-sm" onclick="loadDuplicates()" style="margin-left:auto">🔄 Recarregar</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL ROTEIRO WHATSAPP -->
-<div class="modal-bg" id="rot-modal" onclick="rotFecharModal()">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title" id="rot-modal-title" style="padding:18px 20px;border-bottom:1px solid var(--border);font-family:var(--display);font-size:15px;font-weight:800">Roteiro WhatsApp</div>
-    <div style="padding:16px 20px;flex:1;overflow-y:auto">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Texto pronto para copiar e colar no WhatsApp da equipe 📱</div>
-      <textarea id="rot-modal-txt" style="width:100%;min-height:360px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:14px;font-family:var(--mono);font-size:12px;color:var(--text);line-height:1.8;resize:vertical;outline:none" readonly></textarea>
-    </div>
-    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px">
-      <button class="btn btn-green" onclick="rotCopiarModal()">📋 Copiar Texto</button>
-      <button class="btn btn-ghost" onclick="rotFecharModal()">Fechar</button>
     </div>
   </div>
 </div>
@@ -3320,8 +3305,8 @@ function tipoComboLabel(s) {
   return tipos.join(' + ') || (s.tipoServico || s.sc || '—');
 }
 
-function renderTecnicos(selectedIds = []){
-  const container = document.getElementById('tecnicos-container');
+function renderTecnicos(selectedIds = [], containerId = 'tecnicos-container'){
+  const container = document.getElementById(containerId);
   const lista = window._tecnicos || [];
 
   if(!container) return;
@@ -3368,8 +3353,8 @@ function getTiposServicoCatalogo(selected = []) {
   return [...tiposMap.values()];
 }
 
-function renderTiposCheckbox(selected = []){
-  const container = document.getElementById('tipos-container');
+function renderTiposCheckbox(selected = [], containerId = 'tipos-container'){
+  const container = document.getElementById(containerId);
   if(!container) return;
 
   const selectedNorm = (Array.isArray(selected) ? selected : [])
@@ -3391,20 +3376,20 @@ function renderTiposCheckbox(selected = []){
   }).join('');
 }
 
-function updateTiposPreview(previewId) {
+function updateTiposPreview(previewId, containerId = 'tipos-container') {
   const prev = document.getElementById(previewId);
   if (!prev) return;
   const sel = Array.from(
-    document.querySelectorAll('#tipos-container input:checked')
+    document.querySelectorAll(`#${containerId} input:checked`)
   ).map(el => el.value);
   prev.textContent = sel.length ? sel.join(' + ') : 'Nenhum tipo selecionado';
 }
 
-function bindTiposPreview(previewId) {
-  document.querySelectorAll('#tipos-container input[type="checkbox"]').forEach(chk => {
-    chk.addEventListener('change', () => updateTiposPreview(previewId));
+function bindTiposPreview(previewId, containerId = 'tipos-container') {
+  document.querySelectorAll(`#${containerId} input[type="checkbox"]`).forEach(chk => {
+    chk.addEventListener('change', () => updateTiposPreview(previewId, containerId));
   });
-  updateTiposPreview(previewId);
+  updateTiposPreview(previewId, containerId);
 }
 
 // ════════════════════════════════════════════════
@@ -4588,7 +4573,7 @@ function openEditSvc(id) {
     <div class="form-row fr-2 mb3">
       <div class="field">
         <label>Tipo(s) de Serviço</label>
-        <div id="tipos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:2px"></div>
+        <div id="ed-tipos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:2px"></div>
         <div id="ed-tipos-preview" style="margin-top:4px;font-size:10px;color:var(--text3);font-family:var(--mono)">${tipoComboLabel(s)}</div>
       </div>
       <div class="field">
@@ -4603,7 +4588,7 @@ function openEditSvc(id) {
     <div class="form-row fr-2 mb3">
       <div class="field">
         <label>Técnicos</label>
-        <div id="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+        <div id="ed-tecnicos-container" class="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
       </div>
       <div class="field">
         <label>Veículo</label>
@@ -4640,10 +4625,10 @@ function openEditSvc(id) {
   document.getElementById('modal-del').style.display = 'inline-flex';
   currentDelId = {type:'svc', id};
   document.getElementById('modal').classList.add('open');
-  renderTecnicos(tecnicosSelecionados);
-  carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s)));
-  renderTiposCheckbox(tiposSelecionados);
-  bindTiposPreview('ed-tipos-preview');
+  renderTecnicos(tecnicosSelecionados, 'ed-tecnicos-container');
+  carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s), 'ed-tecnicos-container'));
+  renderTiposCheckbox(tiposSelecionados, 'ed-tipos-container');
+  bindTiposPreview('ed-tipos-preview', 'ed-tipos-container');
 }
 
 async function salvarEdicaoSvc(id) {
@@ -4657,7 +4642,7 @@ async function salvarEdicaoSvc(id) {
   const novoEnd   = document.getElementById('ed-end')?.value.trim();
   const novoSt    = document.getElementById('ed-st')?.value;
   const tecnicos_ids = Array.from(
-    document.querySelectorAll('#tecnicos-container input:checked')
+    document.querySelectorAll('#ed-tecnicos-container input:checked')
   ).map(el => el.value);
   if(tecnicos_ids.length === 0){
     toast('Selecione pelo menos um técnico', 'err');
@@ -4671,7 +4656,7 @@ async function salvarEdicaoSvc(id) {
 
   // Lê tipos via checkboxes (multi-tipo)
   const tiposSel = Array.from(
-    document.querySelectorAll('#tipos-container input:checked')
+    document.querySelectorAll('#ed-tipos-container input:checked')
   ).map(el => el.value);
 
   // Atualizar campos canônicos
@@ -5257,7 +5242,7 @@ function renderHoje() {
 
 async function hojeExecTodos(ids) {
   if (!ids || !ids.length) return;
-  if (!confirm(`Marcar ${ids.length} serviço(s) como executado(s)?`)) return;
+  if (!confirmAction(`Marcar ${ids.length} serviço(s) como executado(s)?`)) return;
   const previousById = new Map();
   ids.forEach(id => {
     const s = services.find(x => sameId(x.id, id));
@@ -6017,7 +6002,7 @@ async function verificarDuplicatasCliente() {
       toast(`⚠️ Possível duplicata: ${duplicateNames}`, 'warn');
       
       // Mostrar modal de duplicatas se houver
-      if (confirm(`Encontramos ${duplicates.length} possível(is) duplicata(s). Deseja visualizar?`)) {
+      if (confirmAction(`Encontramos ${duplicates.length} possível(is) duplicata(s). Deseja visualizar?`)) {
         openDuplicatesModal();
         // TODO: Filtrar duplicatas por nome/telefone
       }
@@ -6360,7 +6345,7 @@ async function mergeDuplicates(groupIndex) {
     return;
   }
   
-  if (!confirm(`Tem certeza que deseja mesclar ${duplicateIds.length} cliente(s) duplicado(s) no cliente principal selecionado?`)) {
+  if (!confirmAction(`Tem certeza que deseja mesclar ${duplicateIds.length} cliente(s) duplicado(s) no cliente principal selecionado?`)) {
     return;
   }
   
@@ -6389,50 +6374,37 @@ async function mergeDuplicates(groupIndex) {
   }
 }
 
-async function deleteClient() {
-  if (!clienteEditando) return;
-  if (!confirm(`Tem certeza que deseja remover o cliente "${clienteEditando.nome}"?`)) return;
-  
+async function deleteCustomerById(clientId, clientName, options = {}) {
+  if (!clientId) return false;
+  if (!confirmAction(`Tem certeza que deseja remover o cliente "${clientName}"?`)) return false;
+
   try {
-    const response = await fetch(`${API_BASE_URL}/api/customers/${clienteEditando.id}`, {
-      method: 'DELETE'
-    });
-    
+    const response = await fetch(`${API_BASE_URL}/api/customers/${clientId}`, { method: 'DELETE' });
+
     if (!response.ok) {
-      const errData = await response.json();
+      const errData = await response.json().catch(() => ({}));
       throw new Error(errData.error || `Erro ${response.status}`);
     }
-    
-    closeClientModal();
+
+    if (options.closeModal) closeClientModal();
     await renderClientes();
-    
+    return true;
   } catch (error) {
-    console.error('Erro deleteClient:', error);
-    alert('Erro ao remover cliente: ' + error.message);
+    console.error('Erro deleteCustomerById:', error);
+    toast('Erro ao remover cliente: ' + error.message, 'err');
+    return false;
   }
+}
+
+async function deleteClient() {
+  if (!clienteEditando) return;
+  await deleteCustomerById(clienteEditando.id, clienteEditando.nome, { closeModal: true });
 }
 
 async function deleteClientDirectly(clientId) {
   const cliente = clientesData.find(c => c.id === clientId);
   if (!cliente) return;
-  if (!confirm(`Tem certeza que deseja remover o cliente "${cliente.nome}"?`)) return;
-  
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/customers/${clientId}`, {
-      method: 'DELETE'
-    });
-    
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || `Erro ${response.status}`);
-    }
-    
-    await renderClientes();
-    
-  } catch (error) {
-    console.error('Erro deleteClientDirectly:', error);
-    alert('Erro ao remover cliente: ' + error.message);
-  }
+  await deleteCustomerById(clientId, cliente.nome);
 }
 
 // ════════════════════════════════════════════════
@@ -6534,10 +6506,10 @@ function openNewSvc(){
     </div>
     <div class="form-row fr-2 mb3">
       <div class="field"><label>Tipo(s) de Serviço</label>
-        <div id="tipos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+        <div id="ns-tipos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
         <div id="ns-tipos-preview" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Nenhum tipo selecionado</div>
       </div>
-      <div class="field"><label>Técnicos</label><div id="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div></div>
+      <div class="field"><label>Técnicos</label><div id="ns-tecnicos-container" class="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div></div>
     </div>
     <div class="form-row fr-2 mb3">
       <div class="field"><label>Veículo</label>
@@ -6557,10 +6529,10 @@ function openNewSvc(){
   document.getElementById('modal-del').style.display='none';
   currentDelId=null;
   document.getElementById('modal').classList.add('open');
-  renderTecnicos([]);
-  carregarTecnicos().then(() => renderTecnicos([]));
-  renderTiposCheckbox([]);
-  bindTiposPreview('ns-tipos-preview');
+  renderTecnicos([], 'ns-tecnicos-container');
+  carregarTecnicos().then(() => renderTecnicos([], 'ns-tecnicos-container'));
+  renderTiposCheckbox([], 'ns-tipos-container');
+  bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
 }
 async function confirmNewSvc(){
   const dt=document.getElementById('ns-dt')?.value;
@@ -6572,14 +6544,14 @@ async function confirmNewSvc(){
 
   // Lê tipos selecionados (multi-select via checkboxes)
   const tiposSel = Array.from(
-    document.querySelectorAll('#tipos-container input:checked')
+    document.querySelectorAll('#ns-tipos-container input:checked')
   ).map(el => el.value);
   if (!tiposSel.length) { toast('Selecione ao menos um tipo de serviço','err'); return; }
   const tipoServico = tiposSel.join(' + ');
   const tipoFirst   = tiposSel[0];
 
   const tecnicos_ids = Array.from(
-    document.querySelectorAll('#tecnicos-container input:checked')
+    document.querySelectorAll('#ns-tecnicos-container input:checked')
   ).map(el => el.value);
   if(tecnicos_ids.length === 0){
     toast('Selecione pelo menos um técnico', 'err');
@@ -6803,7 +6775,7 @@ selectAuthProfile('admin');
 function closeModal(){document.getElementById('modal').classList.remove('open');currentDelId=null;}
 async function delRecord(){
   if(!currentDelId){return;}
-  if(!confirm('Excluir permanentemente?'))return;
+  if(!confirmAction('Excluir permanentemente?'))return;
   if(currentDelId.type==='svc'){
     const id = currentDelId.id;
     const oldSvc = services.find(s=>sameId(s.id, id));
@@ -6845,7 +6817,21 @@ function exportCSV(){
 // ════════════════════════════════════════════════
 // TOAST
 // ════════════════════════════════════════════════
-function toast(msg,type='ok'){const c=document.getElementById('toasts');const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span>${type==='ok'?'✓':type==='err'?'✕':'!'}</span>${msg}`;c.appendChild(t);setTimeout(()=>t.remove(),3200);}
+function normalizeToastMessage(msg){
+  return String(msg || '').replace(/^[^A-Za-z0-9À-ÿ]+/, '').trim();
+}
+function toast(msg,type='ok'){
+  const c=document.getElementById('toasts');
+  if (!c) return;
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;
+  t.innerHTML=`<span>${type==='ok'?'✓':type==='err'?'✕':'!'}</span>${normalizeToastMessage(msg)}`;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(),3200);
+}
+function confirmAction(message){
+  return window.confirm(String(message || 'Confirma esta ação?'));
+}
 
 // ════════════════════════════════════════════════
 // ROTEIRO DO DIA — Sistema Local (sem Google Calendar)
@@ -6854,7 +6840,6 @@ function toast(msg,type='ok'){const c=document.getElementById('toasts');const t=
 // ════════════════════════════════════════════════
 
 let rotDados = [];     // [{equipe, veiculo, svcs:[], sequencia, whatsappText}]
-let rotTextoAtual = '';
 const ROT_FALLBACK_MSG = 'Rota otimizada indisponível (configure Google Maps API)';
 const ROT_BASE_PLUS_CODE = '88VH+MR Vila Sao Paulo, São Paulo - SP';
 const rotDistanceCache = new Map();
@@ -7496,18 +7481,6 @@ function rotFmtData(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
-// Stubs de compatibilidade (funções do antigo Calendar)
-function buscarCalendarRoteiro() { rotGerarDoSistema(); }
-function rotOnDateChange()       { rotGerarDoSistema(); }
-function rotSetStatus()          {}
-function toggleRotConfig()       {}
-function rotSaveConfig()         {}
-function rotGerarTodos()         { rotCopiarTudo(); }
-function rotCopiarModal()        {}
-function rotFecharModal()        {}
-function rotDemo()               { rotGerarDoSistema(); }
-
-
 // ════════════════════════════════════════════════
 // REGRA DE JORNADA — Conflito noite→manhã
 // Se técnico trabalhou >= 20h e tem serviço < 9h no dia seguinte = conflito
@@ -7825,7 +7798,7 @@ function abrirEdicaoEquipe(id) {
     </div>
     <div class="form-row mb3">
       <div class="field"><label>Técnicos</label>
-        <div id="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+        <div id="eq-tecnicos-container" class="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
       </div>
     </div>
     <div class="form-row fr-2 mb3">
@@ -7856,15 +7829,15 @@ function abrirEdicaoEquipe(id) {
   document.getElementById('modal-del').style.display = 'inline-flex';
   currentDelId = {type:'svc', id};
   document.getElementById('modal').classList.add('open');
-  renderTecnicos(getServiceTecnicosIds(s));
-  carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s)));
+  renderTecnicos(getServiceTecnicosIds(s), 'eq-tecnicos-container');
+  carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s), 'eq-tecnicos-container'));
 }
 
 function salvarEdicaoEquipe(id) {
   const s = services.find(x=>sameId(x.id, id));
   if (!s) return;
   const tecnicos_ids = Array.from(
-    document.querySelectorAll('#tecnicos-container input:checked')
+    document.querySelectorAll('#eq-tecnicos-container input:checked')
   ).map(el => el.value);
   if(tecnicos_ids.length === 0){
     toast('Selecione pelo menos um técnico', 'err');
@@ -8201,7 +8174,7 @@ async function salvarTecnico() {
   try { const { error } = await supabaseClient.from('technicians').insert([{ nome, ativo: true }]); if (error) throw error; toast('✅ Técnico salvo!', 'ok'); document.getElementById('form-novo-tecnico').style.display = 'none'; await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
 }
 async function toggleTecnico(id, ativo) { try { const { error } = await supabaseClient.from('technicians').update({ ativo }).eq('id', id); if (error) throw error; toast(ativo ? '✅ Técnico ativado' : '⚠️ Técnico desativado', 'ok'); await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
-async function excluirTecnico(id) { if (!confirm('Excluir este técnico?')) return; try { const { error } = await supabaseClient.from('technicians').delete().eq('id', id); if (error) throw error; toast('🗑 Técnico excluído', 'ok'); await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
+async function excluirTecnico(id) { if (!confirmAction('Excluir este técnico?')) return; try { const { error } = await supabaseClient.from('technicians').delete().eq('id', id); if (error) throw error; toast('🗑 Técnico excluído', 'ok'); await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
 
 async function carregarVeiculosConfig() {
   const container = document.getElementById('config-veiculos');
@@ -8241,7 +8214,7 @@ async function salvarVeiculo() {
   try { const { error } = await supabaseClient.from('vehicles').insert([{ nome, placa, ativo: true }]); if (error) throw error; toast('✅ Veículo salvo!', 'ok'); document.getElementById('form-novo-veiculo').style.display = 'none'; await carregarVeiculosConfig(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
 }
 async function toggleVeiculo(id, ativo) { try { const { error } = await supabaseClient.from('vehicles').update({ ativo }).eq('id', id); if (error) throw error; toast(ativo ? '✅ Veículo ativado' : '⚠️ Veículo desativado', 'ok'); await carregarVeiculosConfig(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
-async function excluirVeiculo(id) { if (!confirm('Excluir este veículo?')) return; try { const { error } = await supabaseClient.from('vehicles').delete().eq('id', id); if (error) throw error; toast('🗑 Veículo excluído', 'ok'); await carregarVeiculosConfig(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
+async function excluirVeiculo(id) { if (!confirmAction('Excluir este veículo?')) return; try { const { error } = await supabaseClient.from('vehicles').delete().eq('id', id); if (error) throw error; toast('🗑 Veículo excluído', 'ok'); await carregarVeiculosConfig(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
 
 async function carregarTiposServicoConfig() {
   const container = document.getElementById('config-tipos');
@@ -8377,7 +8350,7 @@ async function salvarTipoServico() {
 }
 
 async function excluirTipoServico(id, nome) {
-  if (!confirm(`Excluir o tipo "${nome}"? Servi\u00e7os existentes com esse tipo n\u00e3o ser\u00e3o afetados.`)) return;
+  if (!confirmAction(`Excluir o tipo "${nome}"? Servi\u00e7os existentes com esse tipo n\u00e3o ser\u00e3o afetados.`)) return;
   try {
     const response = await fetch(`${API_BASE_URL}/api/service-types/${id}`, { method: 'DELETE' });
     if (!response.ok) {
