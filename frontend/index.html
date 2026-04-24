@@ -2422,15 +2422,6 @@ function getServiceEquipeGroupKey(servico) {
   return legacy ? `legacy:${normalizarNome(legacy)}` : 'sem-equipe';
 }
 
-function extrairTecnicos(servico) {
-  if (servico && typeof servico === 'object' && !Array.isArray(servico)) {
-    return getServiceTecnicos(servico).map(t => t.nome);
-  }
-  const ids = equipeLegadaParaTecnicosIds(servico);
-  const nomes = nomesTecnicos(ids);
-  return nomes ? nomes.split(' / ') : extrairNomesEquipeLegada(servico);
-}
-
 function getTecnicosUnicos(servicos){
   const set = new Set();
   (servicos||[]).forEach(s => {
@@ -2733,25 +2724,6 @@ function tempoParaTipo(tipo, isCond) {
     default:       return TEMPO_SERVICO.OUTRO;
   }
 }
-// ── Calcular tempo total de um único serviço (legado, sem efeito em capacidade v2) ──
-// Considera: tipos (combo), categoria (res/cond), nº de técnicos
-// Retorna minutos (tempo base + deslocamento), mínimo 30 min.
-function calcularTempoServicoLegacy(servico) {
-  const tipos   = extrairTiposServico(servico);
-  const isCond  = ehCondominio(servico);
-
-  // Soma dos tempos base de cada tipo do combo
-  const tempoBase = tipos.reduce((acc, t) => acc + tempoParaTipo(t, isCond), 0);
-
-  // Tempo total = base × técnicos + deslocamento
-  // Nota: técnicos aumentam capacidade, não duplicam tempo;
-  // aqui usamos como multiplicador de "tempo-homem" para refletir
-  // o custo operacional real da alocação.
-  const tempoTotal = tempoBase + TEMPO_DESLOCAMENTO;
-
-  return Math.max(tempoTotal, 30); // mínimo 30 min por serviço
-}
-
 // ── Multiplicador de complexidade baseado em observações ──
 function getComplexityMultiplier(servico) {
   const obs = (servico.observacoes || servico.obs || '').toLowerCase();
@@ -3122,8 +3094,6 @@ function syncMesSelects() {
   }
 }
 
-function getSvcs() { return services; }
-function getCLs()  { return clRecords; }
 function saveCLs() { try{localStorage.setItem('letec_cl2',JSON.stringify(clRecords));}catch(e){} }
 function hasSupabaseReadyCache() {
   try { return localStorage.getItem(SUPABASE_READY_KEY) === '1'; } catch(e) { return false; }
