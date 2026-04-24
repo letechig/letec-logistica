@@ -6032,16 +6032,22 @@ async function loadClientHistory() {
     const historyHtml = services.map(service => {
       const serviceDate = service.date || service.data || service.dt;
       const data = serviceDate ? new Date(`${serviceDate}T12:00:00`).toLocaleDateString('pt-BR') : '—';
-      const status = service.status || 'pendente';
-      const statusEmoji = { 'concluido': '✅', 'pendente': '⏳', 'cancelado': '❌' }[status] || '⏳';
+      const status = service.status || service.st || 'agendado';
+      const statusMeta = {
+        agendado: { icon: '📋', label: 'Agendado', color: 'var(--blue)' },
+        executado: { icon: '✅', label: 'Executado', color: 'var(--green)' },
+        reagendado: { icon: '↻', label: 'Reagendado', color: 'var(--orange)' },
+        cancelado: { icon: '❌', label: 'Cancelado', color: 'var(--red)' }
+      }[status] || { icon: '⏳', label: status, color: 'var(--text3)' };
       const tipoServico = service.tiposervico || service.tipo_servico || service.tipoServico || service.sc || 'Serviço';
       
       return `
         <div style="padding:6px 8px;border-bottom:1px solid var(--border2);font-size:11px">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <span>${statusEmoji} ${data}</span>
-            <span style="color:var(--text3)">${tipoServico}</span>
+            <span>${statusMeta.icon} ${data}</span>
+            <span style="color:${statusMeta.color}">${statusMeta.label}</span>
           </div>
+          <div style="color:var(--text3);margin-top:2px">${tipoServico}</div>
           ${service.endereco ? `<div style="color:var(--text3);margin-top:2px">${service.endereco.substring(0,40)}${service.endereco.length > 40 ? '...' : ''}</div>` : ''}
         </div>
       `;
