@@ -347,6 +347,242 @@ body {
 .svc-btn.reagend { background: var(--orange-bg); border-color: rgba(255,140,66,.3); color: var(--orange); }
 .svc-btn.cancel  { background: var(--red-bg); border-color: rgba(255,83,112,.3); color: var(--red); }
 
+/* ─── HOJE / EQUIPE KANBAN ───────────────────── */
+.team-board {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+}
+.team-board-header {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--border);
+  border-top: 3px solid var(--team-accent, var(--blue));
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.02), transparent 70%),
+    var(--card);
+}
+.team-board-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.team-board-main {
+  flex: 1;
+  min-width: 0;
+}
+.team-board-title {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--team-accent, var(--text));
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-board-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.team-board-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+}
+.team-board-progress {
+  min-width: 88px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.team-board-progress-value {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+.team-board-progress-label {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+.team-board-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.team-board-bar-fill {
+  height: 100%;
+  width: var(--team-progress, 0%);
+  background: var(--team-progress-color, var(--blue));
+  border-radius: 99px;
+  transition: width .35s ease;
+}
+.team-board-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.team-board-list {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  overflow-y: auto;
+  max-height: 440px;
+}
+.team-svc-card {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--svc-accent, var(--border2));
+  border-radius: var(--r2);
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease, opacity .12s ease;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+}
+.team-svc-card:hover {
+  border-color: var(--border3);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .10);
+}
+.team-svc-card.is-executed {
+  opacity: .72;
+}
+.team-svc-card.is-late {
+  border-left-color: var(--red);
+}
+.team-svc-card.is-conflict {
+  border-left-color: var(--yellow);
+}
+.team-svc-card.is-journey {
+  border-left-color: var(--purple);
+}
+.team-svc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.team-svc-client {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-svc-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.team-svc-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: var(--bg2);
+  color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.team-svc-time.is-late {
+  color: var(--red);
+  border-color: rgba(220,38,38,.28);
+  background: rgba(220,38,38,.08);
+}
+.team-svc-os {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+}
+.team-svc-alerts {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.team-svc-address {
+  font-size: 11px;
+  color: var(--text3);
+  line-height: 1.35;
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.team-svc-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.team-svc-actions .svc-btn {
+  padding: 6px 10px;
+  font-size: 10px;
+}
+.team-svc-actions .svc-btn.exec {
+  background: var(--green);
+  color: white;
+  border-color: var(--green);
+}
+.team-svc-actions .svc-btn.reagend {
+  background: transparent;
+  color: var(--text2);
+  border-color: var(--border2);
+}
+.team-svc-actions .svc-btn.reagend:hover {
+  border-color: var(--border3);
+  color: var(--text);
+}
+.team-svc-done {
+  font-size: 11px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .team-board-header {
+    padding: 14px;
+  }
+  .team-board-top {
+    flex-direction: column;
+  }
+  .team-board-progress {
+    text-align: left;
+    min-width: 0;
+  }
+  .team-board-actions {
+    justify-content: stretch;
+  }
+  .team-board-actions .svc-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .team-svc-head {
+    flex-direction: column;
+  }
+}
+
 /* ─── EQUIPE LABELS ───────────────────────────── */
 /* legacy .eq-* color classes removed in v7.2 */
 
@@ -3148,18 +3384,79 @@ function calcularTempoTotalDia(servicos) {
     .reduce((acc, grupo) => acc + montarRotaTecnico(grupo.svcs).tempoTotalMin, 0);
 }
 
-function calcularCapacidade(servicosHoje) {
-  const grupos = agruparServicosPorTecnicoCapacidade(servicosHoje);
-  const porTecnico = grupos.map(grupo => ({
-    id: grupo.id,
-    nome: grupo.nome,
-    totalServicos: grupo.svcs.length,
-    ...montarRotaTecnico(grupo.svcs),
-  })).sort((a, b) => b.tempoTotalMin - a.tempoTotalMin);
+function calcularDuracaoReferenciaCapacidade(servicosHoje) {
+  const duracoes = (servicosHoje || [])
+    .map(s => calcularTempoServico(s))
+    .filter(n => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
 
+  if (!duracoes.length) return TEMPO_MEDIO_SERVICO_PADRAO;
+
+  const idxP75 = Math.min(duracoes.length - 1, Math.floor((duracoes.length - 1) * 0.75));
+  const p75 = duracoes[idxP75] || TEMPO_MEDIO_SERVICO_PADRAO;
+  return Math.max(TEMPO_MEDIO_SERVICO_PADRAO, p75);
+}
+
+function analisarCapacidadeTecnico(rota, duracaoReferenciaMin) {
+  const seq = [...(rota?.sequencia || [])]
+    .filter(item => item && Number.isFinite(item.inicioSugeridoMin) && Number.isFinite(item.fimSugeridoMin))
+    .sort((a, b) => a.inicioSugeridoMin - b.inicioSugeridoMin);
+
+  const inicioObservadoMin = seq.length
+    ? Math.min(...seq.map(item => item.horarioAgendadoMin ?? item.inicioSugeridoMin))
+    : INICIO_EXPEDIENTE_MIN;
+  const fimObservadoMin = seq.length
+    ? Math.max(...seq.map(item => item.fimSugeridoMin))
+    : INICIO_EXPEDIENTE_MIN + JORNADA_MIN;
+
+  const janelaInicioMin = inicioObservadoMin;
+  const janelaFimMin = Math.max(janelaInicioMin + JORNADA_MIN, fimObservadoMin);
+  const blocosLivres = [];
+  let cursor = janelaInicioMin;
+
+  seq.forEach(item => {
+    if (item.inicioSugeridoMin > cursor) blocosLivres.push(item.inicioSugeridoMin - cursor);
+    cursor = Math.max(cursor, item.fimSugeridoMin);
+  });
+
+  if (janelaFimMin > cursor) blocosLivres.push(janelaFimMin - cursor);
+
+  const maiorBlocoLivreMin = blocosLivres.length ? Math.max(...blocosLivres) : 0;
+  const minPorEncaixe = Math.max(90, (duracaoReferenciaMin || TEMPO_MEDIO_SERVICO_PADRAO) + 30);
+  const encaixesConservadores = blocosLivres.reduce((acc, bloco) => acc + Math.max(0, Math.floor(bloco / minPorEncaixe)), 0);
+
+  return {
+    inicioObservadoMin,
+    fimObservadoMin,
+    janelaInicioMin,
+    janelaFimMin,
+    blocosLivres,
+    maiorBlocoLivreMin,
+    encaixesConservadores,
+    minPorEncaixe,
+  };
+}
+
+function calcularCapacidade(servicosHoje, opts = {}) {
+  const usarTecnicosDisponiveis = opts.usarTecnicosDisponiveis !== false;
+  const duracaoReferenciaMin = calcularDuracaoReferenciaCapacidade(servicosHoje);
+  const grupos = agruparServicosPorTecnicoCapacidade(servicosHoje);
+  const porTecnico = grupos.map(grupo => {
+    const rota = montarRotaTecnico(grupo.svcs);
+    return {
+      id: grupo.id,
+      nome: grupo.nome,
+      totalServicos: grupo.svcs.length,
+      ...rota,
+      ...analisarCapacidadeTecnico(rota, duracaoReferenciaMin),
+    };
+  }).sort((a, b) => b.tempoTotalMin - a.tempoTotalMin);
+
+  const tecnicosAtivos = porTecnico.filter(t => t.id !== 'sem-equipe').length;
+  const tecnicosDisponiveis = usarTecnicosDisponiveis ? getTecnicosDisponiveisCapacidade(servicosHoje).length : 0;
   const nTecnicos = Math.max(
-    getTecnicosDisponiveisCapacidade(servicosHoje).length,
-    porTecnico.filter(t => t.id !== 'sem-equipe').length,
+    tecnicosDisponiveis,
+    tecnicosAtivos,
     (servicosHoje || []).length ? 1 : 0
   );
   const total = nTecnicos * JORNADA_MIN;
@@ -3169,6 +3466,10 @@ function calcularCapacidade(servicosHoje) {
     ? Math.round(usado / servicosHoje.length)
     : TEMPO_MEDIO_SERVICO_PADRAO;
   const slotsLivres = tempoMedioServico > 0 ? Math.max(0, Math.floor(livre / tempoMedioServico)) : 0;
+  const encaixesConservadores = porTecnico.reduce((acc, tecnico) => acc + (tecnico.encaixesConservadores || 0), 0);
+  const maiorBlocoLivreMin = porTecnico.reduce((acc, tecnico) => Math.max(acc, tecnico.maiorBlocoLivreMin || 0), 0);
+  const inicioObservadoMin = porTecnico.length ? Math.min(...porTecnico.map(t => t.inicioObservadoMin || INICIO_EXPEDIENTE_MIN)) : INICIO_EXPEDIENTE_MIN;
+  const fimObservadoMin = porTecnico.length ? Math.max(...porTecnico.map(t => t.fimObservadoMin || (INICIO_EXPEDIENTE_MIN + JORNADA_MIN))) : (INICIO_EXPEDIENTE_MIN + JORNADA_MIN);
 
   return {
     total,
@@ -3178,6 +3479,11 @@ function calcularCapacidade(servicosHoje) {
     pctOcup: total > 0 ? Math.round((usado / total) * 100) : 0,
     tempoMedioServico,
     slotsLivres,
+    encaixesConservadores,
+    duracaoReferenciaMin,
+    maiorBlocoLivreMin,
+    inicioObservadoMin,
+    fimObservadoMin,
     hTotal: formatarMinutosHM(total),
     hUsado: formatarMinutosHM(usado),
     hLivre: formatarMinutosHM(livre),
@@ -3587,7 +3893,7 @@ function filteredSvcs() {
                    JUL:'07',AGO:'08',SET:'09',OUT:'10',NOV:'11',DEZ:'12' };
   const mmNum = MS_MAP[mesFilter];
   return services.filter(s =>
-    s.ms === mesFilter || (mmNum && (s.dt||'').slice(5,7) === mmNum)
+    s.ms === mesFilter || (mmNum && (getServiceDateValue(s)||'').slice(5,7) === mmNum)
   );
 }
 
@@ -3738,7 +4044,7 @@ window.nav = function(page, btn) {
 
 function updateBadges() {
   const today = new Date().toISOString().split('T')[0];
-  const todaySvcs = services.filter(s => s.dt === today && (s.status||s.st) !== 'cancelado');
+  const todaySvcs = services.filter(s => getServiceDateValue(s) === today && (s.status||s.st) !== 'cancelado');
   document.getElementById('nb-hoje').textContent    = todaySvcs.length;
   document.getElementById('nb-agenda').textContent  = filteredSvcs().length;
   document.getElementById('nb-frota').textContent   = clRecords.length;
@@ -3784,21 +4090,26 @@ function renderDash() {
 
   // KPIs de alerta
   const semEquipe   = svcs.filter(s => !serviceTemEquipe(s));
-  const vencidos    = svcs.filter(s => s.dt < today && (s.status||s.st) === 'agendado');
+  const vencidos    = svcs.filter(s => getServiceDateValue(s) < today && (s.status||s.st) === 'agendado');
   const noturnos    = svcs.filter(s => { const h=parseInt((s.horario||s.hr||'').substring(0,2)); return !isNaN(h) && h>=20 && (s.status||s.st)==='agendado'; });
 
   // Capacidade — baseada em TEMPO REAL (v7.4)
   const capData    = analisarCapacidade(svcs);
   const numTecnicos= getTecnicosDisponiveisCapacidade(svcs).length || getTecnicosUnicos(svcs).length;
-  const diasComSvc = new Set(svcs.map(s=>s.dt)).size;
+  const diasComSvc = new Set(svcs.map(s => getServiceDateValue(s)).filter(Boolean)).size;
   const mediaPerDia= diasComSvc ? +(total/diasComSvc).toFixed(1) : 0;
-  const byDia = {}; svcs.forEach(s=>{ byDia[s.dt]=(byDia[s.dt]||0)+1; });
+  const byDia = {};
+  svcs.forEach(s => {
+    const dt = getServiceDateValue(s);
+    if (!dt) return;
+    byDia[dt] = (byDia[dt] || 0) + 1;
+  });
   const maxDia = Math.max(...Object.values(byDia), 0);
 
   // ── Capacidade por TEMPO (não por contagem) ──
   // Agrupa por dia, calcula tempo consumido/disponível por dia e acumula
-  const diasUnicos = [...new Set(svcs.map(s => s.dt))];
-  const capacidadeDias = diasUnicos.map(dt => calcularCapacidade(svcs.filter(s => s.dt === dt)));
+  const diasUnicos = [...new Set(svcs.map(s => getServiceDateValue(s)).filter(Boolean))];
+  const capacidadeDias = diasUnicos.map(dt => calcularCapacidade(svcs.filter(s => getServiceDateValue(s) === dt)));
   const tempoConsumidoTotal = capacidadeDias.reduce((acc, cap) => acc + cap.usado, 0);
   const tempoDisponivelTotal = capacidadeDias.reduce((acc, cap) => acc + cap.total, 0);
   const pctOcup     = tempoDisponivelTotal > 0 ? Math.round(tempoConsumidoTotal / tempoDisponivelTotal * 100) : 0;
@@ -3989,7 +4300,9 @@ function renderDash() {
 
   const byWeek={};
   svcs.forEach(s=>{
-    const d=new Date(s.dt);
+    const dt = getServiceDateValue(s);
+    if (!dt) return;
+    const d=new Date(dt);
     const w=`${d.getFullYear()}-W${String(Math.ceil((d.getDate()+(new Date(d.getFullYear(),d.getMonth(),1).getDay()))/7)).padStart(2,'0')}`;
     byWeek[w]=(byWeek[w]||0)+1;
   });
@@ -4058,7 +4371,7 @@ function renderDash() {
   let totalKm = 0;
   let totalServicesWithRoute = 0;
   diasUnicos.forEach(dt => {
-    const dSvcs = svcs.filter(s => s.dt === dt);
+    const dSvcs = svcs.filter(s => getServiceDateValue(s) === dt);
     if (dSvcs.length > 1) {
       const sorted = [...dSvcs].sort((a, b) => (a.horario || '00:00').localeCompare(b.horario || '00:00'));
       for (let i = 1; i < sorted.length; i++) {
@@ -4073,7 +4386,7 @@ function renderDash() {
   document.getElementById('dash-eficiencia').innerHTML = `
     <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Total KM percorridos: ${totalKm.toFixed(1)} km</div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:8px">KM por serviço: ${kmPerService} km</div>
-    <div style="font-size:11px;color:var(--text3)">Dias com rotas: ${diasUnicos.filter(dt => svcs.filter(s => s.dt === dt).length > 1).length}</div>
+    <div style="font-size:11px;color:var(--text3)">Dias com rotas: ${diasUnicos.filter(dt => svcs.filter(s => getServiceDateValue(s) === dt).length > 1).length}</div>
   `;
 
   document.getElementById('dash-km-stats').innerHTML = `
@@ -4244,7 +4557,7 @@ function renderAgenda() {
     const MS_MAP = { JAN:'01',FEV:'02',MAR:'03',ABR:'04',MAI:'05',JUN:'06',
                      JUL:'07',AGO:'08',SET:'09',OUT:'10',NOV:'11',DEZ:'12' };
     const mmNum = MS_MAP[codigo];
-    return mmNum && (s.dt||'').slice(5,7) === mmNum;
+    return mmNum && (getServiceDateValue(s)||'').slice(5,7) === mmNum;
   };
   if (mesFilt)   svcs = svcs.filter(s => mesParaFiltro(s, mesFilt));
   if (mesFilter!=='all') svcs = svcs.filter(s => mesParaFiltro(s, mesFilter));
@@ -4269,12 +4582,13 @@ function renderAgenda() {
     const endTrunc= end.length>32?end.slice(0,32)+'...':(end||'—');
     const equipeLabel = getServiceEquipeLabel(s);
     const semEq   = !equipeLabel.trim();
-    const vencido = stKey==='agendado' && s.dt < today2;
+    const dtValue = getServiceDateValue(s);
+    const vencido = stKey==='agendado' && dtValue < today2;
     const rowBg   = vencido ? 'background:rgba(220,38,38,.04)' : semEq ? 'background:rgba(234,88,12,.04)' : '';
     const equipeHtml = semEq ? '<span style="color:var(--orange);font-size:10px;font-weight:600">⚠ sem equipe</span>' : sanitize(equipeLabel).slice(0,24);
     return `<tr onclick="openEditSvc(${jsArg(s.id)})" style="cursor:pointer;${rowBg}">
       <td class="mono" style="color:var(--text3)">${s.id}</td>
-      <td class="mono bold" style="color:${vencido?'var(--red)':'inherit'}">${s.dt?.slice(8,10)}/${s.dt?.slice(5,7)}</td>
+      <td class="mono bold" style="color:${vencido?'var(--red)':'inherit'}">${dtValue?.slice(8,10)}/${dtValue?.slice(5,7)}</td>
       <td class="mono" style="color:var(--text3)">${s.dw||''}</td>
       <td style="max-width:140px"><div style="display:flex;gap:3px;flex-wrap:wrap">${tipoChipsHtml(s,{compact:true})}</div></td>
       <td class="bold">${sanitize(s.cliente||s.cl)}</td>
@@ -4309,7 +4623,7 @@ function renderAgendaKanban(svcs) {
   grid.innerHTML = colunas.map(col => {
     const colSvcs = svcs
       .filter(s=>(s.status||s.st||'agendado')===col.key)
-      .sort((a,b)=>(a.dt||'').localeCompare(b.dt||'')||(a.horario||a.hr||'').localeCompare(b.horario||b.hr||''));
+      .sort((a,b)=>(getServiceDateValue(a)||'').localeCompare(getServiceDateValue(b)||'')||(a.horario||a.hr||'').localeCompare(b.horario||b.hr||''));
 
     const cards = colSvcs.slice(0,50).map(s => {
       const F         = sf(s);
@@ -4317,7 +4631,8 @@ function renderAgendaKanban(svcs) {
       const tipoMeta  = TIPO_SERVICO[F.tipoRaw];
       const tipoCor   = tipoMeta ? tipoMeta.cor : '#94a3b8';
       const semEq     = !F.equipe.trim();
-      const vencido   = stKey==='agendado' && s.dt < today;
+      const dtValue   = getServiceDateValue(s);
+      const vencido   = stKey==='agendado' && dtValue < today;
       // Cor da borda esquerda: prioriza alerta > tipo
       const bordaCor  = vencido ? 'var(--red)' : semEq ? 'var(--orange)' : tipoCor;
       const bgCard    = vencido ? 'rgba(220,38,38,.04)' : semEq ? 'rgba(234,88,12,.04)' : 'var(--bg2)';
@@ -4342,7 +4657,7 @@ function renderAgendaKanban(svcs) {
         <!-- Linha 2: tipo(s) + data -->
         <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:4px;align-items:center">
           ${tipoChipsHtml(s,{compact:true,fontSize:'9px'})}
-          <span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:2px">· ${s.dt?.slice(8,10)}/${s.dt?.slice(5,7)}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:2px">· ${dtValue?.slice(8,10)}/${dtValue?.slice(5,7)}</span>
         </div>
         <!-- Linha 3: endereço -->
         ${F.endereco?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px">📍 ${F.endereco.slice(0,45)}</div>`:''}
@@ -4394,19 +4709,21 @@ function renderAgendaData(svcs, today) {
   const dayMapAll = {};   // todos os serviços do mês (para alertas e stats)
 
   svcs.forEach(s => {
-    if (!s.dt) return;
-    const dd = new Date(s.dt + 'T12:00:00');
+    const dt = getServiceDateValue(s);
+    if (!dt) return;
+    const dd = new Date(dt + 'T12:00:00');
     if (dd.getFullYear() === calYear && dd.getMonth() === calMonth) {
-      if (!dayMap[s.dt]) dayMap[s.dt] = [];
-      dayMap[s.dt].push(s);
+      if (!dayMap[dt]) dayMap[dt] = [];
+      dayMap[dt].push(s);
     }
   });
   services.forEach(s => {
-    if (!s.dt) return;
-    const dd = new Date(s.dt + 'T12:00:00');
+    const dt = getServiceDateValue(s);
+    if (!dt) return;
+    const dd = new Date(dt + 'T12:00:00');
     if (dd.getFullYear() === calYear && dd.getMonth() === calMonth) {
-      if (!dayMapAll[s.dt]) dayMapAll[s.dt] = [];
-      dayMapAll[s.dt].push(s);
+      if (!dayMapAll[dt]) dayMapAll[dt] = [];
+      dayMapAll[dt].push(s);
     }
   });
 
@@ -4620,7 +4937,7 @@ function renderAgendaData(svcs, today) {
 // ── Detalhe do Dia (modal ao clicar no calendário) ───────
 function showDayDetail(dt) {
   // Usa todos os serviços do dia (visão completa, sem filtros)
-  const daySvcs = services.filter(s => s.dt === dt);
+  const daySvcs = services.filter(s => getServiceDateValue(s) === dt);
   if (!daySvcs.length) return;
 
   const today  = new Date().toISOString().split('T')[0];
@@ -4840,14 +5157,14 @@ function openEditSvc(id) {
     <!-- Cabeçalho informativo -->
     <div style="padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px">
       <div style="font-weight:700;font-size:14px;color:var(--text)">${sanitize(s.cliente||s.cl||'—')}</div>
-      <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${s.dt||''} · OS ${s.OS||s.os||'—'}</div>
+      <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${getServiceDateValue(s)||''} · OS ${s.OS||s.os||'—'}</div>
     </div>
 
     <!-- Linha 1: Data + Horário -->
     <div class="form-row fr-2 mb3">
       <div class="field">
         <label>Data</label>
-        <input type="date" id="ed-dt" value="${s.dt||''}">
+        <input type="date" id="ed-dt" value="${getServiceDateValue(s)||''}">
       </div>
       <div class="field">
         <label>Horário</label>
@@ -5107,7 +5424,8 @@ function hojeAnalisarDia(daySvcs, d) {
       .sort((a,b) => a.min - b.min);
     for (let i = 0; i < sorted.length - 1; i++) {
       const gap = sorted[i+1].min - sorted[i].min;
-      if (gap >= 0 && gap < OP.GAP_MINIMO_MIN) {
+      const mesmaParada = isSameOperationalStop(sorted[i].s, sorted[i+1].s);
+      if (!mesmaParada && gap >= 0 && gap < OP.GAP_MINIMO_MIN) {
         conflitosHorario.push({ equipe: g.equipe, s1: sorted[i].s, s2: sorted[i+1].s, gap });
       }
     }
@@ -5122,7 +5440,7 @@ function hojeAnalisarDia(daySvcs, d) {
   const dPrev = new Date(d + 'T12:00:00');
   dPrev.setDate(dPrev.getDate() - 1);
   const dPrevStr = dPrev.toISOString().split('T')[0];
-  const svcsPrev = services.filter(s => s.dt === dPrevStr);
+  const svcsPrev = services.filter(s => getServiceDateValue(s) === dPrevStr);
 
   // Mapa: tecnico → { svcOntem, minFimOntem (min desde meia-noite do dia anterior) }
   const techsOntem = new Map();
@@ -5163,13 +5481,13 @@ function hojeAnalisarDia(daySvcs, d) {
   }
 
   // ── Capacidade Real por Tempo (v7.4) ──────────────────────
-  const capDia = calcularCapacidade(daySvcs);
+  const capDia = calcularCapacidade(daySvcs, { usarTecnicosDisponiveis: false });
   // Compatibilidade com campos esperados pelo renderHoje
-  const nTecnicos      = getTecnicosUnicos(daySvcs).length;
+  const nTecnicos      = capDia.nTecnicos;
   const minOcupados    = capDia.usado;
   const minDisponiveis = capDia.livre;
   const pctCap         = capDia.total > 0 ? Math.round(capDia.usado / capDia.total * 100) : 0;
-  const slotsLivres    = Math.floor(capDia.livre / 60); // aproximado
+  const slotsLivres    = capDia.encaixesConservadores;
   const capTotal       = capDia.total;
   const capPorTecnico  = nTecnicos > 0 ? capDia.total / nTecnicos : 0;
   const statusCap      = pctCap >= 90 ? 'sobrecarregado' : pctCap < 50 ? 'ocioso' : 'ok';
@@ -5179,7 +5497,9 @@ function hojeAnalisarDia(daySvcs, d) {
     semEquipe, atrasados, reagendados,
     sobrecarga, conflitosHorario, conflitosJornada,
     capacidade: { nTecnicos, capPorTecnico, capTotal, slotsLivres, minOcupados, minDisponiveis, pctCap, statusCap,
-                  hConsumido: capDia.hConsumido, hLivre: capDia.hLivre, hDisponivel: capDia.hDisponivel },
+                  hConsumido: capDia.hConsumido, hLivre: capDia.hLivre, hDisponivel: capDia.hDisponivel,
+                  inicioObservadoMin: capDia.inicioObservadoMin, fimObservadoMin: capDia.fimObservadoMin,
+                  maiorBlocoLivreMin: capDia.maiorBlocoLivreMin, duracaoReferenciaMin: capDia.duracaoReferenciaMin },
     grupos
   };
 }
@@ -5207,7 +5527,7 @@ function renderHoje() {
   const d = dateEl?.value || new Date().toISOString().split('T')[0];
   if (dateEl && !dateEl.value) dateEl.value = d;
 
-  const daySvcs   = services.filter(s => s.dt === d);
+  const daySvcs   = services.filter(s => getServiceDateValue(s) === d);
   const dm        = d.split('-');
   const br        = `${dm[2]}/${dm[1]}/${dm[0]}`;
   const summaryEl = document.getElementById('hoje-summary');
@@ -5235,10 +5555,13 @@ function renderHoje() {
   const cap      = A.capacidade;
   const capColor = cap.statusCap === 'sobrecarregado' ? 'var(--red)' : cap.statusCap === 'ocioso' ? 'var(--blue)' : 'var(--green)';
   const capIcon  = cap.statusCap === 'sobrecarregado' ? '🔴' : cap.statusCap === 'ocioso' ? '🔵' : '🟢';
+  const janelaObservada = `${formatarHoraDoDia(cap.inicioObservadoMin)}–${formatarHoraDoDia(cap.fimObservadoMin)}`;
   const capMsg   = cap.statusCap === 'sobrecarregado'
     ? 'Capacidade excedida — considere redistribuir'
     : cap.statusCap === 'ocioso'
-    ? `Pode encaixar mais ${cap.slotsLivres} serviço(s) hoje`
+    ? cap.slotsLivres > 0
+      ? `Encaixe conservador: até ${cap.slotsLivres} serviço(s) médio(s)`
+      : 'Há folga, mas não em blocos bons para novo encaixe'
     : 'Capacidade bem distribuída';
 
   // ════════════════════════════════════════════
@@ -5438,17 +5761,19 @@ function renderHoje() {
         <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center">
           <span style="font-size:11px;color:var(--text3)">👷 Técnicos</span>
           <span style="font-size:12px;font-family:var(--mono);font-weight:600">${cap.nTecnicos} em campo</span>
-          <span style="font-size:11px;color:var(--text3)">⏱ Jornada</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600">08:00–17:48 (9h48 = 588min)</span>
+          <span style="font-size:11px;color:var(--text3)">⏱ Janela observada</span>
+          <span style="font-size:12px;font-family:var(--mono);font-weight:600">${janelaObservada} · base ${formatarMinutosHM(JORNADA_MIN)}</span>
           <span style="font-size:11px;color:var(--text3)">📊 Tempo alocado</span>
           <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:${capColor}">${cap.hConsumido||Math.floor(cap.minOcupados/60)+'h'+cap.minOcupados%60+'min'} (${cap.pctCap}%)</span>
           <span style="font-size:11px;color:var(--text3)">🕒 Tempo livre</span>
           <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:${cap.slotsLivres>0?'var(--green)':'var(--red)'}">${cap.hLivre||Math.floor(cap.minDisponiveis/60)+'h '+cap.minDisponiveis%60+'min'}</span>
-          ${cap.slotsLivres > 0 ? `<span style="font-size:11px;color:var(--text3)">✅ Slots est.</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--green)">${cap.slotsLivres} serviço(s) cabem</span>` : `<span style="font-size:11px;color:var(--text3)">⚠ Slots</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--red)">Agenda cheia</span>`}
+          <span style="font-size:11px;color:var(--text3)">📦 Maior bloco</span>
+          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:${cap.maiorBlocoLivreMin >= cap.duracaoReferenciaMin ? 'var(--green)' : 'var(--orange)'}">${formatarMinutosHM(cap.maiorBlocoLivreMin || 0)}</span>
+          ${cap.slotsLivres > 0 ? `<span style="font-size:11px;color:var(--text3)">✅ Encaixes cons.</span>
+          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--green)">até ${cap.slotsLivres} serviço(s) médio(s)</span>` : `<span style="font-size:11px;color:var(--text3)">⚠ Encaixes cons.</span>
+          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--red)">sem bloco bom para novo encaixe</span>`}
         </div>
-        <div style="font-size:10px;color:var(--text4);margin-top:8px">Base: tempo real por tipo · DS=60-120min · LCA=180min · HIG=240min · desl.+20min</div>
+        <div style="font-size:10px;color:var(--text4);margin-top:8px">Base: blocos livres reais por técnico + duração de referência ${formatarMinutosHM(cap.duracaoReferenciaMin || TEMPO_MEDIO_SERVICO_PADRAO)} + folga operacional de 30min</div>
       </div>
 
     </div>
@@ -5482,35 +5807,34 @@ function renderHoje() {
     const gPctColor    = gPct >= 80 ? 'var(--green)' : gPct >= 50 ? 'var(--orange)' : 'var(--red)';
     const pendIds      = g.svcs.filter(s => (s.status||s.st) === 'agendado').map(s => s.id);
     const temSobrecarga= A.sobrecarga.some(s => getEquipeTexto(s) === g.equipe);
+    const execTodosIds = jsArg(pendIds.map(id => normId(id)).filter(Boolean));
 
-    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column">
+    return `<div class="team-board" style="--team-accent:${cor};--team-progress:${gPct}%;--team-progress-color:${gPctColor}">
 
-      <!-- Cabeçalho do grupo -->
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);border-top:3px solid ${cor}">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
-          <div style="flex:1;min-width:0">
-            <div style="font-family:var(--display);font-size:13px;font-weight:800;color:${cor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${sanitize(g.equipe)}">${sanitize(g.equipe)}</div>
-            <div style="display:flex;gap:5px;margin-top:3px;flex-wrap:wrap;align-items:center">
-              ${g.veiculo ? `<span style="font-family:var(--mono);font-size:10px;color:var(--text3)">🚗 ${sanitize(g.veiculo)}</span>` : ''}
-              ${temSobrecarga ? `<span style="font-family:var(--mono);font-size:10px;color:var(--yellow);background:rgba(180,83,9,.1);padding:1px 6px;border-radius:3px;border:1px solid rgba(180,83,9,.2)">🔥 sobrecarga</span>` : ''}
-              ${g.semEquipe ? `<span style="font-family:var(--mono);font-size:10px;color:var(--orange)">⚠ sem equipe</span>` : ''}
+      <div class="team-board-header">
+        <div class="team-board-top">
+          <div class="team-board-main">
+            <div class="team-board-title" title="${sanitize(g.equipe)}">${sanitize(g.equipe)}</div>
+            <div class="team-board-sub">
+              ${g.veiculo ? `<span class="team-board-meta">🚗 ${sanitize(g.veiculo)}</span>` : ''}
+              ${temSobrecarga ? `<span class="chip chip-yellow">Sobrecarga</span>` : ''}
+              ${g.semEquipe ? `<span class="chip chip-orange">Sem equipe</span>` : ''}
             </div>
           </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:${gPctColor}">${gExec}/${gTotal}</div>
-            <div style="font-size:10px;color:var(--text3)">${gPct}% ok</div>
+          <div class="team-board-progress">
+            <div class="team-board-progress-value" style="color:${gPctColor}">${gExec}/${gTotal}</div>
+            <div class="team-board-progress-label">${gPct}% concluído</div>
           </div>
         </div>
-        <div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden">
-          <div style="height:100%;width:${gPct}%;background:${gPctColor};border-radius:99px;transition:width .4s"></div>
+        <div class="team-board-bar">
+          <div class="team-board-bar-fill"></div>
         </div>
-        ${pendIds.length ? `<div style="margin-top:8px">
-          <button style="font-size:10px;padding:4px 10px;background:var(--green);color:white;border:none;border-radius:4px;cursor:pointer;font-family:var(--mono)" onclick="hojeExecTodos(${jsArg(pendIds.map(id => normId(id)).filter(Boolean))})">✓ Marcar todos (${pendIds.length})</button>
+        ${pendIds.length ? `<div class="team-board-actions">
+          <button class="svc-btn exec" onclick="hojeExecTodos(${execTodosIds})">Executar todos (${pendIds.length})</button>
         </div>` : ''}
       </div>
 
-      <!-- Lista de serviços ordenada por horário -->
-      <div style="padding:8px;display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto;max-height:420px">
+      <div class="team-board-list">
         ${g.svcs.sort((a,b) => (a.horario||a.hr||'99').localeCompare(b.horario||b.hr||'99')).map(s => {
           const F = sf(s);
           const isExec  = F.status === 'executado';
@@ -5522,32 +5846,33 @@ function renderHoje() {
           const isConfl = idsConflito.has(s.id);
           const isJorn  = idsJornada.has(s.id);
 
-          let borderStyle = 'border:1px solid var(--border)';
-          if      (isAtras) borderStyle = 'border:1.5px solid rgba(220,38,38,.5)';
-          else if (isConfl) borderStyle = 'border:1.5px solid rgba(180,83,9,.4)';
-          else if (isJorn)  borderStyle = 'border:1.5px solid rgba(124,58,237,.35)';
-
           const badges = [
-            isAtras ? `<span style="font-size:9px;background:rgba(220,38,38,.12);color:var(--red);padding:1px 5px;border-radius:3px;font-family:var(--mono)">atrasado</span>` : '',
-            isConfl ? `<span style="font-size:9px;background:rgba(180,83,9,.12);color:var(--yellow);padding:1px 5px;border-radius:3px;font-family:var(--mono)">horário apertado</span>` : '',
-            isJorn  ? `<span style="font-size:9px;background:rgba(124,58,237,.12);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:var(--mono)">jornada ⚠</span>` : '',
+            isAtras ? `<span class="chip chip-red">Atrasado</span>` : '',
+            isConfl ? `<span class="chip chip-yellow">Horário apertado</span>` : '',
+            isJorn  ? `<span class="chip chip-purple">Jornada</span>` : '',
           ].filter(Boolean).join('');
+          const svcAccent = isAtras ? 'var(--red)' : isConfl ? 'var(--yellow)' : isJorn ? 'var(--purple)' : isExec ? 'var(--green)' : 'rgba(37,99,235,.45)';
+          const svcClasses = ['team-svc-card'];
+          if (isExec) svcClasses.push('is-executed');
+          if (isAtras) svcClasses.push('is-late');
+          else if (isConfl) svcClasses.push('is-conflict');
+          else if (isJorn) svcClasses.push('is-journey');
 
-          return `<div style="background:var(--card2);${borderStyle};border-radius:var(--r2);padding:10px 12px;cursor:pointer${isExec?';opacity:.65':''}" onclick="showSvcDetail(${jsArg(s.id)})">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
-              <div style="font-weight:600;font-size:13px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sanitize(F.cliente)}</div>
-              <span class="chip ${st.chip}" style="font-size:10px;flex-shrink:0">${st.label}</span>
+          return `<div class="${svcClasses.join(' ')}" style="--svc-accent:${svcAccent}" onclick="showSvcDetail(${jsArg(s.id)})">
+            <div class="team-svc-head">
+              <div class="team-svc-client">${sanitize(F.cliente)}</div>
+              <span class="chip ${st.chip}" style="flex-shrink:0">${st.label}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:${badges||F.endereco?'6px':'0'}">
-              ${F.horario && F.horario!=='—' ? `<span style="font-family:var(--mono);font-size:11px;background:var(--bg2);border:1px solid ${isAtras?'rgba(220,38,38,.4)':'var(--border2)'};border-radius:4px;padding:2px 7px;color:${isAtras?'var(--red)':'var(--text2)'}">⏰ ${F.horario}</span>` : ''}
-              ${F.tipo ? `<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:99px;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(37,99,235,.2)">${F.tipo}</span>` : ''}
-              ${F.os && F.os!=='—' ? `<span style="font-family:var(--mono);font-size:10px;color:var(--text3)">OS ${F.os}</span>` : ''}
+            <div class="team-svc-meta">
+              ${F.horario && F.horario!=='—' ? `<span class="team-svc-time ${isAtras ? 'is-late' : ''}">🕒 ${F.horario}</span>` : ''}
+              ${F.tipo ? `<span class="chip chip-blue">${F.tipo}</span>` : ''}
+              ${F.os && F.os!=='—' ? `<span class="team-svc-os">OS ${F.os}</span>` : ''}
             </div>
-            ${badges ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${badges}</div>` : ''}
-            ${F.endereco ? `<div style="font-size:10px;color:var(--text3);margin-bottom:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${sanitize(F.endereco)}</div>` : ''}
-            <div style="display:flex;gap:5px;flex-wrap:wrap" onclick="event.stopPropagation()">
-              ${!isExec ? `<button style="font-size:10px;padding:3px 9px;background:var(--green);color:white;border:none;border-radius:4px;cursor:pointer;font-family:var(--mono)" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">✓ Executado</button>` : `<span style="font-size:10px;color:var(--green);font-family:var(--mono)">✓ Concluído</span>`}
-              ${isAgend ? `<button style="font-size:10px;padding:3px 9px;border:1px solid var(--border2);border-radius:4px;cursor:pointer;background:var(--card);color:var(--text2)" onclick="setSt(${jsArg(s.id)},'reagendado');renderHoje()">↻ Reagendar</button>` : ''}
+            ${badges ? `<div class="team-svc-alerts">${badges}</div>` : ''}
+            ${F.endereco ? `<div class="team-svc-address">📍 ${sanitize(F.endereco)}</div>` : ''}
+            <div class="team-svc-actions" onclick="event.stopPropagation()">
+              ${!isExec ? `<button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Executado</button>` : `<span class="team-svc-done">✓ Concluído</span>`}
+              ${isAgend ? `<button class="svc-btn reagend" onclick="setSt(${jsArg(s.id)},'reagendado');renderHoje()">Reagendar</button>` : ''}
             </div>
           </div>`;
         }).join('')}
@@ -5687,7 +6012,7 @@ function renderRotas() {
   const recsComKm = recs.filter(r => r.kmD > 0);
   const avgKm     = recsComKm.length ? Math.round(totalKm / recsComKm.length) : 0;
   const maxKmRec  = recs.reduce((a,b) => (b.kmD||0) > (a.kmD||0) ? b : a, {});
-  const totalDays = [...new Set(svcs.map(s=>s.dt))].length;
+  const totalDays = [...new Set(svcs.map(s => getServiceDateValue(s)).filter(Boolean))].length;
   const svcsPerDay= totalDays ? (svcs.length / totalDays).toFixed(1) : 0;
   const kmPorSvc  = (svcs.length && totalKm) ? (totalKm / svcs.length).toFixed(1) : '—';
 
@@ -5721,7 +6046,7 @@ function renderRotas() {
   }).join('') || '<div class="text-muted">Registre check lists para ver análise de KM.</div>';
 
   // ── Google Maps link para data ──────────────────────────
-  const daySvcs   = services.filter(s => s.dt === rotaDate);
+  const daySvcs   = services.filter(s => getServiceDateValue(s) === rotaDate);
   const allClients= daySvcs.map(s => encodeURIComponent((s.cliente||s.cl||'') + ', São Paulo')).join('/');
   const dm = rotaDate.split('-');
   const brDate = `${dm[2]}/${dm[1]}/${dm[0]}`;
@@ -6003,7 +6328,12 @@ function renderEquipes(){
       });
       const exec = esvc.filter(s=>(s.status||s.st)==='executado').length;
       const tx   = esvc.length ? Math.round(exec/esvc.length*100) : 0;
-      const byDay={};esvc.forEach(s=>{byDay[s.dt]=(byDay[s.dt]||0)+1;});
+      const byDay={};
+      esvc.forEach(s => {
+        const dt = getServiceDateValue(s);
+        if (!dt) return;
+        byDay[dt] = (byDay[dt] || 0) + 1;
+      });
       const avgPD= Object.keys(byDay).length ? (esvc.length/Object.keys(byDay).length).toFixed(1) : 0;
       return`<div class="card" style="border-top:2px solid ${cor}">
         <div style="color:${cor};font-family:var(--display);font-size:15px;font-weight:800;margin-bottom:12px">${lbl}</div>
@@ -7172,7 +7502,7 @@ async function delRecord(){
 function exportCSV(){
   const svcs=filteredSvcs();
   const h='ID,Data,Dia,Mes,Cliente,Endereco,Horario,TipoServico,Equipe,Veiculo,OS,Status\n';
-  const rows=svcs.map(s=>[s.id,s.dt,s.dw,s.ms,'"'+(s.cliente||s.cl||'')+'"','"'+(s.endereco||'')+'"',s.horario||s.hr,s.tipoServico||s.sc,getServiceEquipeLabel(s),s.veiculo||'',s.OS||s.os||'',s.status||s.st].join(',')).join('\n');
+  const rows=svcs.map(s=>[s.id,getServiceDateValue(s)||'',s.dw,s.ms,'"'+(s.cliente||s.cl||'')+'"','"'+(s.endereco||'')+'"',s.horario||s.hr,s.tipoServico||s.sc,getServiceEquipeLabel(s),s.veiculo||'',s.OS||s.os||'',s.status||s.st].join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+h+rows],{type:'text/csv;charset=utf-8;'}));a.download='letec_servicos.csv';a.click();
   toast('📤 CSV exportado!','ok');
 }
@@ -7958,8 +8288,9 @@ function analisarCapacidade(svcs) {
       byTecnico[t.id].total++;
       if ((s.status||s.st)==='executado') byTecnico[t.id].exec++;
       if (parseInt((s.horario||'').substring(0,2))>=20) byTecnico[t.id].noturno++;
-      if (s.dt) byTecnico[t.id].dias.add(s.dt);
-      const dia = s.dt || 'sem-data';
+      const dt = getServiceDateValue(s);
+      if (dt) byTecnico[t.id].dias.add(dt);
+      const dia = dt || 'sem-data';
       if (!byTecnico[t.id].porDia[dia]) byTecnico[t.id].porDia[dia] = [];
       byTecnico[t.id].porDia[dia].push(s);
     });
@@ -8229,7 +8560,7 @@ function abrirEdicaoEquipe(id) {
   document.getElementById('modal-body').innerHTML = `
     <div style="margin-bottom:16px;padding:10px 12px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--border)">
       <div style="font-weight:700;font-size:14px;margin-bottom:2px">${s.cliente||s.cl||'—'}</div>
-      <div style="font-size:11px;color:var(--text3)">${s.dt||''} · ${s.horario||s.hr||'—'} · ${s.tipoServico||s.sc||'—'}</div>
+      <div style="font-size:11px;color:var(--text3)">${getServiceDateValue(s)||''} · ${s.horario||s.hr||'—'} · ${s.tipoServico||s.sc||'—'}</div>
     </div>
     <div class="form-row mb3">
       <div class="field"><label>Técnicos</label>
