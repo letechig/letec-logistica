@@ -5993,7 +5993,7 @@ async function verificarDuplicatasCliente() {
       
       // Mostrar modal de duplicatas se houver
       if (confirmAction(`Encontramos ${duplicates.length} possível(is) duplicata(s). Deseja visualizar?`)) {
-        openDuplicatesModal();
+        openDuplicatesModal({ focusIds: duplicates.map(d => d.id), sourceName: nome });
         return false;
       }
     }
@@ -6255,13 +6255,20 @@ function selectGeocodeSuggestion(suggestion) {
   geocodeClientAddress();
 }
 
-async function openDuplicatesModal() {
+let _duplicatesModalState = { focusIds: [], sourceName: '' };
+
+async function openDuplicatesModal(options = {}) {
+  _duplicatesModalState = {
+    focusIds: Array.isArray(options.focusIds) ? options.focusIds.map(id => Number(id)).filter(Boolean) : [],
+    sourceName: String(options.sourceName || '').trim()
+  };
   document.getElementById('duplicates-modal').classList.add('open');
   await loadDuplicates();
 }
 
 function closeDuplicatesModal() {
   document.getElementById('duplicates-modal').classList.remove('open');
+  _duplicatesModalState = { focusIds: [], sourceName: '' };
 }
 
 async function loadDuplicates() {
@@ -6273,13 +6280,17 @@ async function loadDuplicates() {
     if (!response.ok) throw new Error(`Erro: ${response.status}`);
     
     const duplicates = await response.json();
+    const focusIds = _duplicatesModalState.focusIds || [];
+    const filteredDuplicates = focusIds.length
+      ? duplicates.filter(group => group.group.some(customer => focusIds.includes(Number(customer.id))))
+      : duplicates;
     
-    if (duplicates.length === 0) {
+    if (filteredDuplicates.length === 0) {
       content.innerHTML = `
         <div style="text-align:center;padding:40px;color:var(--text3)">
           <div style="font-size:24px;margin-bottom:8px">✅</div>
-          <div>Nenhuma duplicata encontrada</div>
-          <div style="font-size:12px;margin-top:8px">Todos os clientes estão únicos</div>
+          <div>${focusIds.length ? 'Nenhuma duplicata correspondente encontrada' : 'Nenhuma duplicata encontrada'}</div>
+          <div style="font-size:12px;margin-top:8px">${focusIds.length ? 'Os grupos suspeitos podem já ter sido resolvidos.' : 'Todos os clientes estão únicos'}</div>
         </div>
       `;
       return;
@@ -6288,24 +6299,25 @@ async function loadDuplicates() {
     content.innerHTML = `
       <div style="margin-bottom:16px">
         <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">
-          ${duplicates.length} grupo(s) de duplicata(s) encontrado(s)
+          ${filteredDuplicates.length} grupo(s) de duplicata(s) encontrado(s)
         </div>
         <div style="font-size:12px;color:var(--text3);margin-bottom:16px">
           Selecione o cliente principal em cada grupo e clique em "Mesclar" para combinar os dados.
         </div>
+        ${focusIds.length ? `<div style="font-size:12px;color:var(--orange);margin-bottom:16px">Filtro ativo para clientes relacionados a ${sanitize(_duplicatesModalState.sourceName || 'este alerta')}.</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:16px">
-        ${duplicates.map((group, groupIndex) => `
+        ${filteredDuplicates.map((group, groupIndex) => `
           <div style="border:1px solid var(--border2);border-radius:var(--r2);padding:16px">
             <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">
               Grupo ${groupIndex + 1} - ${group.group.length} cliente(s)
             </div>
             <div style="display:flex;flex-direction:column;gap:8px">
               ${group.group.map(customer => `
-                <label style="display:flex;gap:8px;align-items:center;padding:8px;border-radius:var(--r1);background:var(--bg2);cursor:pointer">
+                <label style="display:flex;gap:8px;align-items:center;padding:8px;border-radius:var(--r1);background:${focusIds.includes(Number(customer.id)) ? 'var(--orange-bg)' : 'var(--bg2)'};cursor:pointer">
                   <input type="radio" name="primary-${groupIndex}" value="${customer.id}" style="margin:0">
                   <div style="flex:1">
-                    <div style="font-weight:600">${customer.nome}</div>
+                    <div style="font-weight:600">${customer.nome}${focusIds.includes(Number(customer.id)) ? ' <span style="font-size:10px;color:var(--orange)">Alerta atual</span>' : ''}</div>
                     <div style="font-size:11px;color:var(--text3)">${customer.telefone || 'Sem telefone'} • ${customer.endereco || 'Sem endereço'}</div>
                   </div>
                 </label>
