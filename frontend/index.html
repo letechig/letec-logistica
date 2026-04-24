@@ -560,7 +560,229 @@ body {
   font-family: var(--mono);
   font-weight: 600;
 }
+.today-summary-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.today-alert {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--blue);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+.today-alert.critical {
+  border-left-color: var(--red);
+  background: linear-gradient(180deg, rgba(220,38,38,.06), rgba(220,38,38,.02));
+}
+.today-alert.warn {
+  border-left-color: var(--orange);
+  background: linear-gradient(180deg, rgba(234,88,12,.05), rgba(234,88,12,.02));
+}
+.today-alert.info {
+  border-left-color: var(--purple);
+  background: linear-gradient(180deg, rgba(124,58,237,.05), rgba(124,58,237,.02));
+}
+.today-alert-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.today-alert-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.today-alert-title {
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+.today-alert-sub {
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+.today-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.today-alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(148,163,184,.12);
+  border-radius: var(--r2);
+  padding: 9px 10px;
+}
+.today-alert-row.compact {
+  gap: 8px;
+}
+.today-alert-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+}
+.today-alert-name {
+  font-weight: 700;
+  color: var(--text);
+}
+.today-alert-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+}
+.today-alert-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.today-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.today-pill {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--border2);
+  background: rgba(255,255,255,.03);
+  color: var(--text2);
+}
+.today-overview {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+}
+.today-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.15fr) minmax(280px, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.today-panel {
+  min-width: 0;
+}
+.today-panel + .today-panel {
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+.today-panel-label {
+  font-size: 11px;
+  color: var(--text3);
+  font-family: var(--mono);
+  margin-bottom: 8px;
+}
+.today-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.today-panel-value {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+.today-progress {
+  height: 8px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.today-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .35s ease;
+}
+.today-kpi-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.today-kpi {
+  min-width: 92px;
+  text-align: center;
+  padding: 9px 12px;
+  border-radius: var(--r2);
+  border: 1px solid rgba(148,163,184,.16);
+}
+.today-kpi-value {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+.today-kpi-label {
+  font-size: 10px;
+  margin-top: 6px;
+}
+.today-capacity-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.today-capacity-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: center;
+}
+.today-capacity-grid .today-alert-label {
+  margin: 0;
+}
+.today-capacity-note {
+  font-size: 10px;
+  color: var(--text4);
+  margin-top: 10px;
+}
+@media (max-width: 900px) {
+  .today-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .today-panel + .today-panel {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 16px;
+  }
+}
 @media (max-width: 640px) {
+  .today-alert-row {
+    align-items: flex-start;
+  }
+  .today-alert-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .today-alert-actions .svc-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .today-capacity-grid {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
   .team-board-header {
     padding: 14px;
   }
@@ -5568,27 +5790,29 @@ function renderHoje() {
   // CONSTRUÇÃO DO HTML DO SUMMARY
   // Ordem: críticos → avisos → capacidade + progresso
   // ════════════════════════════════════════════
-  let html = '';
+  let html = '<div class="today-summary-stack">';
 
   // â”€â”€ CRÃTICO 1: Serviços Atrasados ──
   if (A.atrasados.length) {
     const agoraMin = new Date().getHours()*60 + new Date().getMinutes();
-    html += `<div style="background:rgba(220,38,38,.07);border:1.5px solid rgba(220,38,38,.4);border-radius:var(--r);padding:14px 16px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:16px">🚨</span>
-        <span style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--red)">${A.atrasados.length} serviço(s) ATRASADO(S) — horário já passou</span>
+    html += `<div class="today-alert critical">
+      <div class="today-alert-head">
+        <span class="today-alert-icon">🚨</span>
+        <span class="today-alert-title">${A.atrasados.length} serviço(s) atrasado(s) — horário já passou</span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="today-alert-list">
         ${A.atrasados.map(s => {
           const F = sf(s);
           const min = hojeParseMin(F.horario)||0;
           const atrMin = agoraMin - min;
-          return `<div style="display:flex;align-items:center;gap:10px;font-size:12px;background:rgba(220,38,38,.05);padding:8px 10px;border-radius:var(--r2)">
-            <span style="font-family:var(--mono);color:var(--red);font-weight:700;min-width:44px">${F.horario||'—'}</span>
-            <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.cliente}</span>
-            <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${F.equipe||'sem equipe'}</span>
-            <span style="font-family:var(--mono);font-size:10px;background:rgba(220,38,38,.15);color:var(--red);padding:2px 6px;border-radius:4px;white-space:nowrap">+${atrMin}min</span>
-            <button style="font-size:10px;padding:3px 8px;background:var(--red);color:white;border:none;border-radius:4px;cursor:pointer;font-family:var(--mono);white-space:nowrap" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">✓ Exec.</button>
+          return `<div class="today-alert-row">
+            <span class="today-alert-time" style="color:var(--red);border-color:rgba(220,38,38,.25);background:rgba(220,38,38,.12)">${F.horario||'—'}</span>
+            <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
+            <span class="today-alert-label">${F.equipe||'sem equipe'}</span>
+            <span class="chip chip-red">+${atrMin}min</span>
+            <div class="today-alert-actions">
+              <button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Executado</button>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -5598,25 +5822,25 @@ function renderHoje() {
   // â”€â”€ CRÃTICO 2: Conflito de Jornada (início cedo após noturno) ──
   const jornadaCritica = A.conflitosJornada.filter(c => c.ehCedo);
   if (jornadaCritica.length) {
-    html += `<div style="background:rgba(220,38,38,.07);border:1.5px solid rgba(220,38,38,.4);border-radius:var(--r);padding:14px 16px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="font-size:16px">⛔</span>
-        <span style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--red)">Conflito de Jornada — início cedo após turno noturno</span>
+    html += `<div class="today-alert critical">
+      <div class="today-alert-head">
+        <span class="today-alert-icon">⛔</span>
+        <span class="today-alert-title">Conflito de jornada — início cedo após turno noturno</span>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Regra: quem trabalhou após ${OP.HORA_NOTURNA}h não deve iniciar antes das 0${OP.HORA_CEDO}:00 do dia seguinte.</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="today-alert-sub">Regra: quem trabalhou após ${OP.HORA_NOTURNA}h não deve iniciar antes das 0${OP.HORA_CEDO}:00 do dia seguinte.</div>
+      <div class="today-alert-list">
         ${jornadaCritica.map(c => {
           const F = sf(c.svHoje);
           const nome = c.tecnico.replace(/(^\w|\s\w)/g, m => m.toUpperCase());
           const horOntem = c.svOntem ? (c.svOntem.horario||c.svOntem.hr||'?') : '?';
-          return `<div style="font-size:12px;background:rgba(220,38,38,.05);padding:8px 10px;border-radius:var(--r2);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span style="font-weight:700;color:var(--red)">${nome}</span>
-            <span style="color:var(--text3)">ontem até</span>
-            <span style="font-family:var(--mono);color:var(--red);background:rgba(220,38,38,.15);padding:1px 6px;border-radius:3px">${horOntem}</span>
-            <span style="color:var(--text3)">→ hoje às</span>
-            <span style="font-family:var(--mono);color:var(--red);background:rgba(220,38,38,.15);padding:1px 6px;border-radius:3px">${F.horario||'?'}</span>
-            <span style="color:var(--text3)">em</span>
-            <span style="font-weight:600">${F.cliente}</span>
+          return `<div class="today-alert-row compact">
+            <span class="today-alert-name" style="color:var(--red)">${nome}</span>
+            <span class="today-alert-label">ontem até</span>
+            <span class="today-alert-time" style="color:var(--red);border-color:rgba(220,38,38,.25);background:rgba(220,38,38,.12)">${horOntem}</span>
+            <span class="today-alert-label">hoje às</span>
+            <span class="today-alert-time" style="color:var(--red);border-color:rgba(220,38,38,.25);background:rgba(220,38,38,.12)">${F.horario||'?'}</span>
+            <span class="today-alert-label">em</span>
+            <span class="today-alert-name">${F.cliente}</span>
           </div>`;
         }).join('')}
       </div>
@@ -5625,29 +5849,33 @@ function renderHoje() {
 
   // ── AVISO 1: Sem equipe + Reagendados ──
   if (A.semEquipe.length || A.reagendados.length) {
-    html += `<div style="background:rgba(234,88,12,.06);border:1.5px solid rgba(234,88,12,.35);border-radius:var(--r);padding:14px 16px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:16px">⚠️</span>
-        <span style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--orange)">Ação necessária — ${A.semEquipe.length + A.reagendados.length} item(s)</span>
+    html += `<div class="today-alert warn">
+      <div class="today-alert-head">
+        <span class="today-alert-icon">⚠️</span>
+        <span class="today-alert-title">Ação necessária — ${A.semEquipe.length + A.reagendados.length} item(s)</span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="today-alert-list">
         ${A.semEquipe.map(s => {
           const F = sf(s);
-          return `<div style="display:flex;align-items:center;gap:10px;font-size:12px;background:rgba(234,88,12,.05);padding:8px 10px;border-radius:var(--r2)">
-            <span style="font-size:10px;background:rgba(234,88,12,.15);color:var(--orange);padding:2px 7px;border-radius:4px;font-family:var(--mono);white-space:nowrap">sem equipe</span>
-            <span style="font-family:var(--mono);color:var(--text3);min-width:44px">${F.horario||'—'}</span>
-            <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.cliente}</span>
-            <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${F.tipo||'—'}</span>
-            <button style="font-size:10px;padding:3px 8px;background:var(--orange);color:white;border:none;border-radius:4px;cursor:pointer;white-space:nowrap" onclick="abrirEdicaoEquipe(${jsArg(s.id)})">✏️ Definir</button>
+          return `<div class="today-alert-row">
+            <span class="chip chip-orange">Sem equipe</span>
+            <span class="today-alert-time">${F.horario||'—'}</span>
+            <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
+            <span class="today-alert-label">${F.tipo||'—'}</span>
+            <div class="today-alert-actions">
+              <button class="svc-btn reagend" style="background:var(--orange);color:white;border-color:var(--orange)" onclick="abrirEdicaoEquipe(${jsArg(s.id)})">Definir equipe</button>
+            </div>
           </div>`;
         }).join('')}
         ${A.reagendados.map(s => {
           const F = sf(s);
-          return `<div style="display:flex;align-items:center;gap:10px;font-size:12px;background:rgba(180,83,9,.05);padding:8px 10px;border-radius:var(--r2)">
-            <span style="font-size:10px;background:rgba(180,83,9,.15);color:var(--yellow);padding:2px 7px;border-radius:4px;font-family:var(--mono);white-space:nowrap">reagendado</span>
-            <span style="font-family:var(--mono);color:var(--text3);min-width:44px">${F.horario||'—'}</span>
-            <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.cliente}</span>
-            <button style="font-size:10px;padding:3px 8px;border:1px solid var(--border2);border-radius:4px;cursor:pointer;background:var(--card);color:var(--text2)" onclick="showSvcDetail(${jsArg(s.id)})">Ver</button>
+          return `<div class="today-alert-row">
+            <span class="chip chip-yellow">Reagendado</span>
+            <span class="today-alert-time">${F.horario||'—'}</span>
+            <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
+            <div class="today-alert-actions">
+              <button class="svc-btn reagend" onclick="showSvcDetail(${jsArg(s.id)})">Ver serviço</button>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -5656,16 +5884,14 @@ function renderHoje() {
 
   // ── AVISO 2: Sobrecarga ──
   if (A.sobrecarga.length) {
-    html += `<div style="background:rgba(180,83,9,.06);border:1.5px solid rgba(180,83,9,.3);border-radius:var(--r);padding:14px 16px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:16px">🔥</span>
-        <span style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--yellow)">${A.sobrecarga.length} equipe(s) sobrecarregada(s) — ≥ ${OP.SOBRECARGA_LIM} serviços</span>
+    html += `<div class="today-alert warn">
+      <div class="today-alert-head">
+        <span class="today-alert-icon">🔥</span>
+        <span class="today-alert-title">${A.sobrecarga.length} equipe(s) sobrecarregada(s) — ≥ ${OP.SOBRECARGA_LIM} serviços</span>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${A.sobrecarga.map(s => `<div style="background:rgba(180,83,9,.1);border:1px solid rgba(180,83,9,.25);border-radius:var(--r2);padding:6px 12px">
-          <div style="font-size:12px;font-weight:600;color:var(--yellow)">${getEquipeTexto(s)}</div>
-          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--yellow)">${s.count}</div>
-          <div style="font-size:10px;color:var(--text3)">serviços hoje</div>
+      <div class="today-pill-list">
+        ${A.sobrecarga.map(s => `<div class="today-pill">
+          <strong style="color:var(--yellow)">${getEquipeTexto(s)}</strong> · ${s.count} serviços
         </div>`).join('')}
       </div>
     </div>`;
@@ -5673,25 +5899,24 @@ function renderHoje() {
 
   // ── AVISO 3: Conflitos de Horário ──
   if (A.conflitosHorario.length) {
-    html += `<div style="background:rgba(180,83,9,.06);border:1.5px solid rgba(180,83,9,.3);border-radius:var(--r);padding:14px 16px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:16px">⏱</span>
-        <span style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--yellow)">${A.conflitosHorario.length} conflito(s) de horário — gap &lt; ${OP.GAP_MINIMO_MIN}min entre serviços</span>
+    html += `<div class="today-alert warn">
+      <div class="today-alert-head">
+        <span class="today-alert-icon">⏱</span>
+        <span class="today-alert-title">${A.conflitosHorario.length} conflito(s) de horário — gap &lt; ${OP.GAP_MINIMO_MIN}min entre serviços</span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="today-alert-list">
         ${A.conflitosHorario.map(c => {
           const F1 = sf(c.s1), F2 = sf(c.s2);
-          return `<div style="font-size:12px;background:rgba(180,83,9,.05);padding:8px 10px;border-radius:var(--r2)">
-            <div style="font-size:10px;font-weight:700;color:var(--yellow);margin-bottom:4px;font-family:var(--mono)">${c.equipe}</div>
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span style="font-family:var(--mono)">${F1.horario||'—'}</span>
-              <span style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F1.cliente}</span>
-              <span style="color:var(--text3);font-size:16px">→</span>
-              <span style="font-family:var(--mono)">${F2.horario||'—'}</span>
-              <span style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F2.cliente}</span>
-              <span style="font-family:var(--mono);font-size:10px;background:rgba(180,83,9,.15);color:var(--yellow);padding:2px 7px;border-radius:4px">gap: ${c.gap}min</span>
+          return `<div class="today-alert-row compact">
+            <span class="today-alert-label" style="font-weight:700;color:var(--yellow)">${c.equipe}</span>
+            <span class="today-alert-time">${F1.horario||'—'}</span>
+            <span class="today-alert-name">${F1.cliente}</span>
+            <span class="today-alert-label">→</span>
+            <span class="today-alert-time">${F2.horario||'—'}</span>
+            <span class="today-alert-name">${F2.cliente}</span>
+            <span class="chip chip-yellow">gap ${c.gap}min</span>
             </div>
-          </div>`;
+          `;
         }).join('')}
       </div>
     </div>`;
@@ -5700,85 +5925,83 @@ function renderHoje() {
   // ── INFO: Jornada (aviso, não crítico) ──
   const jornadaAviso = A.conflitosJornada.filter(c => !c.ehCedo);
   if (jornadaAviso.length) {
-    html += `<div style="background:rgba(124,58,237,.06);border:1.5px solid rgba(124,58,237,.3);border-radius:var(--r);padding:14px 16px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-size:16px">🌙</span>
-        <span style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--purple)">Técnico(s) com turno noturno ontem — verificar descanso</span>
+    html += `<div class="today-alert info">
+      <div class="today-alert-head">
+        <span class="today-alert-icon">🌙</span>
+        <span class="today-alert-title">Técnico(s) com turno noturno ontem — verificar descanso</span>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div class="today-pill-list">
         ${jornadaAviso.map(c => {
           const nome = c.tecnico.replace(/(^\w|\s\w)/g, m => m.toUpperCase());
           const horOntem = c.svOntem ? (c.svOntem.horario||c.svOntem.hr||'?') : '?';
-          return `<span style="font-size:11px;padding:4px 10px;background:rgba(124,58,237,.1);color:var(--purple);border-radius:4px;border:1px solid rgba(124,58,237,.2)">${nome} <span style="opacity:.7">(ontem às ${horOntem})</span></span>`;
+          return `<span class="today-pill" style="color:var(--purple);border-color:rgba(124,58,237,.22)">${nome} <span style="opacity:.7">(ontem às ${horOntem})</span></span>`;
         }).join('')}
       </div>
     </div>`;
   }
 
   // ── Painel: Capacidade + Progresso ──
-  html += `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px">
-    <div style="display:flex;align-items:stretch;gap:16px;flex-wrap:wrap">
+  html += `<div class="today-overview">
+    <div class="today-overview-grid">
 
-      <!-- Progresso de execução -->
-      <div style="flex:1;min-width:200px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">Execução do dia</span>
-          <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:${pctColor}">${A.exec}/${A.total} · ${A.pct}%</span>
+      <div class="today-panel">
+        <div class="today-panel-head">
+          <span class="today-panel-label">Execução do dia</span>
+          <span class="today-panel-value" style="color:${pctColor}">${A.exec}/${A.total} · ${A.pct}%</span>
         </div>
-        <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:12px">
-          <div style="height:100%;width:${A.pct}%;background:${pctColor};border-radius:99px;transition:width .4s"></div>
+        <div class="today-progress">
+          <div class="today-progress-fill" style="width:${A.pct}%;background:${pctColor}"></div>
         </div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap">
-          <div style="text-align:center;padding:7px 12px;background:var(--green-bg);border-radius:var(--r2);border:1px solid rgba(22,163,74,.2)">
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--green)">${A.exec}</div>
-            <div style="font-size:10px;color:var(--green)">Executados</div>
+        <div class="today-kpi-row">
+          <div class="today-kpi" style="background:var(--green-bg)">
+            <div class="today-kpi-value" style="color:var(--green)">${A.exec}</div>
+            <div class="today-kpi-label" style="color:var(--green)">Executados</div>
           </div>
-          <div style="text-align:center;padding:7px 12px;background:var(--blue-bg);border-radius:var(--r2);border:1px solid rgba(37,99,235,.2)">
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--blue2)">${A.pend}</div>
-            <div style="font-size:10px;color:var(--blue2)">Pendentes</div>
+          <div class="today-kpi" style="background:var(--blue-bg)">
+            <div class="today-kpi-value" style="color:var(--blue2)">${A.pend}</div>
+            <div class="today-kpi-label" style="color:var(--blue2)">Pendentes</div>
           </div>
-          ${A.reagend ? `<div style="text-align:center;padding:7px 12px;background:var(--orange-bg);border-radius:var(--r2);border:1px solid rgba(234,88,12,.2)">
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--orange)">${A.reagend}</div>
-            <div style="font-size:10px;color:var(--orange)">Reagendados</div>
+          ${A.reagend ? `<div class="today-kpi" style="background:var(--orange-bg)">
+            <div class="today-kpi-value" style="color:var(--orange)">${A.reagend}</div>
+            <div class="today-kpi-label" style="color:var(--orange)">Reagendados</div>
           </div>` : ''}
-          ${A.cancel ? `<div style="text-align:center;padding:7px 12px;background:var(--red-bg);border-radius:var(--r2);border:1px solid rgba(220,38,38,.2)">
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--red)">${A.cancel}</div>
-            <div style="font-size:10px;color:var(--red)">Cancelados</div>
+          ${A.cancel ? `<div class="today-kpi" style="background:var(--red-bg)">
+            <div class="today-kpi-value" style="color:var(--red)">${A.cancel}</div>
+            <div class="today-kpi-label" style="color:var(--red)">Cancelados</div>
           </div>` : ''}
         </div>
       </div>
 
-      <!-- Inteligência de Capacidade Real -->
-      <div style="flex:1;min-width:200px;padding-left:16px;border-left:1px solid var(--border)">
-        <div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-bottom:8px">Capacidade Real da Equipe</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <div class="today-panel">
+        <div class="today-panel-label">Capacidade real da equipe</div>
+        <div class="today-capacity-status" style="color:${capColor}">
           <span style="font-size:15px">${capIcon}</span>
-          <span style="font-size:12px;font-weight:600;color:${capColor}">${capMsg}</span>
+          <span>${capMsg}</span>
         </div>
-        <div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:10px">
-          <div style="height:100%;width:${Math.min(cap.pctCap,100)}%;background:${capColor};border-radius:99px;transition:width .4s"></div>
+        <div class="today-progress">
+          <div class="today-progress-fill" style="width:${Math.min(cap.pctCap,100)}%;background:${capColor}"></div>
         </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center">
-          <span style="font-size:11px;color:var(--text3)">👷 Técnicos</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600">${cap.nTecnicos} em campo</span>
-          <span style="font-size:11px;color:var(--text3)">⏱ Janela observada</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600">${janelaObservada} · base ${formatarMinutosHM(JORNADA_MIN)}</span>
-          <span style="font-size:11px;color:var(--text3)">📊 Tempo alocado</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:${capColor}">${cap.hConsumido||Math.floor(cap.minOcupados/60)+'h'+cap.minOcupados%60+'min'} (${cap.pctCap}%)</span>
-          <span style="font-size:11px;color:var(--text3)">🕒 Tempo livre</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:${cap.slotsLivres>0?'var(--green)':'var(--red)'}">${cap.hLivre||Math.floor(cap.minDisponiveis/60)+'h '+cap.minDisponiveis%60+'min'}</span>
-          <span style="font-size:11px;color:var(--text3)">📦 Maior bloco</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:${cap.maiorBlocoLivreMin >= cap.duracaoReferenciaMin ? 'var(--green)' : 'var(--orange)'}">${formatarMinutosHM(cap.maiorBlocoLivreMin || 0)}</span>
-          ${cap.slotsLivres > 0 ? `<span style="font-size:11px;color:var(--text3)">✅ Encaixes cons.</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--green)">até ${cap.slotsLivres} serviço(s) médio(s)</span>` : `<span style="font-size:11px;color:var(--text3)">⚠ Encaixes cons.</span>
-          <span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--red)">sem bloco bom para novo encaixe</span>`}
+        <div class="today-capacity-grid">
+          <span class="today-alert-label">👷 Técnicos</span>
+          <span class="today-panel-value">${cap.nTecnicos} em campo</span>
+          <span class="today-alert-label">⏱ Janela observada</span>
+          <span class="today-panel-value">${janelaObservada} · base ${formatarMinutosHM(JORNADA_MIN)}</span>
+          <span class="today-alert-label">📊 Tempo alocado</span>
+          <span class="today-panel-value" style="color:${capColor}">${cap.hConsumido||Math.floor(cap.minOcupados/60)+'h'+cap.minOcupados%60+'min'} (${cap.pctCap}%)</span>
+          <span class="today-alert-label">🕒 Tempo livre</span>
+          <span class="today-panel-value" style="color:${cap.slotsLivres>0?'var(--green)':'var(--text2)'}">${cap.hLivre||Math.floor(cap.minDisponiveis/60)+'h '+cap.minDisponiveis%60+'min'}</span>
+          <span class="today-alert-label">📦 Maior bloco</span>
+          <span class="today-panel-value" style="color:${cap.maiorBlocoLivreMin >= cap.duracaoReferenciaMin ? 'var(--green)' : 'var(--orange)'}">${formatarMinutosHM(cap.maiorBlocoLivreMin || 0)}</span>
+          <span class="today-alert-label">${cap.slotsLivres > 0 ? '✅ Encaixes cons.' : '⚠ Encaixes cons.'}</span>
+          <span class="today-panel-value" style="color:${cap.slotsLivres > 0 ? 'var(--green)' : 'var(--text2)'}">${cap.slotsLivres > 0 ? `até ${cap.slotsLivres} serviço(s) médio(s)` : 'sem bloco bom para novo encaixe'}</span>
         </div>
-        <div style="font-size:10px;color:var(--text4);margin-top:8px">Base: blocos livres reais por técnico + duração de referência ${formatarMinutosHM(cap.duracaoReferenciaMin || TEMPO_MEDIO_SERVICO_PADRAO)} + folga operacional de 30min</div>
+        <div class="today-capacity-note">Base: blocos livres reais por técnico + duração de referência ${formatarMinutosHM(cap.duracaoReferenciaMin || TEMPO_MEDIO_SERVICO_PADRAO)} + folga operacional de 30min</div>
       </div>
 
     </div>
   </div>`;
 
+  html += '</div>';
   summaryEl.style.display = 'block';
   summaryEl.innerHTML = html;
 
