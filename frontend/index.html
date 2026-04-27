@@ -3251,16 +3251,19 @@ function ehCondominio(servico) {
     servico.cliente || servico.cl || '',
     servico.endereco || '',
     servico.observacoes || servico.obs || '',
+    servico.tipoServico || '',
     servico.sc || '',
   ].join(' ').toLowerCase();
-  return /cond|condom[ií]n|edif[íi]c|cond\./.test(haystack);
+  return /\bcond\b|condom[ií]n|edif[íi]c|cond\./.test(haystack);
 }
 
 // ── Extrair lista de tipos de um serviço ──────
 // Entrada:  "DS + DR", "DS/DR", "DS e DR", "DS", "LCA"
 // Saída:    ["DS", "DR"] — sempre maiúsculos, sem duplicatas
 function extrairTiposServico(servico) {
+  const tiposArray = Array.isArray(servico?.tipos) ? servico.tipos : [];
   const raw = [
+    ...tiposArray,
     servico.tipoServico || '',
     servico.sc || '',
   ].join(' ');
@@ -3269,9 +3272,9 @@ function extrairTiposServico(servico) {
   const normalizado = raw
     .toUpperCase()
     .replace(/[+\/,&]/g, ' ')
-    .replace(/E/g, ' ')      // "e" como conjunção
-    .replace(/DE/g, ' ')
-    .replace(/COM/g, ' ')
+    .replace(/\bE\b/g, ' ')      // "e" como conjunção
+    .replace(/\bDE\b/g, ' ')
+    .replace(/\bCOM\b/g, ' ')
     .replace(/[^A-Z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
