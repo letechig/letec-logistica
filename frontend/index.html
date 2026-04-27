@@ -6664,13 +6664,14 @@ async function renderClientes(){
 }
 
 function openServiceFromClient(clientId) {
-  const cliente = clientesData.find(c => c.id === clientId);
+  const cliente = clientesData.find(c => String(c.id) === String(clientId));
   if (!cliente) {
     toast('Cliente não encontrado', 'err');
     return;
   }
 
   openNewSvc({
+    clientId: cliente.id,
     cliente: cliente.nome || '',
     endereco: buildServiceAddressFromClient(cliente),
     focarData: true
@@ -6932,6 +6933,7 @@ async function loadClientHistory() {
 
 async function saveClient() {
   try {
+    const isNewClient = !clienteEditando;
     const nome = document.getElementById('cli-form-nome').value.trim();
     const telefone = document.getElementById('cli-form-tel').value.trim();
     const cep = document.getElementById('cli-form-cep').value.trim();
@@ -7031,8 +7033,17 @@ async function saveClient() {
       throw new Error(errData.error || `Erro ${response.status}`);
     }
     
+    const savedCustomer = await response.json();
     closeClientModal();
     await renderClientes();
+
+    if (savedCustomer?.id && isNewClient) {
+      setTimeout(() => {
+        if (confirmAction(`Cliente "${savedCustomer.nome}" salvo. Deseja criar um serviço para ele agora?`)) {
+          openServiceFromClient(savedCustomer.id);
+        }
+      }, 80);
+    }
     
   } catch (error) {
     console.error('Erro saveClient:', error);
@@ -7079,6 +7090,106 @@ function buildServiceAddressFromClient(cliente = {}) {
   if (!cep) return enderecoBase;
   if (!enderecoBase) return `CEP: ${cep}`;
   return `${enderecoBase} - CEP: ${cep}`;
+}
+
+async function ensureClientesDataForService() {
+  if (Array.isArray(clientesData) && clientesData.length) return clientesData;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers`);
+    if (!response.ok) throw new Error(`Erro ${response.status}`);
+    clientesData = await response.json();
+  } catch (error) {
+    console.error('Erro ao carregar clientes para novo serviço:', error);
+    toast('Não foi possível carregar clientes cadastrados', 'warn');
+  }
+
+  return Array.isArray(clientesData) ? clientesData : [];
+}
+
+function renderNovoServicoClientesSelect(selectedClientId = '') {
+  const select = document.getElementById('ns-client-select');
+  if (!select) return;
+
+  const selectedId = String(selectedClientId || select.value || '');
+  const clientes = [...(clientesData || [])]
+    .filter(c => c && c.id !== undefined && c.id !== null)
+    .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
+
+  select.innerHTML = '<option value="">Selecionar cliente cadastrado...</option>' + clientes.map(c => {
+    const id = String(c.id);
+    const telefone = c.telefone ? ` - ${c.telefone}` : '';
+    return `<option value="${escapeHtmlAttr(id)}"${id === selectedId ? ' selected' : ''}>${sanitize(c.nome || 'Cliente sem nome')}${sanitize(telefone)}</option>`;
+  }).join('');
+}
+
+function preencherNovoServicoPorCliente(cliente) {
+  const nomeInput = document.getElementById('ns-cl');
+  const enderecoInput = document.getElementById('ns-end');
+  const hint = document.getElementById('ns-client-hint');
+  if (!cliente || !nomeInput || !enderecoInput) return;
+
+  const endereco = buildServiceAddressFromClient(cliente);
+  nomeInput.value = cliente.nome || '';
+  nomeInput.dataset.clientId = String(cliente.id || '');
+  enderecoInput.dataset.clientId = String(cliente.id || '');
+
+  if (endereco) {
+    enderecoInput.value = endereco;
+    if (hint) {
+      hint.textContent = 'Endereço preenchido pelo cadastro do cliente. Você pode ajustar para este serviço.';
+      hint.style.color = 'var(--green)';
+    }
+  } else if (hint) {
+    hint.textContent = 'Cliente sem endereço cadastrado.';
+    hint.style.color = 'var(--orange)';
+  }
+}
+
+function onNovoServicoClienteSelect() {
+  const select = document.getElementById('ns-client-select');
+  const nomeInput = document.getElementById('ns-cl');
+  const enderecoInput = document.getElementById('ns-end');
+  const hint = document.getElementById('ns-client-hint');
+  const clientId = String(select?.value || '');
+
+  if (!clientId) {
+    if (nomeInput) nomeInput.dataset.clientId = '';
+    if (enderecoInput) enderecoInput.dataset.clientId = '';
+    if (hint) {
+      hint.textContent = 'Selecione um cliente cadastrado para preencher o endereço automaticamente.';
+      hint.style.color = 'var(--text3)';
+    }
+    return;
+  }
+
+  const cliente = (clientesData || []).find(c => String(c.id) === clientId);
+  if (!cliente) {
+    toast('Cliente não encontrado', 'err');
+    return;
+  }
+
+  preencherNovoServicoPorCliente(cliente);
+}
+
+function onNovoServicoClienteManualInput() {
+  const select = document.getElementById('ns-client-select');
+  const nomeInput = document.getElementById('ns-cl');
+  const enderecoInput = document.getElementById('ns-end');
+  const hint = document.getElementById('ns-client-hint');
+  const selectedId = String(select?.value || '');
+  if (!selectedId) return;
+
+  const cliente = (clientesData || []).find(c => String(c.id) === selectedId);
+  if (cliente && String(nomeInput?.value || '').trim() === String(cliente.nome || '').trim()) return;
+
+  if (select) select.value = '';
+  if (nomeInput) nomeInput.dataset.clientId = '';
+  if (enderecoInput) enderecoInput.dataset.clientId = '';
+  if (hint) {
+    hint.textContent = 'Nome editado manualmente. O endereço continuará editável e o serviço será salvo sem cliente vinculado.';
+    hint.style.color = 'var(--text3)';
+  }
 }
 
 async function geocodeClientAddress() {
@@ -7394,6 +7505,7 @@ function openNewSvc(initialData = {}){
   carregarCatalogosServico();
   const defaults = {
     data: initialData.data || new Date().toISOString().split('T')[0],
+    clientId: initialData.clientId || '',
     cliente: initialData.cliente || '',
     endereco: initialData.endereco || '',
     focarData: !!initialData.focarData
@@ -7405,10 +7517,19 @@ function openNewSvc(initialData = {}){
       <div class="field"><label>Horário</label><input type="time" id="ns-hr"></div>
     </div>
     <div class="form-row mb3">
-      <div class="field"><label>Cliente / Condomínio</label><input type="text" id="ns-cl" value="${sanitize(defaults.cliente)}" placeholder="Nome do cliente"></div>
+      <div class="field">
+        <label>Cliente cadastrado</label>
+        <select id="ns-client-select" onchange="onNovoServicoClienteSelect()">
+          <option value="">Carregando clientes...</option>
+        </select>
+        <div id="ns-client-hint" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Selecione um cliente cadastrado para preencher o endereço automaticamente.</div>
+      </div>
     </div>
     <div class="form-row mb3">
-      <div class="field"><label>Endereço completo</label><input type="text" id="ns-end" value="${sanitize(defaults.endereco)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo"></div>
+      <div class="field"><label>Cliente / Condomínio</label><input type="text" id="ns-cl" value="${sanitize(defaults.cliente)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Nome do cliente" oninput="onNovoServicoClienteManualInput()"></div>
+    </div>
+    <div class="form-row mb3">
+      <div class="field"><label>Endereço completo</label><input type="text" id="ns-end" value="${sanitize(defaults.endereco)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo"></div>
     </div>
     <div class="form-row fr-2 mb3">
       <div class="field"><label>Tipo(s) de Serviço</label>
@@ -7439,13 +7560,22 @@ function openNewSvc(initialData = {}){
   carregarTecnicos().then(() => renderTecnicos([], 'ns-tecnicos-container'));
   renderTiposCheckbox([], 'ns-tipos-container');
   bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
+  renderNovoServicoClientesSelect(defaults.clientId);
+  ensureClientesDataForService().then(() => {
+    renderNovoServicoClientesSelect(defaults.clientId);
+    if (defaults.clientId) {
+      const cliente = clientesData.find(c => String(c.id) === String(defaults.clientId));
+      if (cliente) preencherNovoServicoPorCliente(cliente);
+    }
+  });
   if (defaults.focarData) {
     document.getElementById('ns-dt')?.focus();
   }
 }
 async function confirmNewSvc(){
   const dt=document.getElementById('ns-dt')?.value;
-  const cl=document.getElementById('ns-cl')?.value.trim();
+  const clienteInput = document.getElementById('ns-cl');
+  const cl=clienteInput?.value.trim();
   if(!dt||!cl){toast('Preencha data e cliente','err');return;}
   const d=new Date(dt);
   const dw=['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][d.getDay()];
@@ -7470,15 +7600,17 @@ async function confirmNewSvc(){
   const veiculo     = document.getElementById('ns-vei')?.value||'';
   const os          = document.getElementById('ns-os')?.value.trim()||'';
   const observacoes = document.getElementById('ns-obs')?.value.trim()||'';
-  const endereco    = document.getElementById('ns-end')?.value.trim()||'';
+  const enderecoEl  = document.getElementById('ns-end');
+  const endereco    = enderecoEl?.value.trim()||'';
   const horario     = document.getElementById('ns-hr')?.value||'';
+  const cliente_id  = clienteInput?.dataset.clientId || enderecoEl?.dataset.clientId || document.getElementById('ns-client-select')?.value || '';
 
   // Gerar ID único (timestamp numérico compatível com BIGINT PK do Supabase)
   const newId = Date.now();
 
   const newS={
     id: newId, dt, dw, ms,
-    cliente: cl, endereco, horario,
+    cliente: cl, cliente_id, endereco, horario,
     tipoServico, tipos: tiposSel,
     tecnicos_ids, equipe, veiculo, os, observacoes,
     status: 'agendado',
