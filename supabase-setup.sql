@@ -101,6 +101,31 @@ ON CONFLICT (nome) DO NOTHING;
 --              observacoes, status, created_at, is_repasse BOOL,
 --              prioridade TEXT, updated_at
 
+CREATE TABLE IF NOT EXISTS vehicles (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome       TEXT NOT NULL,
+  placa      TEXT,
+  ativo      BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  UNIQUE(nome)
+);
+
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS placa TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+
+INSERT INTO vehicles (nome, ativo) VALUES
+  ('Palio', true),
+  ('Gol', true),
+  ('Uno', true),
+  ('Saveiro', true),
+  ('Fox', true),
+  ('Moto', true),
+  ('Outro', true)
+ON CONFLICT (nome) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS services (
   id          BIGINT PRIMARY KEY,
   date        DATE,
@@ -208,5 +233,6 @@ WHERE COALESCE(nome_normalizado, '') = '';
 -- ─── 6. Verificação final ─────────────────────────────────────────────
 SELECT 'service_types' AS table_name, COUNT(*) AS count FROM service_types
 UNION ALL SELECT 'technicians',  COUNT(*) FROM technicians
+UNION ALL SELECT 'vehicles',     COUNT(*) FROM vehicles
 UNION ALL SELECT 'services',     COUNT(*) FROM services
 UNION ALL SELECT 'customers',    COUNT(*) FROM customers;

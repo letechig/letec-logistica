@@ -1453,8 +1453,10 @@ gap: 6px;
   // Setar false para desligar Supabase sem remover o código.
   const USAR_SUPABASE = true;
   window._tecnicos = [];
+  window._veiculos = [];
   window._tiposServico = [];
   let _catalogosServicoPromise = null;
+  const VEICULOS_FALLBACK = ['Palio','Gol','Uno','Saveiro','Fox','Moto','Outro'];
 
 async function carregarTecnicos(){
   try {
@@ -1471,6 +1473,24 @@ async function carregarTecnicos(){
   } catch(e){
     console.error('Erro ao carregar técnicos:', e);
     window._tecnicos = [];
+  }
+}
+
+async function carregarVeiculos(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('vehicles')
+      .select('id, nome, placa, ativo')
+      .eq('ativo', true)
+      .order('nome');
+
+    if(error) throw error;
+
+    window._veiculos = data || [];
+    console.log('Veículos carregados:', window._veiculos);
+  } catch(e){
+    console.error('Erro ao carregar veículos:', e);
+    window._veiculos = [];
   }
 }
 
@@ -1518,7 +1538,7 @@ async function carregarTecnicos(){
 
   function carregarCatalogosServico() {
     if (!_catalogosServicoPromise) {
-      _catalogosServicoPromise = Promise.all([carregarTecnicos(), carregarTiposServico()]).then(() => {
+      _catalogosServicoPromise = Promise.all([carregarTecnicos(), carregarVeiculos(), carregarTiposServico()]).then(() => {
         if (typeof normalizarTecnicosIdsServicos === 'function') normalizarTecnicosIdsServicos();
         if (typeof refreshPages === 'function') refreshPages();
       });
@@ -4145,16 +4165,38 @@ function tipoComboLabel(s) {
 function renderTecnicos(selectedIds = [], containerId = 'tecnicos-container'){
   const container = document.getElementById(containerId);
   const lista = window._tecnicos || [];
+  const selectedSet = new Set((Array.isArray(selectedIds) ? selectedIds : []).map(id => String(id)));
 
   if(!container) return;
 
   container.innerHTML = lista.map(t => `
     <label style="display:block; margin-bottom:4px;">
-      <input type="checkbox" value="${t.id}"
-        ${selectedIds.includes(t.id) ? 'checked' : ''}>
-      ${t.nome}
+      <input type="checkbox" value="${escapeHtmlAttr(t.id)}"
+        ${selectedSet.has(String(t.id)) ? 'checked' : ''}>
+      ${sanitize(t.nome)}
     </label>
   `).join('');
+}
+
+function getVeiculosOptions(selectedValue = '') {
+  const selected = String(selectedValue || '').trim();
+  const ativos = Array.isArray(window._veiculos) ? window._veiculos.filter(v => v && v.ativo !== false) : [];
+  const nomes = ativos.length
+    ? ativos.map(v => String(v.nome || '').trim()).filter(Boolean)
+    : VEICULOS_FALLBACK.slice();
+
+  if (selected && !nomes.includes(selected)) nomes.unshift(selected);
+  const unique = [...new Set(nomes)];
+
+  return '<option value="">—</option>' + unique.map(nome => (
+    `<option value="${escapeHtmlAttr(nome)}" ${nome === selected ? 'selected' : ''}>${sanitize(nome)}</option>`
+  )).join('');
+}
+
+function renderVeiculosSelect(selectId, selectedValue = '') {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.innerHTML = getVeiculosOptions(selectedValue);
 }
 
 function getTiposServicoCatalogo(selected = []) {
@@ -5436,9 +5478,7 @@ function openEditSvc(id) {
       </div>
       <div class="field">
         <label>Veículo</label>
-        <select id="ed-vei">
-          ${['','Palio','Gol','Uno','Saveiro','Moto','Outro'].map(v=>`<option value="${v}" ${(s.veiculo||'')==v?'selected':''}>${v||'—'}</option>`).join('')}
-        </select>
+        <select id="ed-vei">${getVeiculosOptions(s.veiculo || '')}</select>
       </div>
     </div>
 
@@ -5471,6 +5511,7 @@ function openEditSvc(id) {
   document.getElementById('modal').classList.add('open');
   renderTecnicos(tecnicosSelecionados, 'ed-tecnicos-container');
   carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s), 'ed-tecnicos-container'));
+  carregarVeiculos().then(() => renderVeiculosSelect('ed-vei', s.veiculo || ''));
   renderTiposCheckbox(tiposSelecionados, 'ed-tipos-container');
   bindTiposPreview('ed-tipos-preview', 'ed-tipos-container');
 }
@@ -5523,7 +5564,7 @@ async function salvarEdicaoSvc(id) {
   if(novoSt)    { candidato.status = novoSt; candidato.st = novoSt; }
   candidato.tecnicos_ids = tecnicos_ids;
   if(novaEq  !== undefined) { candidato.equipe = novaEq; }
-  if(novoVei)   { candidato.veiculo = novoVei; }
+  if(novoVei !== undefined) { candidato.veiculo = novoVei; }
   if(novoOS  !== undefined) { candidato.OS = novoOS; candidato.os = novoOS; }
   if(novoSc  !== undefined) { candidato.sc = novoSc || candidato.sc; }
   if(novaObs !== undefined) { candidato.observacoes = novaObs; candidato.obs = novaObs; }
@@ -7540,11 +7581,7 @@ function openNewSvc(initialData = {}){
     </div>
     <div class="form-row fr-2 mb3">
       <div class="field"><label>Veículo</label>
-        <select id="ns-vei">
-          <option value="">—</option>
-          <option>Palio</option><option>Gol</option><option>Uno</option>
-          <option>Saveiro</option><option>Fox</option><option>Moto</option><option>Outro</option>
-        </select>
+        <select id="ns-vei">${getVeiculosOptions()}</select>
       </div>
       <div class="field"><label>OS (Ordem de Serviço)</label><input type="text" id="ns-os" placeholder="Ex: 1659"></div>
     </div>
@@ -7558,6 +7595,7 @@ function openNewSvc(initialData = {}){
   document.getElementById('modal').classList.add('open');
   renderTecnicos([], 'ns-tecnicos-container');
   carregarTecnicos().then(() => renderTecnicos([], 'ns-tecnicos-container'));
+  carregarVeiculos().then(() => renderVeiculosSelect('ns-vei'));
   renderTiposCheckbox([], 'ns-tipos-container');
   bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
   renderNovoServicoClientesSelect(defaults.clientId);
@@ -8927,10 +8965,7 @@ function abrirEdicaoEquipe(id) {
     </div>
     <div class="form-row fr-2 mb3">
       <div class="field"><label>Veículo</label>
-        <select id="eq-edit-vei">
-          <option value="">—</option>
-          ${['Palio','Gol','Uno','Saveiro','Moto','Outro'].map(v=>`<option value="${v}" ${(s.veiculo||'')==v?'selected':''}>${v}</option>`).join('')}
-        </select>
+        <select id="eq-edit-vei">${getVeiculosOptions(s.veiculo || '')}</select>
       </div>
       <div class="field"><label>Status</label>
         <select id="eq-edit-st">
@@ -8955,6 +8990,7 @@ function abrirEdicaoEquipe(id) {
   document.getElementById('modal').classList.add('open');
   renderTecnicos(getServiceTecnicosIds(s), 'eq-tecnicos-container');
   carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s), 'eq-tecnicos-container'));
+  carregarVeiculos().then(() => renderVeiculosSelect('eq-edit-vei', s.veiculo || ''));
 }
 
 function salvarEdicaoEquipe(id) {
@@ -8974,7 +9010,7 @@ function salvarEdicaoEquipe(id) {
   const novaObs     = document.getElementById('eq-edit-obs')?.value.trim();
   s.tecnicos_ids = tecnicos_ids;
   if (novaEquipe  !== undefined) { s.equipe     = novaEquipe; }
-  if (novoVei)                   { s.veiculo    = novoVei; }
+  if (novoVei !== undefined)     { s.veiculo    = novoVei; }
   if (novoSt)                    { s.status     = novoSt; s.st = novoSt; }
   if (novoEnd !== undefined)     { s.endereco   = novoEnd; }
   if (novaObs !== undefined)     { s.observacoes = novaObs; s.obs = novaObs; }
@@ -9286,7 +9322,7 @@ async function carregarTecnicosConfig() {
         </div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>ID</th><th>Nome</th><th>Ativo</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(t => `<tr><td class="mono">${t.id}</td><td class="bold">${t.nome}</td><td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${t.id}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button> <button class="btn btn-ghost btn-sm" onclick="excluirTecnico(${t.id})">🗑</button></td></tr>`).join('')}</tbody>
+          <tbody>${items.map(t => `<tr><td class="mono">${sanitize(t.id)}</td><td class="bold">${sanitize(t.nome)}</td><td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</tbody>
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
@@ -9297,8 +9333,20 @@ async function salvarTecnico() {
   if (!nome) { toast('Preencha o nome do técnico', 'err'); return; }
   try { const { error } = await supabaseClient.from('technicians').insert([{ nome, ativo: true }]); if (error) throw error; toast('✅ Técnico salvo!', 'ok'); document.getElementById('form-novo-tecnico').style.display = 'none'; await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
 }
-async function toggleTecnico(id, ativo) { try { const { error } = await supabaseClient.from('technicians').update({ ativo }).eq('id', id); if (error) throw error; toast(ativo ? '✅ Técnico ativado' : '⚠️ Técnico desativado', 'ok'); await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
-async function excluirTecnico(id) { if (!confirmAction('Excluir este técnico?')) return; try { const { error } = await supabaseClient.from('technicians').delete().eq('id', id); if (error) throw error; toast('🗑 Técnico excluído', 'ok'); await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
+async function toggleTecnico(id, ativo) {
+  const msg = ativo ? 'Ativar este técnico?' : 'Desativar este técnico? Ele sairá das novas seleções, mas o histórico será mantido.';
+  if (!confirmAction(msg)) return;
+  try {
+    const { error } = await supabaseClient.from('technicians').update({ ativo }).eq('id', id);
+    if (error) throw error;
+    toast(ativo ? '✅ Técnico ativado' : '⚠️ Técnico desativado', 'ok');
+    await carregarTecnicosConfig();
+    await carregarTecnicos();
+  } catch(e) {
+    toast('❌ Erro: ' + e.message, 'err');
+  }
+}
+async function excluirTecnico(id) { await toggleTecnico(id, false); }
 
 async function carregarVeiculosConfig() {
   const container = document.getElementById('config-veiculos');
@@ -9325,7 +9373,7 @@ async function carregarVeiculosConfig() {
         </div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>ID</th><th>Nome</th><th>Placa</th><th>Ativo</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(v => `<tr><td class="mono">${v.id}</td><td class="bold">${v.nome}</td><td class="mono">${v.placa || '—'}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${v.id}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button> <button class="btn btn-ghost btn-sm" onclick="excluirVeiculo(${v.id})">🗑</button></td></tr>`).join('')}</tbody>
+          <tbody>${items.map(v => `<tr><td class="mono">${sanitize(v.id)}</td><td class="bold">${sanitize(v.nome)}</td><td class="mono">${sanitize(v.placa || '—')}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${jsArg(v.id)}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</tbody>
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
@@ -9335,10 +9383,22 @@ async function salvarVeiculo() {
   const nome = document.getElementById('cfg-vei-nome')?.value.trim();
   const placa = document.getElementById('cfg-vei-placa')?.value.trim();
   if (!nome) { toast('Preencha o nome do veículo', 'err'); return; }
-  try { const { error } = await supabaseClient.from('vehicles').insert([{ nome, placa, ativo: true }]); if (error) throw error; toast('✅ Veículo salvo!', 'ok'); document.getElementById('form-novo-veiculo').style.display = 'none'; await carregarVeiculosConfig(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
+  try { const { error } = await supabaseClient.from('vehicles').insert([{ nome, placa, ativo: true }]); if (error) throw error; toast('✅ Veículo salvo!', 'ok'); document.getElementById('form-novo-veiculo').style.display = 'none'; await carregarVeiculosConfig(); await carregarVeiculos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
 }
-async function toggleVeiculo(id, ativo) { try { const { error } = await supabaseClient.from('vehicles').update({ ativo }).eq('id', id); if (error) throw error; toast(ativo ? '✅ Veículo ativado' : '⚠️ Veículo desativado', 'ok'); await carregarVeiculosConfig(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
-async function excluirVeiculo(id) { if (!confirmAction('Excluir este veículo?')) return; try { const { error } = await supabaseClient.from('vehicles').delete().eq('id', id); if (error) throw error; toast('🗑 Veículo excluído', 'ok'); await carregarVeiculosConfig(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); } }
+async function toggleVeiculo(id, ativo) {
+  const msg = ativo ? 'Ativar este veículo?' : 'Desativar este veículo? Ele sairá das novas seleções, mas o histórico será mantido.';
+  if (!confirmAction(msg)) return;
+  try {
+    const { error } = await supabaseClient.from('vehicles').update({ ativo }).eq('id', id);
+    if (error) throw error;
+    toast(ativo ? '✅ Veículo ativado' : '⚠️ Veículo desativado', 'ok');
+    await carregarVeiculosConfig();
+    await carregarVeiculos();
+  } catch(e) {
+    toast('❌ Erro: ' + e.message, 'err');
+  }
+}
+async function excluirVeiculo(id) { await toggleVeiculo(id, false); }
 
 async function carregarTiposServicoConfig() {
   const container = document.getElementById('config-tipos');
