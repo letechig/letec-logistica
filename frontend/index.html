@@ -5417,6 +5417,7 @@ function openEditSvc(id) {
   const stKey = s.status || s.st || 'agendado';
   const tiposSelecionados = Array.isArray(s.tipos) && s.tipos.length ? s.tipos : extrairTiposServico(s);
   const tecnicosSelecionados = getServiceTecnicosIds(s);
+  const clienteIdSelecionado = s.cliente_id || s.clienteId || '';
   carregarCatalogosServico();
 
   document.getElementById('modal-title').textContent = `✏️ Editar Serviço #${s.id}`;
@@ -5442,8 +5443,17 @@ function openEditSvc(id) {
     <!-- Linha 2: Cliente -->
     <div class="form-row mb3">
       <div class="field">
+        <label>Cliente cadastrado</label>
+        <select id="ed-client-select" onchange="onServicoClienteSelect('ed')">
+          <option value="">Carregando clientes...</option>
+        </select>
+        <div id="ed-client-hint" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Selecione um cliente cadastrado para preencher o endereço automaticamente.</div>
+      </div>
+    </div>
+    <div class="form-row mb3">
+      <div class="field">
         <label>Cliente / Condomínio</label>
-        <input type="text" id="ed-cl" value="${sanitize(s.cliente||s.cl||'')}">
+        <input type="text" id="ed-cl" value="${sanitize(s.cliente||s.cl||'')}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" oninput="onServicoClienteManualInput('ed')">
       </div>
     </div>
 
@@ -5451,7 +5461,7 @@ function openEditSvc(id) {
     <div class="form-row mb3">
       <div class="field">
         <label>Endereço completo</label>
-        <input type="text" id="ed-end" value="${sanitize(s.endereco||'')}" placeholder="Rua, número, bairro, cidade">
+        <input type="text" id="ed-end" value="${sanitize(s.endereco||'')}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" placeholder="Rua, número, bairro, cidade">
       </div>
     </div>
 
@@ -5514,6 +5524,7 @@ function openEditSvc(id) {
   carregarVeiculos().then(() => renderVeiculosSelect('ed-vei', s.veiculo || ''));
   renderTiposCheckbox(tiposSelecionados, 'ed-tipos-container');
   bindTiposPreview('ed-tipos-preview', 'ed-tipos-container');
+  initServicoClienteSelect('ed', clienteIdSelecionado, s.cliente || s.cl || '');
 }
 
 async function salvarEdicaoSvc(id) {
@@ -5525,6 +5536,7 @@ async function salvarEdicaoSvc(id) {
   const novoHr    = document.getElementById('ed-hr')?.value;
   const novoCl    = document.getElementById('ed-cl')?.value.trim();
   const novoEnd   = document.getElementById('ed-end')?.value.trim();
+  const cliente_id = document.getElementById('ed-cl')?.dataset.clientId || document.getElementById('ed-end')?.dataset.clientId || document.getElementById('ed-client-select')?.value || '';
   const novoSt    = document.getElementById('ed-st')?.value;
   const tecnicos_ids = Array.from(
     document.querySelectorAll('#ed-tecnicos-container input:checked')
@@ -5554,6 +5566,7 @@ async function salvarEdicaoSvc(id) {
   }
   if(novoHr  !== undefined) { candidato.horario = novoHr; candidato.hr = novoHr; }
   if(novoCl)    { candidato.cliente = novoCl; candidato.cl = novoCl; }
+  candidato.cliente_id = cliente_id;
   if(novoEnd !== undefined) { candidato.endereco = novoEnd; }
   // Atualiza tipos[] + tipoServico (string combo para exibição e legado)
   if(tiposSel.length > 0) {
@@ -7148,8 +7161,15 @@ async function ensureClientesDataForService() {
   return Array.isArray(clientesData) ? clientesData : [];
 }
 
-function renderNovoServicoClientesSelect(selectedClientId = '') {
-  const select = document.getElementById('ns-client-select');
+function getClienteIdPorNomeServico(nome) {
+  const nomeNorm = normalizarNome(nome || '');
+  if (!nomeNorm) return '';
+  const match = (clientesData || []).find(c => normalizarNome(c.nome || '') === nomeNorm);
+  return match?.id ? String(match.id) : '';
+}
+
+function renderServicoClientesSelect(prefix = 'ns', selectedClientId = '') {
+  const select = document.getElementById(`${prefix}-client-select`);
   if (!select) return;
 
   const selectedId = String(selectedClientId || select.value || '');
@@ -7164,10 +7184,10 @@ function renderNovoServicoClientesSelect(selectedClientId = '') {
   }).join('');
 }
 
-function preencherNovoServicoPorCliente(cliente) {
-  const nomeInput = document.getElementById('ns-cl');
-  const enderecoInput = document.getElementById('ns-end');
-  const hint = document.getElementById('ns-client-hint');
+function preencherServicoPorCliente(prefix = 'ns', cliente) {
+  const nomeInput = document.getElementById(`${prefix}-cl`);
+  const enderecoInput = document.getElementById(`${prefix}-end`);
+  const hint = document.getElementById(`${prefix}-client-hint`);
   if (!cliente || !nomeInput || !enderecoInput) return;
 
   const endereco = buildServiceAddressFromClient(cliente);
@@ -7187,11 +7207,11 @@ function preencherNovoServicoPorCliente(cliente) {
   }
 }
 
-function onNovoServicoClienteSelect() {
-  const select = document.getElementById('ns-client-select');
-  const nomeInput = document.getElementById('ns-cl');
-  const enderecoInput = document.getElementById('ns-end');
-  const hint = document.getElementById('ns-client-hint');
+function onServicoClienteSelect(prefix = 'ns') {
+  const select = document.getElementById(`${prefix}-client-select`);
+  const nomeInput = document.getElementById(`${prefix}-cl`);
+  const enderecoInput = document.getElementById(`${prefix}-end`);
+  const hint = document.getElementById(`${prefix}-client-hint`);
   const clientId = String(select?.value || '');
 
   if (!clientId) {
@@ -7210,14 +7230,14 @@ function onNovoServicoClienteSelect() {
     return;
   }
 
-  preencherNovoServicoPorCliente(cliente);
+  preencherServicoPorCliente(prefix, cliente);
 }
 
-function onNovoServicoClienteManualInput() {
-  const select = document.getElementById('ns-client-select');
-  const nomeInput = document.getElementById('ns-cl');
-  const enderecoInput = document.getElementById('ns-end');
-  const hint = document.getElementById('ns-client-hint');
+function onServicoClienteManualInput(prefix = 'ns') {
+  const select = document.getElementById(`${prefix}-client-select`);
+  const nomeInput = document.getElementById(`${prefix}-cl`);
+  const enderecoInput = document.getElementById(`${prefix}-end`);
+  const hint = document.getElementById(`${prefix}-client-hint`);
   const selectedId = String(select?.value || '');
   if (!selectedId) return;
 
@@ -7232,6 +7252,25 @@ function onNovoServicoClienteManualInput() {
     hint.style.color = 'var(--text3)';
   }
 }
+
+function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentName = '') {
+  renderServicoClientesSelect(prefix, selectedClientId);
+  ensureClientesDataForService().then(() => {
+    const resolvedClientId = String(selectedClientId || getClienteIdPorNomeServico(currentName) || '');
+    renderServicoClientesSelect(prefix, resolvedClientId);
+    if (resolvedClientId) {
+      const select = document.getElementById(`${prefix}-client-select`);
+      if (select) select.value = resolvedClientId;
+      const nomeInput = document.getElementById(`${prefix}-cl`);
+      const enderecoInput = document.getElementById(`${prefix}-end`);
+      if (nomeInput) nomeInput.dataset.clientId = resolvedClientId;
+      if (enderecoInput) enderecoInput.dataset.clientId = resolvedClientId;
+    }
+  });
+}
+
+function onNovoServicoClienteSelect() { onServicoClienteSelect('ns'); }
+function onNovoServicoClienteManualInput() { onServicoClienteManualInput('ns'); }
 
 async function geocodeClientAddress() {
   const enderecoInput = document.getElementById('cli-form-end');
@@ -7598,14 +7637,7 @@ function openNewSvc(initialData = {}){
   carregarVeiculos().then(() => renderVeiculosSelect('ns-vei'));
   renderTiposCheckbox([], 'ns-tipos-container');
   bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
-  renderNovoServicoClientesSelect(defaults.clientId);
-  ensureClientesDataForService().then(() => {
-    renderNovoServicoClientesSelect(defaults.clientId);
-    if (defaults.clientId) {
-      const cliente = clientesData.find(c => String(c.id) === String(defaults.clientId));
-      if (cliente) preencherNovoServicoPorCliente(cliente);
-    }
-  });
+  initServicoClienteSelect('ns', defaults.clientId, defaults.cliente);
   if (defaults.focarData) {
     document.getElementById('ns-dt')?.focus();
   }
