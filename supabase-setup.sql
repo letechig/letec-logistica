@@ -142,9 +142,32 @@ CREATE TABLE IF NOT EXISTS services (
   status      TEXT DEFAULT 'agendado',
   is_repasse  BOOLEAN DEFAULT false,
   prioridade  TEXT,
+  exec_status TEXT DEFAULT 'agendado',
+  chegada_hora TIMESTAMP WITH TIME ZONE,
+  chegada_lat DOUBLE PRECISION,
+  chegada_lng DOUBLE PRECISION,
+  inicio_hora TIMESTAMP WITH TIME ZONE,
+  fim_hora TIMESTAMP WITH TIME ZONE,
+  tempo_espera INTEGER,
+  tempo_execucao INTEGER,
+  checklist_servico JSONB,
+  problema_descricao TEXT,
+  tecnicos_ids JSONB DEFAULT '[]'::jsonb,
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
+
+ALTER TABLE services ADD COLUMN IF NOT EXISTS exec_status TEXT DEFAULT 'agendado';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS chegada_hora TIMESTAMP WITH TIME ZONE;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS chegada_lat DOUBLE PRECISION;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS chegada_lng DOUBLE PRECISION;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS inicio_hora TIMESTAMP WITH TIME ZONE;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS fim_hora TIMESTAMP WITH TIME ZONE;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS tempo_espera INTEGER;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS tempo_execucao INTEGER;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS checklist_servico JSONB;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS problema_descricao TEXT;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS tecnicos_ids JSONB DEFAULT '[]'::jsonb;
 
 INSERT INTO services (id, date, data, cliente, endereco, horario, tiposervico, tipos, equipe, veiculo, status) VALUES
   (1640995200001, '2026-04-07', '2026-04-07', 'Cliente A - Empresa XYZ',       'Rua das Flores, 123 - Centro',                '08:00', 'Manutenção', '["Manutenção"]'::jsonb, 'Equipe 1', 'Veículo 1', 'agendado'),
@@ -155,7 +178,52 @@ INSERT INTO services (id, date, data, cliente, endereco, horario, tiposervico, t
   (1640995200006, '2026-04-06', '2026-04-06', 'Cliente F - Indústria ABC',     'Rodovia BR-101, Km 45 - Distrito Industrial', '11:00', 'Limpeza',    '["Limpeza"]'::jsonb,    'Equipe 1', 'Veículo 1', 'executado')
 ON CONFLICT (id) DO NOTHING;
 
--- ─── 4. customers (nova tabela) ─────────────────────────────────────
+-- ─── 4. checklists ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS checklists (
+  id BIGINT PRIMARY KEY,
+  date DATE,
+  motorista TEXT,
+  assistente TEXT,
+  cartao TEXT,
+  vei TEXT,
+  kms INTEGER,
+  kmc INTEGER,
+  kmd INTEGER,
+  hrs TEXT,
+  hrc TEXT,
+  fuel TEXT,
+  hasav BOOLEAN DEFAULT false,
+  avtxt TEXT,
+  obs TEXT,
+  equip JSONB DEFAULT '{}'::jsonb,
+  importado BOOLEAN DEFAULT false,
+  origem TEXT DEFAULT 'admin',
+  saida_lat DOUBLE PRECISION,
+  saida_lng DOUBLE PRECISION,
+  retorno_lat DOUBLE PRECISION,
+  retorno_lng DOUBLE PRECISION,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS cartao TEXT;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS equip JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS importado BOOLEAN DEFAULT false;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS origem TEXT DEFAULT 'admin';
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS saida_lat DOUBLE PRECISION;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS saida_lng DOUBLE PRECISION;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS retorno_lat DOUBLE PRECISION;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS retorno_lng DOUBLE PRECISION;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_services_exec_status ON services(exec_status);
+CREATE INDEX IF NOT EXISTS idx_services_tecnicos_ids ON services USING GIN(tecnicos_ids);
+CREATE INDEX IF NOT EXISTS idx_checklists_date ON checklists(date);
+CREATE INDEX IF NOT EXISTS idx_checklists_motorista ON checklists(LOWER(motorista));
+CREATE INDEX IF NOT EXISTS idx_checklists_origem ON checklists(origem);
+
+-- ─── 5. customers (nova tabela) ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS customers (
   id               SERIAL PRIMARY KEY,
@@ -235,4 +303,5 @@ SELECT 'service_types' AS table_name, COUNT(*) AS count FROM service_types
 UNION ALL SELECT 'technicians',  COUNT(*) FROM technicians
 UNION ALL SELECT 'vehicles',     COUNT(*) FROM vehicles
 UNION ALL SELECT 'services',     COUNT(*) FROM services
+UNION ALL SELECT 'checklists',   COUNT(*) FROM checklists
 UNION ALL SELECT 'customers',    COUNT(*) FROM customers;

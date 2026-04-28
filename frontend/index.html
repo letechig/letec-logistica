@@ -2272,6 +2272,17 @@ async function carregarVeiculos(){
       os:           s.OS          || s.os        || '',
       observacoes:  s.observacoes || s.obs       || '',
       status:       s.status      || s.st        || 'agendado',
+      tecnicos_ids: Array.isArray(s.tecnicos_ids) ? s.tecnicos_ids : [],
+      exec_status:  s.exec_status || 'agendado',
+      chegada_hora: s.chegada_hora || null,
+      chegada_lat:  s.chegada_lat  ?? null,
+      chegada_lng:  s.chegada_lng  ?? null,
+      inicio_hora:  s.inicio_hora  || null,
+      fim_hora:     s.fim_hora     || null,
+      tempo_espera: s.tempo_espera ?? null,
+      tempo_execucao: s.tempo_execucao ?? null,
+      checklist_servico: s.checklist_servico || null,
+      problema_descricao: s.problema_descricao || '',
     };
     if (!omitId && s.id !== undefined) {
       payload.id = s.id;
@@ -2715,6 +2726,7 @@ async function carregarVeiculos(){
       <div id="rot-actions" style="display:none;margin-bottom:16px;display:none" class="flex gap2">
         <button class="btn btn-green" onclick="rotWhatsAppTudo()">📱 Enviar tudo para WhatsApp</button>
         <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">📋 Copiar Tudo</button>
+        <button class="btn btn-ghost btn-sm" onclick="rotCopiarLinksPortais()">🔗 Copiar links dos portais</button>
       </div>
 
       <div id="rot-sugestao-wrap" style="display:none;margin-bottom:20px">
@@ -4878,6 +4890,16 @@ function migrarServicoSupabase(row, base = {}) {
     observacoes: obsValue,
     st: statusValue,
     status: statusValue,
+    exec_status: source.exec_status || 'agendado',
+    chegada_hora: source.chegada_hora || null,
+    chegada_lat: source.chegada_lat ?? null,
+    chegada_lng: source.chegada_lng ?? null,
+    inicio_hora: source.inicio_hora || null,
+    fim_hora: source.fim_hora || null,
+    tempo_espera: source.tempo_espera ?? null,
+    tempo_execucao: source.tempo_execucao ?? null,
+    checklist_servico: source.checklist_servico || null,
+    problema_descricao: source.problema_descricao || '',
   });
 }
 
@@ -9627,6 +9649,62 @@ ${idaVoltaTxt}${observacoesTxt}
 KM total estimado: ${rotKmFmt(eq.kmTotal)} km | Tempo deslocamento: ${Math.round(eq.tempoDeslocamentoMin || 0)} min`;
 }
 
+function rotPortalBaseUrl() {
+  const configuredBase = window.LETEC_PUBLIC_BASE_URL || localStorage.getItem('letec_public_base_url') || '';
+  const runtimeBase = window.location.protocol === 'file:' ? API_BASE_URL : window.location.origin;
+  const base = String(configuredBase || runtimeBase || API_BASE_URL || '').replace(/\/$/, '');
+  return `${base}/portal-tecnico.html`;
+}
+
+function rotPortalTecnicoNome(eq) {
+  const nome = String(eq?.equipe || '').replace(/^⚠\s*/, '').trim();
+  return nome || 'Tecnico';
+}
+
+function rotPortalDisponivel(eq) {
+  return !!eq && !String(eq.equipe || '').startsWith('⚠');
+}
+
+function rotMontarLinkPortal(eq, data) {
+  if (!rotPortalDisponivel(eq)) return '';
+  const params = new URLSearchParams();
+  params.set('tecnico', rotPortalTecnicoNome(eq));
+  params.set('data', data || document.getElementById('rot-data')?.value || new Date().toISOString().split('T')[0]);
+  if (eq.veiculo && eq.veiculo !== '—') params.set('veiculo', eq.veiculo);
+  params.set('equipe', rotPortalTecnicoNome(eq));
+  return `${rotPortalBaseUrl()}?${params.toString()}`;
+}
+
+function rotMontarTextoPortal(eq, data) {
+  if (!rotPortalDisponivel(eq)) return '';
+  const paradas = groupConsecutiveOperationalStops(eq.sequencia || []);
+  const portalLink = rotMontarLinkPortal(eq, data);
+  const linhas = paradas.map(parada => {
+    const base = sf(parada.servicoBase);
+    const tarefas = parada.items.map(item => {
+      const F = sf(item.servico);
+      const hr = item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined
+        ? formatarHoraDoDia(item.horarioAgendadoMin)
+        : (F.horario || '—');
+      const os = F.os && F.os !== '—' ? ` · OS ${F.os}` : '';
+      return `${hr} - ${F.tipo || F.tipoLabel || 'Serviço'}${os}`;
+    }).join(' / ');
+    return `${parada.ordem}. ${base.cliente} - ${tarefas}`;
+  }).join('\n');
+
+  return `Bom dia, ${rotPortalTecnicoNome(eq)}.
+
+Segue seu roteiro de ${rotFmtData(data)}.
+Veículo: ${eq.veiculo || '—'}
+Resumo: ${(eq.sequencia || []).length} serviço(s) · ${paradas.length} parada(s)
+
+Sequência resumida:
+${linhas || 'Sem serviços listados.'}
+
+Acesse o Portal do Técnico para registrar chegada, início, finalização e checklist:
+${portalLink}`;
+}
+
 // ─── Gerar Roteiro do sistema ────────────────
 async function rotGerarDoSistema() {
   const data = document.getElementById('rot-data')?.value;
@@ -9654,7 +9732,12 @@ async function rotGerarDoSistema() {
       const rota = rotas[idx];
       const veiculo = rotVeiculoPreferencial(grupo.svcs, grupo.veiculo);
       const enriched = { ...grupo, veiculo, ...rota };
-      return { ...enriched, whatsappText: rotMontarTextoWhatsApp(enriched, data) };
+      return {
+        ...enriched,
+        portalLink: rotMontarLinkPortal(enriched, data),
+        portalText: rotMontarTextoPortal(enriched, data),
+        whatsappText: rotMontarTextoWhatsApp(enriched, data)
+      };
     });
 
     // KPIs
@@ -9852,6 +9935,18 @@ function rotRenderizarLocal(equipes, data) {
 
       <!-- Texto gerado para WhatsApp -->
       <div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--bg2)">
+        ${rotPortalDisponivel(eq) ? `
+          <div style="margin-bottom:10px;padding:10px;border:1px solid rgba(37,99,235,.18);border-radius:var(--r2);background:var(--blue-bg)">
+            <div style="font-family:var(--display);font-size:12px;font-weight:800;color:var(--blue2);margin-bottom:3px">Portal do Técnico</div>
+            <div style="font-size:10px;color:var(--text2);line-height:1.5;margin-bottom:8px">Envie o resumo com link para o técnico registrar chegada, início, finalização e checklist pelo celular.</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button style="flex:1;min-width:130px;padding:8px;background:#25D366;color:white;border:none;border-radius:var(--r2);cursor:pointer;font-size:11px;font-weight:700" onclick="rotWhatsAppPortal(${gi})">📱 Enviar Portal</button>
+              <button style="flex:1;min-width:110px;padding:8px;background:white;color:var(--blue2);border:1px solid rgba(37,99,235,.25);border-radius:var(--r2);cursor:pointer;font-size:11px;font-weight:700" onclick="rotCopiarLinkPortal(${gi})">🔗 Copiar link</button>
+            </div>
+          </div>
+        ` : `
+          <div style="margin-bottom:10px;padding:10px;border:1px solid rgba(245,158,11,.28);border-radius:var(--r2);background:var(--orange-bg);font-size:11px;color:var(--orange);font-weight:700">Defina equipe antes de enviar portal.</div>
+        `}
         <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:6px">TEXTO PARA WHATSAPP:</div>
         <textarea id="${textoId}" readonly style="width:100%;font-family:var(--mono);font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:8px;resize:vertical;min-height:80px;color:var(--text2);line-height:1.5">${texto}</textarea>
         <div style="display:flex;gap:6px;margin-top:6px">
@@ -9878,6 +9973,29 @@ function rotWhatsApp(id) {
   window.open(url, '_blank');
 }
 
+function rotWhatsAppPortal(index) {
+  const eq = rotDados[index];
+  if (!eq || !rotPortalDisponivel(eq)) {
+    toast('Defina equipe antes de enviar portal', 'warn');
+    return;
+  }
+  const texto = eq.portalText || rotMontarTextoPortal(eq, document.getElementById('rot-data')?.value);
+  const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  window.open(url, '_blank');
+}
+
+function rotCopiarLinkPortal(index) {
+  const eq = rotDados[index];
+  if (!eq || !rotPortalDisponivel(eq)) {
+    toast('Defina equipe antes de copiar o link do portal', 'warn');
+    return;
+  }
+  const link = eq.portalLink || rotMontarLinkPortal(eq, document.getElementById('rot-data')?.value);
+  navigator.clipboard.writeText(link)
+    .then(() => toast('Link do portal copiado!', 'ok'))
+    .catch(() => toast('Erro ao copiar link do portal', 'err'));
+}
+
 function rotWhatsAppTudo() {
   if (!rotDados.length) { toast('Gere o roteiro primeiro', 'err'); return; }
   const txt = rotDados.map(eq => eq.whatsappText).join('\n\n');
@@ -9891,6 +10009,21 @@ function rotCopiarTudo() {
   navigator.clipboard.writeText(txt.trim())
     .then(() => toast(`✓ ${rotDados.length} roteiro(s) copiados!`, 'ok'))
     .catch(() => toast('Erro ao copiar', 'err'));
+}
+
+function rotCopiarLinksPortais() {
+  if (!rotDados.length) { toast('Gere o roteiro primeiro', 'err'); return; }
+  const data = document.getElementById('rot-data')?.value;
+  const linhas = rotDados
+    .filter(rotPortalDisponivel)
+    .map(eq => `${rotPortalTecnicoNome(eq)}: ${eq.portalLink || rotMontarLinkPortal(eq, data)}`);
+  if (!linhas.length) {
+    toast('Nenhuma equipe definida para gerar portal', 'warn');
+    return;
+  }
+  navigator.clipboard.writeText(linhas.join('\n'))
+    .then(() => toast(`${linhas.length} link(s) de portal copiados!`, 'ok'))
+    .catch(() => toast('Erro ao copiar links dos portais', 'err'));
 }
 
 function rotFmtData(dateStr) {

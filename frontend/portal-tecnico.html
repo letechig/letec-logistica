@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Portal do Tecnico - Letec Log</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --primary:#2563eb;
+      --primary-2:#1d4ed8;
+      --success:#16a34a;
+      --warning:#f59e0b;
+      --danger:#dc2626;
+      --muted:#64748b;
+      --text:#0f172a;
+      --text-2:#334155;
+      --border:#dbe4ef;
+      --surface:#ffffff;
+      --surface-2:#f8fafc;
+      --bg:#eef4fb;
+      --radius:16px;
+      --radius-sm:12px;
+      --shadow:0 18px 50px rgba(15,23,42,.12);
+      --shadow-sm:0 8px 24px rgba(15,23,42,.08);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing:border-box; }
+    html { min-height:100%; background:var(--bg); }
+    body {
+      margin:0;
+      min-height:100%;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.14), transparent 34rem),
+        linear-gradient(180deg,#f8fbff,#eef4fb 48%,#e8f0fa);
+    }
+    button, input, textarea { font:inherit; }
+    button { cursor:pointer; }
+    button:disabled { cursor:not-allowed; opacity:.62; }
+    :focus-visible { outline:3px solid rgba(37,99,235,.25); outline-offset:2px; }
+
+    .app {
+      width:min(100%, 760px);
+      margin:0 auto;
+      min-height:100vh;
+      padding:14px 14px 96px;
+    }
+
+    .hero {
+      position:sticky;
+      top:0;
+      z-index:20;
+      margin:-14px -14px 12px;
+      padding:18px 14px 14px;
+      background:rgba(248,251,255,.92);
+      backdrop-filter: blur(16px);
+      border-bottom:1px solid rgba(219,228,239,.9);
+    }
+    .brand-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .brand-kicker { font-size:12px; color:var(--muted); font-weight:700; letter-spacing:.02em; }
+    h1 { margin:3px 0 2px; font-size:24px; line-height:1.1; letter-spacing:0; }
+    .subtitle { margin:0; color:var(--muted); font-size:13px; line-height:1.4; }
+    .sync-pill {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      min-height:30px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      background:#fff;
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:700;
+      white-space:nowrap;
+    }
+    .sync-pill.offline { color:#92400e; background:#fffbeb; border-color:#fde68a; }
+    .sync-dot { width:8px; height:8px; border-radius:50%; background:var(--success); }
+    .sync-pill.offline .sync-dot { background:var(--warning); }
+
+    .profile-card {
+      margin-top:14px;
+      padding:14px;
+      border-radius:var(--radius);
+      background:linear-gradient(135deg,#fff,#f8fbff);
+      border:1px solid rgba(219,228,239,.95);
+      box-shadow:var(--shadow-sm);
+    }
+    .profile-main { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .tech-name { font-size:19px; font-weight:900; }
+    .date-text { margin-top:3px; color:var(--muted); font-size:13px; }
+    .vehicle-chip {
+      display:inline-flex;
+      align-items:center;
+      min-height:30px;
+      padding:0 10px;
+      border-radius:999px;
+      background:#eff6ff;
+      color:#1d4ed8;
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    .summary-grid {
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin-top:14px;
+    }
+    .metric {
+      padding:10px 8px;
+      border:1px solid var(--border);
+      border-radius:var(--radius-sm);
+      background:#fff;
+      text-align:center;
+    }
+    .metric strong { display:block; font-size:20px; line-height:1; }
+    .metric span { display:block; margin-top:4px; color:var(--muted); font-size:11px; font-weight:700; }
+    .metric.warn strong { color:var(--warning); }
+    .metric.ok strong { color:var(--success); }
+    .metric.blue strong { color:var(--primary); }
+
+    .quick-nav {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      margin-top:14px;
+    }
+    .quick-nav button, .bottom-nav button {
+      border:1px solid var(--border);
+      background:#fff;
+      color:var(--text-2);
+      border-radius:14px;
+      min-height:46px;
+      padding:8px 10px;
+      font-weight:800;
+      font-size:13px;
+      transition:background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+    }
+    .quick-nav button.active, .bottom-nav button.active {
+      background:#eff6ff;
+      border-color:rgba(37,99,235,.32);
+      color:var(--primary-2);
+    }
+    .quick-nav button:active, .bottom-nav button:active, .primary:active { transform:translateY(1px); }
+
+    .section { display:none; }
+    .section.active { display:block; }
+    .section-head { margin:18px 2px 10px; }
+    .section-title { font-size:18px; font-weight:900; }
+    .section-sub { margin-top:2px; color:var(--muted); font-size:13px; }
+
+    .service-list, .history-list { display:flex; flex-direction:column; gap:10px; }
+    .service-card, .form-panel, .history-card {
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      background:var(--surface);
+      box-shadow:var(--shadow-sm);
+    }
+    .service-card {
+      overflow:hidden;
+      border-left:5px solid #94a3b8;
+    }
+    .service-card.cheguei { border-left-color:var(--primary); }
+    .service-card.em_execucao { border-left-color:var(--warning); }
+    .service-card.finalizado { border-left-color:var(--success); }
+    .service-card.problema { border-left-color:var(--danger); }
+    .service-body { padding:14px; }
+    .service-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .time-badge {
+      display:inline-flex;
+      align-items:center;
+      min-height:30px;
+      padding:0 10px;
+      border-radius:999px;
+      background:#f1f5f9;
+      color:var(--text);
+      font-weight:900;
+      font-size:13px;
+      white-space:nowrap;
+    }
+    .status-badge {
+      display:inline-flex;
+      min-height:28px;
+      align-items:center;
+      padding:0 9px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:900;
+      color:#475569;
+      background:#f1f5f9;
+    }
+    .status-badge.cheguei { color:#1d4ed8; background:#dbeafe; }
+    .status-badge.em_execucao { color:#92400e; background:#fef3c7; }
+    .status-badge.finalizado { color:#166534; background:#dcfce7; }
+    .status-badge.problema { color:#991b1b; background:#fee2e2; }
+    .client { margin-top:10px; font-size:18px; font-weight:900; line-height:1.2; }
+    .meta { margin-top:7px; color:var(--muted); font-size:13px; line-height:1.35; }
+    .service-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+    .mini {
+      padding:8px 10px;
+      border-radius:12px;
+      background:#f8fafc;
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:700;
+      min-width:0;
+    }
+    .service-actions {
+      display:grid;
+      grid-template-columns:1fr;
+      gap:8px;
+      padding:0 14px 14px;
+    }
+    .primary, .secondary, .danger-soft {
+      border:0;
+      border-radius:14px;
+      min-height:50px;
+      padding:0 16px;
+      font-weight:900;
+      font-size:15px;
+      transition:filter .15s ease, transform .15s ease;
+    }
+    .primary { color:#fff; background:var(--primary); box-shadow:0 12px 24px rgba(37,99,235,.22); }
+    .primary:hover { filter:brightness(.98); }
+    .secondary { color:var(--text-2); background:#f1f5f9; border:1px solid var(--border); }
+    .danger-soft { color:#991b1b; background:#fee2e2; }
+
+    .form-panel { padding:14px; margin-bottom:12px; }
+    .step-title { font-size:15px; font-weight:900; margin-bottom:3px; }
+    .step-sub { color:var(--muted); font-size:12px; margin-bottom:12px; }
+    .field { margin-bottom:12px; }
+    .field label { display:block; color:var(--text-2); font-weight:800; font-size:12px; margin-bottom:6px; }
+    .field input, .field textarea {
+      width:100%;
+      min-height:48px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:10px 12px;
+      background:#fff;
+      color:var(--text);
+      font-size:16px;
+    }
+    .field textarea { min-height:92px; resize:vertical; }
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+    .choice-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    .choice {
+      min-height:58px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#fff;
+      color:var(--text-2);
+      font-weight:900;
+      padding:8px;
+    }
+    .choice.selected {
+      color:var(--primary-2);
+      border-color:rgba(37,99,235,.4);
+      background:#eff6ff;
+      box-shadow:inset 0 0 0 1px rgba(37,99,235,.12);
+    }
+    .fuel-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    .equip-list { display:flex; flex-direction:column; gap:8px; }
+    .equip-item {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#fff;
+      font-weight:800;
+    }
+    .equip-item input { width:22px; height:22px; }
+    .button-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .button-row .secondary { min-height:42px; font-size:13px; padding:0 12px; }
+
+    .empty {
+      padding:22px 14px;
+      border:1px dashed #cbd5e1;
+      border-radius:var(--radius);
+      background:rgba(255,255,255,.7);
+      color:var(--muted);
+      text-align:center;
+      font-weight:700;
+    }
+    .history-card { padding:13px; }
+    .history-card strong { display:block; margin-bottom:4px; }
+
+    .bottom-nav {
+      position:fixed;
+      left:50%;
+      bottom:12px;
+      transform:translateX(-50%);
+      width:min(calc(100% - 24px), 720px);
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      padding:8px;
+      border:1px solid rgba(219,228,239,.95);
+      border-radius:20px;
+      background:rgba(255,255,255,.94);
+      box-shadow:var(--shadow);
+      backdrop-filter: blur(18px);
+      z-index:30;
+    }
+
+    .modal-bg {
+      position:fixed;
+      inset:0;
+      z-index:60;
+      display:none;
+      align-items:flex-end;
+      justify-content:center;
+      padding:14px;
+      background:rgba(15,23,42,.42);
+    }
+    .modal-bg.open { display:flex; }
+    .modal {
+      width:min(100%, 620px);
+      max-height:88vh;
+      display:flex;
+      flex-direction:column;
+      border-radius:22px;
+      overflow:hidden;
+      background:#fff;
+      box-shadow:var(--shadow);
+    }
+    .modal-head { padding:16px; border-bottom:1px solid var(--border); }
+    .modal-title { font-size:18px; font-weight:900; }
+    .modal-sub { margin-top:3px; color:var(--muted); font-size:13px; }
+    .modal-body { padding:14px; overflow:auto; }
+    .modal-foot { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:14px; border-top:1px solid var(--border); }
+
+    .toast-wrap {
+      position:fixed;
+      left:12px;
+      right:12px;
+      top:12px;
+      z-index:80;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      pointer-events:none;
+    }
+    .toast {
+      align-self:center;
+      width:min(100%, 560px);
+      padding:12px 14px;
+      border-radius:14px;
+      background:#0f172a;
+      color:#fff;
+      box-shadow:var(--shadow-sm);
+      font-weight:800;
+      font-size:13px;
+    }
+    .toast.ok { background:#166534; }
+    .toast.warn { background:#92400e; }
+    .toast.err { background:#991b1b; }
+
+    .loading {
+      padding:28px 14px;
+      color:var(--muted);
+      text-align:center;
+      font-weight:800;
+    }
+
+    @media (min-width:720px) {
+      .app { padding-top:24px; }
+      .hero { border:1px solid rgba(219,228,239,.95); border-radius:24px; margin:0 0 14px; top:12px; }
+      .modal-bg { align-items:center; }
+      .service-actions { grid-template-columns:auto 1fr; }
+    }
+
+    @media (max-width:430px) {
+      .summary-grid { grid-template-columns:repeat(2,1fr); }
+      .quick-nav { grid-template-columns:1fr; }
+      .service-grid, .two-col { grid-template-columns:1fr; }
+      .fuel-grid { grid-template-columns:1fr; }
+      .modal-foot { grid-template-columns:1fr; }
+      h1 { font-size:22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toast-wrap" id="toasts"></div>
+
+  <main class="app">
+    <header class="hero">
+      <div class="brand-row">
+        <div>
+          <div class="brand-kicker">Letec Log</div>
+          <h1>Portal do Tecnico</h1>
+          <p class="subtitle">Servicos, execucao e checklist do dia.</p>
+        </div>
+        <div class="sync-pill" id="sync-pill"><span class="sync-dot"></span><span id="sync-text">Online</span></div>
+      </div>
+
+      <div class="profile-card">
+        <div class="profile-main">
+          <div>
+            <div class="tech-name" id="tech-name">Tecnico</div>
+            <div class="date-text" id="date-text">Hoje</div>
+          </div>
+          <span class="vehicle-chip" id="vehicle-chip">Veiculo</span>
+        </div>
+        <div class="summary-grid">
+          <div class="metric blue"><strong id="m-agendados">0</strong><span>Agendados</span></div>
+          <div class="metric warn"><strong id="m-execucao">0</strong><span>Em execucao</span></div>
+          <div class="metric ok"><strong id="m-finalizados">0</strong><span>Finalizados</span></div>
+          <div class="metric"><strong id="m-pendentes">0</strong><span>Pendentes</span></div>
+        </div>
+        <nav class="quick-nav" aria-label="Atalhos do portal">
+          <button id="tab-servicos" class="active" onclick="showSection('servicos')">Meus servicos</button>
+          <button id="tab-checklist" onclick="showSection('checklist')">Checklist diario</button>
+          <button id="tab-historico" onclick="showSection('historico')">Historico do dia</button>
+        </nav>
+      </div>
+    </header>
+
+    <section class="section active" id="section-servicos">
+      <div class="section-head">
+        <div class="section-title">Meus servicos</div>
+        <div class="section-sub">Use os botoes grandes para registrar cada etapa do atendimento.</div>
+      </div>
+      <div id="services-list" class="service-list"><div class="loading">Carregando servicos...</div></div>
+    </section>
+
+    <section class="section" id="section-checklist">
+      <div class="section-head">
+        <div class="section-title">Meu Checklist Diario</div>
+        <div class="section-sub">Registre saida, retorno, veiculo e equipamentos.</div>
+      </div>
+
+      <form id="daily-form" onsubmit="event.preventDefault(); saveDailyChecklist();">
+        <div class="form-panel">
+          <div class="step-title">1. Equipe</div>
+          <div class="step-sub">Dados principais do dia.</div>
+          <div class="two-col">
+            <div class="field"><label for="cl-data">Data</label><input id="cl-data" type="date" required></div>
+            <div class="field"><label for="cl-motorista">Motorista</label><input id="cl-motorista" type="text" required placeholder="Nome do motorista"></div>
+          </div>
+          <div class="two-col">
+            <div class="field"><label for="cl-assistente">Assistente</label><input id="cl-assistente" type="text" placeholder="Nome do assistente"></div>
+            <div class="field"><label for="cl-cartao">Cartao combustivel</label><input id="cl-cartao" type="text" placeholder="Numero do cartao"></div>
+          </div>
+        </div>
+
+        <div class="form-panel">
+          <div class="step-title">2. Veiculo</div>
+          <div class="step-sub">Selecione o veiculo usado pela equipe.</div>
+          <div class="choice-grid" id="vehicle-grid"></div>
+          <input id="cl-veiculo" type="hidden" required>
+        </div>
+
+        <div class="form-panel">
+          <div class="step-title">3. Saida</div>
+          <div class="step-sub">KM, horario e combustivel na saida.</div>
+          <div class="two-col">
+            <div class="field"><label for="cl-kms">KM saida</label><input id="cl-kms" type="number" inputmode="numeric" placeholder="Ex: 45320"></div>
+            <div class="field"><label for="cl-hs">Hora saida</label><input id="cl-hs" type="time"></div>
+          </div>
+          <button class="secondary" type="button" onclick="registerDailyMoment('saida')">Registrar saida agora</button>
+          <div class="field" style="margin-top:12px;margin-bottom:0">
+            <label>Combustivel saida</label>
+            <div class="fuel-grid" id="fuel-grid"></div>
+            <input id="cl-fuel" type="hidden">
+          </div>
+        </div>
+
+        <div class="form-panel">
+          <div class="step-title">4. Retorno</div>
+          <div class="step-sub">KM, horario e condicoes do veiculo no retorno.</div>
+          <div class="two-col">
+            <div class="field"><label for="cl-kmc">KM chegada</label><input id="cl-kmc" type="number" inputmode="numeric" placeholder="Ex: 45518"></div>
+            <div class="field"><label for="cl-hc">Hora chegada</label><input id="cl-hc" type="time"></div>
+          </div>
+          <button class="secondary" type="button" onclick="registerDailyMoment('retorno')">Registrar retorno agora</button>
+          <label class="equip-item" style="margin-top:12px">
+            <input id="cl-avaria" type="checkbox" onchange="toggleAvaria()">
+            <span>Registrar avaria?</span>
+          </label>
+          <div class="field" id="avaria-field" style="display:none;margin-top:12px;margin-bottom:0">
+            <label for="cl-avaria-txt">Descreva a avaria</label>
+            <textarea id="cl-avaria-txt" placeholder="Ex: riscado na porta direita"></textarea>
+          </div>
+        </div>
+
+        <div class="form-panel">
+          <div class="step-title">5. Equipamentos</div>
+          <div class="step-sub">Toque na linha para marcar os itens conferidos.</div>
+          <div class="equip-list" id="equip-list"></div>
+          <div class="button-row">
+            <button class="secondary" type="button" onclick="setAllEquipment(true)">Tudo conferido</button>
+            <button class="secondary" type="button" onclick="setAllEquipment(true)">Marcar todos</button>
+            <button class="secondary" type="button" onclick="setAllEquipment(false)">Desmarcar todos</button>
+          </div>
+        </div>
+
+        <div class="form-panel">
+          <div class="step-title">6. Observacoes e finalizar</div>
+          <div class="step-sub">Informe ocorrencias gerais do dia.</div>
+          <div class="choice-grid" style="margin-bottom:12px">
+            <button class="choice selected" type="button" data-final="ok" onclick="selectFinalState('ok')">Tudo OK</button>
+            <button class="choice" type="button" data-final="problema" onclick="selectFinalState('problema')">Houve problema</button>
+          </div>
+          <div class="field">
+            <label for="cl-obs">Observacoes gerais</label>
+            <textarea id="cl-obs" placeholder="Ocorrencias, problemas ou observacoes do dia"></textarea>
+          </div>
+          <button class="primary" id="save-checklist-btn" type="submit" style="width:100%">Salvar checklist</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="section" id="section-historico">
+      <div class="section-head">
+        <div class="section-title">Historico do dia</div>
+        <div class="section-sub">Resumo das acoes registradas neste aparelho e no Supabase.</div>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegacao principal">
+    <button class="active" data-bottom="servicos" onclick="showSection('servicos')">Servicos</button>
+    <button data-bottom="checklist" onclick="showSection('checklist')">Checklist</button>
+    <button data-bottom="historico" onclick="showSection('historico')">Historico</button>
+  </nav>
+
+  <div class="modal-bg" id="finish-modal" onclick="if(event.target===event.currentTarget)closeFinishModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-title">Finalizar servico</div>
+        <div class="modal-sub" id="finish-service-title">Checklist rapido antes de concluir.</div>
+      </div>
+      <div class="modal-body">
+        <div class="choice-grid" style="margin-bottom:12px">
+          <button class="choice selected" type="button" data-finish="ok" onclick="selectFinishState('ok')">Tudo OK</button>
+          <button class="choice" type="button" data-finish="problema" onclick="selectFinishState('problema')">Houve problema</button>
+        </div>
+        <div class="equip-list" id="service-checklist">
+          <label class="equip-item"><input type="checkbox" checked data-item="Servico executado corretamente"><span>Servico executado corretamente</span></label>
+          <label class="equip-item"><input type="checkbox" checked data-item="Local inspecionado"><span>Local inspecionado</span></label>
+          <label class="equip-item"><input type="checkbox" checked data-item="Cliente orientado"><span>Cliente orientado</span></label>
+          <label class="equip-item"><input type="checkbox" checked data-item="Sem pendencias"><span>Sem pendencias</span></label>
+        </div>
+        <div class="field" id="service-problem-field" style="display:none;margin-top:12px;margin-bottom:0">
+          <label for="service-problem-text">Descreva o problema encontrado</label>
+          <textarea id="service-problem-text" placeholder="Explique o que impediu ou afetou a execucao"></textarea>
+        </div>
+        <div class="meta" style="margin-top:12px">Estrutura preparada para fotos e assinatura em versoes futuras.</div>
+      </div>
+      <div class="modal-foot">
+        <button class="secondary" type="button" onclick="closeFinishModal()">Cancelar</button>
+        <button class="primary" id="confirm-finish-btn" type="button" onclick="confirmFinishService()">Finalizar servico</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const params = new URLSearchParams(window.location.search);
+    const portal = {
+      tecnico: params.get('tecnico') || params.get('motorista') || 'Tecnico',
+      data: params.get('data') || new Date().toISOString().slice(0, 10),
+      veiculo: params.get('veiculo') || '',
+      equipe: params.get('equipe') || '',
+    };
+
+    const QUEUE_KEY = 'letec_portal_tecnico_queue';
+    const HISTORY_KEY = 'letec_portal_tecnico_history';
+    const EQUIPAMENTOS = ['EPIs', 'Pulverizador', 'Iscas', 'Produtos', 'Ferramentas', 'Prancheta', 'Celular carregado', 'Documentos'];
+    const FUEL = ['Cheio', '3/4', 'Metade', '1/4', 'Reserva'];
+
+    let state = {
+      services: [],
+      technicians: [],
+      vehicles: [],
+      checklists: [],
+      activeSection: 'servicos',
+      finalDailyState: 'ok',
+      finishState: 'ok',
+      finishServiceId: null,
+      gps: { saida:null, retorno:null },
+      matchedTech: null,
+      loading: false,
+    };
+
+    function normalizeText(value) {
+      return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function toast(message, type = '') {
+      const wrap = document.getElementById('toasts');
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = message;
+      wrap.appendChild(el);
+      setTimeout(() => el.remove(), 3600);
+    }
+
+    function setSyncState() {
+      const pill = document.getElementById('sync-pill');
+      const text = document.getElementById('sync-text');
+      const offline = !navigator.onLine;
+      pill.classList.toggle('offline', offline);
+      text.textContent = offline ? 'Offline' : 'Online';
+    }
+
+    function formatDateLabel(dateStr) {
+      const d = new Date(`${dateStr}T12:00:00`);
+      return d.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+    }
+
+    function nowIso() { return new Date().toISOString(); }
+    function nowTime() { return new Date().toTimeString().slice(0,5); }
+
+    function minutesBetween(startIso, endIso) {
+      if (!startIso || !endIso) return null;
+      const diff = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);
+      return Number.isFinite(diff) && diff >= 0 ? diff : null;
+    }
+
+    function loadQueue() {
+      try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e) { return []; }
+    }
+
+    function saveQueue(queue) {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    }
+
+    function addQueue(item) {
+      const queue = loadQueue();
+      queue.push({ ...item, queued_at: nowIso() });
+      saveQueue(queue);
+      addHistory(item.type === 'checklist-insert' ? 'Checklist salvo localmente para sincronizar.' : 'Acao do servico salva localmente para sincronizar.');
+    }
+
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; }
+    }
+
+    function addHistory(text) {
+      const all = loadHistory();
+      all.unshift({ id: Date.now(), date: portal.data, tecnico: portal.tecnico, text, at: nowIso() });
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, 80)));
+      renderHistory();
+    }
+
+    async function processQueue() {
+      if (!navigator.onLine) return;
+      const queue = loadQueue();
+      if (!queue.length) return;
+      const remaining = [];
+      for (const item of queue) {
+        try {
+          if (item.type === 'service-update') {
+            const { error } = await supabaseClient.from('services').update(item.payload).eq('id', item.id);
+            if (error) throw error;
+          } else if (item.type === 'checklist-insert') {
+            const { error } = await supabaseClient.from('checklists').insert([item.record]);
+            if (error) throw error;
+          }
+        } catch(e) {
+          remaining.push(item);
+        }
+      }
+      saveQueue(remaining);
+      if (remaining.length !== queue.length) {
+        toast('Pendencias sincronizadas.', 'ok');
+        await loadData();
+      }
+    }
+
+    async function getGps() {
+      if (!navigator.geolocation) return null;
+      return new Promise(resolve => {
+        navigator.geolocation.getCurrentPosition(
+          pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => resolve(null),
+          { enableHighAccuracy:true, timeout:8000, maximumAge:60000 }
+        );
+      });
+    }
+
+    function serviceDate(s) {
+      return s.date || s.data || s.dt || '';
+    }
+
+    function serviceTypes(s) {
+      if (Array.isArray(s.tipos) && s.tipos.length) return s.tipos.join(', ');
+      return s.tiposervico || s.tipoServico || s.sc || 'Servico';
+    }
+
+    function execStatus(s) {
+      if (s.exec_status) return s.exec_status;
+      const st = String(s.status || '').toLowerCase();
+      if (st === 'executado') return 'finalizado';
+      return 'agendado';
+    }
+
+    function statusLabel(status) {
+      return {
+        agendado:'Agendado',
+        cheguei:'Cheguei',
+        em_execucao:'Em execucao',
+        finalizado:'Finalizado',
+        problema:'Problema'
+      }[status] || 'Agendado';
+    }
+
+    function matchTechnician() {
+      const wanted = normalizeText(portal.tecnico);
+      state.matchedTech = state.technicians.find(t => normalizeText(t.nome).includes(wanted) || wanted.includes(normalizeText(t.nome))) || null;
+    }
+
+    function serviceMatchesPortal(s) {
+      if (serviceDate(s) !== portal.data) return false;
+      const ids = Array.isArray(s.tecnicos_ids) ? s.tecnicos_ids.map(String) : [];
+      if (state.matchedTech && ids.includes(String(state.matchedTech.id))) return true;
+      const hay = normalizeText(`${s.equipe || ''} ${s.eq || ''}`);
+      const tech = normalizeText(portal.tecnico);
+      const equipe = normalizeText(portal.equipe);
+      if (tech && hay.includes(tech)) return true;
+      if (equipe && hay.includes(equipe)) return true;
+      return !tech && !equipe;
+    }
+
+    async function loadData() {
+      setSyncState();
+      try {
+        const [tecRes, veiRes, svcRes, clRes] = await Promise.all([
+          supabaseClient.from('technicians').select('*').order('nome'),
+          supabaseClient.from('vehicles').select('*').order('nome'),
+          supabaseClient.from('services').select('*').or(`date.eq.${portal.data},data.eq.${portal.data}`).order('horario', { ascending:true }),
+          supabaseClient.from('checklists').select('*').eq('date', portal.data).order('created_at', { ascending:false })
+        ]);
+        if (tecRes.error) throw tecRes.error;
+        if (veiRes.error) throw veiRes.error;
+        if (svcRes.error) throw svcRes.error;
+        if (clRes.error) throw clRes.error;
+        state.technicians = tecRes.data || [];
+        state.vehicles = (veiRes.data || []).filter(v => v.ativo !== false);
+        state.checklists = clRes.data || [];
+        matchTechnician();
+        state.services = (svcRes.data || []).filter(serviceMatchesPortal);
+        renderAll();
+      } catch(e) {
+        console.error(e);
+        toast('Nao foi possivel carregar tudo agora. Use offline se necessario.', 'warn');
+        renderAll();
+      }
+    }
+
+    function renderAll() {
+      document.getElementById('tech-name').textContent = portal.tecnico;
+      document.getElementById('date-text').textContent = formatDateLabel(portal.data);
+      document.getElementById('vehicle-chip').textContent = portal.veiculo || 'Sem veiculo';
+      renderSummary();
+      renderServices();
+      renderVehicles();
+      renderFuel();
+      renderEquipment();
+      renderChecklistDefaults();
+      renderHistory();
+    }
+
+    function renderSummary() {
+      const total = state.services.length;
+      const emExec = state.services.filter(s => ['cheguei','em_execucao'].includes(execStatus(s))).length;
+      const finalizados = state.services.filter(s => execStatus(s) === 'finalizado').length;
+      const pendentes = state.services.filter(s => !['finalizado','problema'].includes(execStatus(s))).length;
+      document.getElementById('m-agendados').textContent = total;
+      document.getElementById('m-execucao').textContent = emExec;
+      document.getElementById('m-finalizados').textContent = finalizados;
+      document.getElementById('m-pendentes').textContent = pendentes;
+    }
+
+    function renderServices() {
+      const list = document.getElementById('services-list');
+      if (!state.services.length) {
+        list.innerHTML = '<div class="empty">Nenhum servico encontrado para este tecnico nesta data.</div>';
+        return;
+      }
+      list.innerHTML = state.services.map(s => {
+        const status = execStatus(s);
+        const os = s.os || s.OS || '';
+        return `
+          <article class="service-card ${status}">
+            <div class="service-body">
+              <div class="service-top">
+                <span class="time-badge">${s.horario || s.hr || '--:--'}</span>
+                <span class="status-badge ${status}">${statusLabel(status)}</span>
+              </div>
+              <div class="client">${escapeHtml(s.cliente || s.cl || 'Cliente')}</div>
+              <div class="meta">${escapeHtml(s.endereco || 'Endereco nao informado')}</div>
+              <div class="service-grid">
+                <div class="mini">Tipo: ${escapeHtml(serviceTypes(s))}</div>
+                <div class="mini">OS: ${escapeHtml(os || '-')}</div>
+                <div class="mini">Equipe: ${escapeHtml(s.equipe || '-')}</div>
+                <div class="mini">Veiculo: ${escapeHtml(s.veiculo || '-')}</div>
+              </div>
+            </div>
+            <div class="service-actions">${renderServiceAction(s, status)}</div>
+          </article>`;
+      }).join('');
+    }
+
+    function renderServiceAction(s, status) {
+      const id = escapeHtml(String(s.id));
+      if (status === 'agendado') return `<button class="primary" onclick="markArrived('${id}')">Cheguei no local</button>`;
+      if (status === 'cheguei') return `<button class="primary" onclick="startService('${id}')">Iniciar servico</button>`;
+      if (status === 'em_execucao') return `<button class="primary" onclick="openFinishModal('${id}')">Finalizar servico</button>`;
+      if (status === 'problema') return '<button class="danger-soft" disabled>Problema registrado</button>';
+      return '<button class="secondary" disabled>Finalizado</button>';
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+
+    function updateLocalService(id, patch) {
+      state.services = state.services.map(s => String(s.id) === String(id) ? { ...s, ...patch } : s);
+      renderSummary();
+      renderServices();
+      renderHistory();
+    }
+
+    async function persistService(id, payload, successMessage) {
+      try {
+        const { error } = await supabaseClient.from('services').update(payload).eq('id', id);
+        if (error) throw error;
+        toast(successMessage, 'ok');
+      } catch(e) {
+        console.error(e);
+        addQueue({ type:'service-update', id, payload });
+        toast('Sem sincronizar agora. Foi salvo neste celular.', 'warn');
+      }
+    }
+
+    async function markArrived(id) {
+      const gps = await getGps();
+      const payload = {
+        exec_status:'cheguei',
+        chegada_hora:nowIso(),
+        chegada_lat:gps ? gps.lat : null,
+        chegada_lng:gps ? gps.lng : null,
+      };
+      updateLocalService(id, payload);
+      await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
+      addHistory('Chegada registrada no servico.');
+    }
+
+    async function startService(id) {
+      const s = state.services.find(item => String(item.id) === String(id));
+      const inicio = nowIso();
+      const payload = {
+        exec_status:'em_execucao',
+        inicio_hora:inicio,
+        tempo_espera:minutesBetween(s?.chegada_hora, inicio),
+      };
+      updateLocalService(id, payload);
+      await persistService(id, payload, 'Servico iniciado.');
+      addHistory('Inicio de servico registrado.');
+    }
+
+    function openFinishModal(id) {
+      const s = state.services.find(item => String(item.id) === String(id));
+      state.finishServiceId = id;
+      state.finishState = 'ok';
+      document.getElementById('finish-service-title').textContent = s ? `${s.cliente || 'Servico'} - ${s.horario || ''}` : 'Checklist rapido antes de concluir.';
+      document.querySelectorAll('[data-finish]').forEach(btn => btn.classList.toggle('selected', btn.dataset.finish === 'ok'));
+      document.getElementById('service-problem-field').style.display = 'none';
+      document.getElementById('service-problem-text').value = '';
+      document.querySelectorAll('#service-checklist input').forEach(cb => cb.checked = true);
+      document.getElementById('finish-modal').classList.add('open');
+    }
+
+    function closeFinishModal() {
+      document.getElementById('finish-modal').classList.remove('open');
+      state.finishServiceId = null;
+    }
+
+    function selectFinishState(value) {
+      state.finishState = value;
+      document.querySelectorAll('[data-finish]').forEach(btn => btn.classList.toggle('selected', btn.dataset.finish === value));
+      document.getElementById('service-problem-field').style.display = value === 'problema' ? 'block' : 'none';
+    }
+
+    async function confirmFinishService() {
+      const id = state.finishServiceId;
+      if (!id) return;
+      const problemText = document.getElementById('service-problem-text').value.trim();
+      if (state.finishState === 'problema' && !problemText) {
+        toast('Descreva o problema encontrado.', 'err');
+        return;
+      }
+      const s = state.services.find(item => String(item.id) === String(id));
+      const fim = nowIso();
+      const checked = Array.from(document.querySelectorAll('#service-checklist input')).map(cb => ({
+        item: cb.dataset.item,
+        ok: cb.checked
+      }));
+      const payload = {
+        exec_status: state.finishState === 'problema' ? 'problema' : 'finalizado',
+        fim_hora: fim,
+        tempo_execucao: minutesBetween(s?.inicio_hora, fim),
+        checklist_servico: { resultado: state.finishState, itens: checked, futuras_opcoes: ['fotos', 'assinatura_cliente'] },
+        problema_descricao: problemText,
+      };
+      if (state.finishState === 'ok') payload.status = 'executado';
+      updateLocalService(id, payload);
+      closeFinishModal();
+      await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
+      addHistory(state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado no servico.');
+    }
+
+    function showSection(section) {
+      state.activeSection = section;
+      document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+      document.getElementById(`section-${section}`).classList.add('active');
+      document.querySelectorAll('.quick-nav button').forEach(btn => btn.classList.toggle('active', btn.id === `tab-${section}`));
+      document.querySelectorAll('.bottom-nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.bottom === section));
+    }
+
+    function renderVehicles() {
+      const items = state.vehicles.length ? state.vehicles.map(v => v.nome) : ['Palio','Gol','Uno','Saveiro','Fox','Moto','Outro'];
+      const grid = document.getElementById('vehicle-grid');
+      grid.innerHTML = items.map(name => `<button class="choice ${name === portal.veiculo ? 'selected' : ''}" type="button" data-vehicle="${escapeHtml(name)}" onclick="selectVehicle('${escapeHtml(name)}')">${escapeHtml(name)}</button>`).join('');
+      if (portal.veiculo) document.getElementById('cl-veiculo').value = portal.veiculo;
+    }
+
+    function selectVehicle(name) {
+      document.getElementById('cl-veiculo').value = name;
+      document.querySelectorAll('[data-vehicle]').forEach(btn => btn.classList.toggle('selected', btn.dataset.vehicle === name));
+    }
+
+    function renderFuel() {
+      const grid = document.getElementById('fuel-grid');
+      grid.innerHTML = FUEL.map(name => `<button class="choice" type="button" data-fuel="${name}" onclick="selectFuel('${name}')">${name}</button>`).join('');
+    }
+
+    function selectFuel(name) {
+      document.getElementById('cl-fuel').value = name;
+      document.querySelectorAll('[data-fuel]').forEach(btn => btn.classList.toggle('selected', btn.dataset.fuel === name));
+    }
+
+    function renderEquipment() {
+      const list = document.getElementById('equip-list');
+      list.innerHTML = EQUIPAMENTOS.map(item => `
+        <label class="equip-item">
+          <input type="checkbox" data-equip="${escapeHtml(item)}">
+          <span>${escapeHtml(item)}</span>
+        </label>
+      `).join('');
+    }
+
+    function renderChecklistDefaults() {
+      document.getElementById('cl-data').value = portal.data;
+      document.getElementById('cl-motorista').value = portal.tecnico === 'Tecnico' ? '' : portal.tecnico;
+      if (portal.veiculo) selectVehicle(portal.veiculo);
+    }
+
+    function selectFinalState(value) {
+      state.finalDailyState = value;
+      document.querySelectorAll('[data-final]').forEach(btn => btn.classList.toggle('selected', btn.dataset.final === value));
+    }
+
+    async function registerDailyMoment(type) {
+      const gps = await getGps();
+      if (type === 'saida') {
+        document.getElementById('cl-hs').value = nowTime();
+        state.gps.saida = gps;
+        toast(gps ? 'Saida registrada com GPS.' : 'Saida registrada sem GPS.', gps ? 'ok' : 'warn');
+      } else {
+        document.getElementById('cl-hc').value = nowTime();
+        state.gps.retorno = gps;
+        toast(gps ? 'Retorno registrado com GPS.' : 'Retorno registrado sem GPS.', gps ? 'ok' : 'warn');
+      }
+    }
+
+    function toggleAvaria() {
+      const checked = document.getElementById('cl-avaria').checked;
+      document.getElementById('avaria-field').style.display = checked ? 'block' : 'none';
+    }
+
+    function setAllEquipment(value) {
+      document.querySelectorAll('#equip-list input[type="checkbox"]').forEach(cb => cb.checked = value);
+    }
+
+    async function saveDailyChecklist() {
+      const btn = document.getElementById('save-checklist-btn');
+      const date = document.getElementById('cl-data').value;
+      const motorista = document.getElementById('cl-motorista').value.trim();
+      const vei = document.getElementById('cl-veiculo').value;
+      const obs = document.getElementById('cl-obs').value.trim();
+      const hasav = document.getElementById('cl-avaria').checked;
+      const avtxt = document.getElementById('cl-avaria-txt').value.trim();
+
+      if (!date || !motorista || !vei) {
+        toast('Preencha data, motorista e veiculo.', 'err');
+        return;
+      }
+      if (hasav && !avtxt) {
+        toast('Descreva a avaria.', 'err');
+        return;
+      }
+      if (state.finalDailyState === 'problema' && !obs) {
+        toast('Informe a observacao do problema.', 'err');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Salvando...';
+      const kms = parseInt(document.getElementById('cl-kms').value, 10) || null;
+      const kmc = parseInt(document.getElementById('cl-kmc').value, 10) || null;
+      const equip = { conferidos: Array.from(document.querySelectorAll('#equip-list input:checked')).map(cb => cb.dataset.equip) };
+      const rec = {
+        id: Date.now(),
+        date,
+        motorista,
+        assistente: document.getElementById('cl-assistente').value.trim(),
+        cartao: document.getElementById('cl-cartao').value.trim(),
+        vei,
+        kms,
+        kmc,
+        kmd: kms && kmc ? kmc - kms : null,
+        hrs: document.getElementById('cl-hs').value,
+        hrc: document.getElementById('cl-hc').value,
+        fuel: document.getElementById('cl-fuel').value,
+        hasav,
+        avtxt,
+        obs,
+        equip,
+        origem: 'portal_tecnico',
+        saida_lat: state.gps.saida ? state.gps.saida.lat : null,
+        saida_lng: state.gps.saida ? state.gps.saida.lng : null,
+        retorno_lat: state.gps.retorno ? state.gps.retorno.lat : null,
+        retorno_lng: state.gps.retorno ? state.gps.retorno.lng : null,
+      };
+
+      try {
+        const { error } = await supabaseClient.from('checklists').insert([rec]);
+        if (error) throw error;
+        toast('Checklist salvo com sucesso.', 'ok');
+        addHistory('Checklist diario salvo.');
+        state.checklists.unshift(rec);
+        renderHistory();
+      } catch(e) {
+        console.error(e);
+        addQueue({ type:'checklist-insert', record:rec });
+        toast('Checklist salvo neste celular para sincronizar.', 'warn');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salvar checklist';
+      }
+    }
+
+    function renderHistory() {
+      const list = document.getElementById('history-list');
+      const local = loadHistory().filter(item => item.date === portal.data && normalizeText(item.tecnico) === normalizeText(portal.tecnico));
+      const checks = state.checklists
+        .filter(c => normalizeText(c.motorista) === normalizeText(portal.tecnico) || !portal.tecnico)
+        .map(c => ({ id:c.id, at:c.created_at || c.date, text:`Checklist ${c.origem === 'portal_tecnico' ? 'do portal' : 'administrativo'} salvo para ${c.vei || 'veiculo nao informado'}.` }));
+      const rows = [...local, ...checks].slice(0, 20);
+      if (!rows.length) {
+        list.innerHTML = '<div class="empty">Nenhum historico registrado ainda.</div>';
+        return;
+      }
+      list.innerHTML = rows.map(item => `
+        <div class="history-card">
+          <strong>${new Date(item.at || Date.now()).toLocaleString('pt-BR')}</strong>
+          <div class="meta">${escapeHtml(item.text)}</div>
+        </div>
+      `).join('');
+    }
+
+    window.addEventListener('online', () => { setSyncState(); processQueue(); });
+    window.addEventListener('offline', setSyncState);
+
+    window.addEventListener('load', async () => {
+      setSyncState();
+      await loadData();
+      await processQueue();
+    });
+  </script>
+</body>
+</html>
