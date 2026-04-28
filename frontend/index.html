@@ -972,6 +972,385 @@ td.bold { color: var(--text); font-weight: 600; }
 .modal { background:var(--card); border:1px solid var(--border2); border-radius:var(--r); padding:24px; width:90%; max-width:560px; max-height:90vh; overflow-y:auto; }
 .modal-title { font-family:var(--display); font-size:18px; font-weight:800; margin-bottom:18px; letter-spacing:-0.3px; }
 
+/* ─── EDIT SERVICE MODAL ─────────────────────── */
+#modal.svc-edit-modal { background:rgba(15,23,42,.52); backdrop-filter:blur(3px); padding:20px; }
+#modal.svc-edit-modal .modal {
+  width:min(980px,96vw);
+  max-width:980px;
+  max-height:min(92vh,880px);
+  padding:0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  background:#fff;
+  color:#0f172a;
+  border:1px solid rgba(148,163,184,.28);
+  border-radius:14px;
+  box-shadow:0 28px 80px rgba(15,23,42,.24);
+}
+#modal.svc-edit-modal .modal-title,
+#modal.svc-edit-modal .modal > .flex.gap2.mt3 { display:none; }
+#modal.svc-edit-modal #modal-body { min-height:0; flex:1; }
+.svc-edit-shell {
+  height:min(92vh,880px);
+  max-height:min(92vh,880px);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  background:#fff;
+}
+.svc-edit-header {
+  flex-shrink:0;
+  padding:22px 26px 18px;
+  border-bottom:1px solid #e2e8f0;
+  background:linear-gradient(180deg,#fff,#f8fafc);
+}
+.svc-edit-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.svc-edit-title-wrap { display:flex; align-items:flex-start; gap:14px; min-width:0; }
+.svc-edit-icon {
+  width:42px; height:42px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  background:#eff6ff; color:#2563eb; font-size:20px; flex-shrink:0;
+}
+.svc-edit-title { font-family:var(--display); font-size:21px; font-weight:850; color:#0f172a; line-height:1.15; }
+.svc-edit-subtitle { margin-top:4px; font-size:13px; color:#64748b; line-height:1.4; }
+.svc-edit-id { font-family:var(--mono); font-size:11px; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:999px; padding:6px 10px; white-space:nowrap; }
+.svc-edit-body {
+  flex:1;
+  overflow-y:auto;
+  padding:22px 26px;
+  background:#fff;
+}
+.svc-edit-body::-webkit-scrollbar { width:10px; }
+.svc-edit-body::-webkit-scrollbar-thumb { background:#cbd5e1; border:3px solid #fff; border-radius:999px; }
+.svc-edit-summary {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:14px;
+  align-items:start;
+  padding:15px 16px;
+  margin-bottom:18px;
+  border:1px solid #e2e8f0;
+  border-left:4px solid #2563eb;
+  border-radius:12px;
+  background:#f8fafc;
+}
+.svc-edit-summary-name { font-size:16px; font-weight:850; color:#0f172a; line-height:1.2; }
+.svc-edit-summary-meta { margin-top:4px; font-family:var(--mono); font-size:11px; color:#64748b; }
+.svc-edit-summary-address { margin-top:8px; font-size:12px; color:#475569; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.svc-status-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-height:28px; padding:0 11px; border-radius:999px;
+  border:1px solid #cbd5e1; background:#f8fafc; color:#475569;
+  font-size:11px; font-weight:800; white-space:nowrap;
+}
+.svc-status-badge.st-agendado { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+.svc-status-badge.st-executado { background:#ecfdf5; border-color:#bbf7d0; color:#047857; }
+.svc-status-badge.st-atrasado { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+.svc-status-badge.st-reagendado { background:#fff7ed; border-color:#fed7aa; color:#c2410c; }
+.svc-status-badge.st-cancelado { background:#f1f5f9; border-color:#cbd5e1; color:#475569; }
+.svc-edit-content { display:flex; flex-direction:column; gap:18px; }
+.svc-edit-section {
+  border:1px solid #e2e8f0;
+  background:#f8fafc;
+  border-radius:12px;
+  padding:16px;
+}
+.svc-edit-section-head { margin-bottom:14px; }
+.svc-edit-section-title { font-size:12px; font-weight:850; color:#334155; text-transform:uppercase; letter-spacing:.08em; }
+.svc-edit-section-desc { margin-top:3px; font-size:12px; color:#64748b; }
+.svc-edit-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.svc-edit-grid-3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.svc-edit-field { min-width:0; }
+.svc-edit-field.full { grid-column:1 / -1; }
+.svc-edit-label { display:block; margin-bottom:6px; font-size:12px; font-weight:750; color:#475569; }
+.svc-edit-help { margin-top:6px; font-size:11px; color:#64748b; line-height:1.35; }
+#modal.svc-edit-modal input,
+#modal.svc-edit-modal select,
+#modal.svc-edit-modal textarea {
+  width:100%;
+  min-height:42px;
+  background:#fff;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  color:#0f172a;
+  font-size:14px;
+  padding:10px 12px;
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+  transition:border-color .15s, box-shadow .15s, background .15s;
+}
+#modal.svc-edit-modal textarea { min-height:86px; line-height:1.45; resize:vertical; }
+#modal.svc-edit-modal input:focus,
+#modal.svc-edit-modal select:focus,
+#modal.svc-edit-modal textarea:focus {
+  outline:none;
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,.12);
+}
+.svc-edit-status-wrap { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:end; }
+.svc-edit-type-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.svc-edit-type-option {
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:11px 12px;
+  border:1px solid #dbe3ee;
+  border-radius:12px;
+  background:#fff;
+  cursor:pointer;
+  transition:background .15s, border-color .15s, box-shadow .15s, transform .15s;
+}
+.svc-edit-type-option:hover { border-color:#93c5fd; box-shadow:0 8px 18px rgba(15,23,42,.06); transform:translateY(-1px); }
+.svc-edit-type-option:has(input:checked) { background:#ecfdf5; border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.08); }
+.svc-edit-type-option input { width:16px !important; height:16px !important; min-height:auto !important; padding:0 !important; accent-color:#16a34a; flex-shrink:0; }
+.svc-edit-type-code { font-family:var(--mono); font-size:11px; font-weight:850; color:#2563eb; min-width:42px; }
+.svc-edit-type-name { color:#334155; font-size:13px; line-height:1.25; }
+.svc-edit-preview { margin-top:8px; font-size:11px; color:#64748b; font-family:var(--mono); }
+.svc-edit-checklist {
+  max-height:180px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding:8px;
+  border:1px solid #e2e8f0;
+  border-radius:10px;
+  background:#fff;
+}
+.svc-edit-checklist input[type="checkbox"] {
+  width:16px !important;
+  height:16px !important;
+  min-height:auto !important;
+  padding:0 !important;
+  accent-color:#2563eb;
+  flex-shrink:0;
+}
+.svc-edit-footer {
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:16px 26px;
+  border-top:1px solid #e2e8f0;
+  background:#f8fafc;
+}
+.svc-edit-footer-spacer { flex:1; }
+.svc-edit-btn {
+  min-height:40px;
+  border-radius:10px;
+  padding:0 16px;
+  font-size:13px;
+  font-weight:800;
+  border:1px solid transparent;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  transition:background .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+.svc-edit-btn.secondary { background:#fff; color:#334155; border-color:#cbd5e1; }
+.svc-edit-btn.secondary:hover { border-color:#94a3b8; background:#f8fafc; }
+.svc-edit-btn.danger-outline { background:#fff; color:#b91c1c; border-color:#fecaca; }
+.svc-edit-btn.danger-outline:hover { background:#fef2f2; border-color:#fca5a5; }
+.svc-edit-btn.primary { min-width:158px; background:#2563eb; color:#fff; border-color:#2563eb; box-shadow:0 8px 18px rgba(37,99,235,.18); }
+.svc-edit-btn.primary:hover { background:#1d4ed8; }
+.svc-edit-btn:disabled { opacity:.7; cursor:wait; box-shadow:none; }
+@media(max-width:820px) {
+  #modal.svc-edit-modal { align-items:flex-end; padding:0; }
+  #modal.svc-edit-modal .modal { width:100%; max-height:94vh; border-radius:14px 14px 0 0; }
+  .svc-edit-shell { height:94vh; max-height:94vh; }
+  .svc-edit-header,.svc-edit-body,.svc-edit-footer { padding-left:16px; padding-right:16px; }
+  .svc-edit-title-row,.svc-edit-summary { grid-template-columns:1fr; flex-direction:column; }
+  .svc-edit-grid,.svc-edit-grid-3,.svc-edit-type-grid,.svc-edit-status-wrap { grid-template-columns:1fr; }
+  .svc-edit-summary-address { white-space:normal; }
+  .svc-edit-footer { flex-wrap:wrap; }
+  .svc-edit-footer-spacer { display:none; }
+  .svc-edit-btn { flex:1; }
+  .svc-edit-btn.primary { flex-basis:100%; order:-1; }
+}
+
+/* ─── CLIENT MODAL ───────────────────────────── */
+#client-modal { background:rgba(15,23,42,.48); backdrop-filter:blur(4px); padding:22px; align-items:center; }
+#client-modal .client-modal-shell {
+  width:min(960px,96vw);
+  max-height:min(92vh,860px);
+  padding:0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  background:#fff;
+  color:#0f172a;
+  border:1px solid rgba(148,163,184,.28);
+  border-radius:14px;
+  box-shadow:0 24px 70px rgba(15,23,42,.22);
+}
+.client-modal-header {
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+  padding:22px 26px 18px;
+  border-bottom:1px solid #e2e8f0;
+  background:linear-gradient(180deg,#fff,#f8fafc);
+}
+.client-modal-icon {
+  width:42px;
+  height:42px;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#eff6ff;
+  color:#2563eb;
+  font-size:20px;
+  flex-shrink:0;
+}
+.client-modal-title { font-family:var(--display); font-size:20px; font-weight:850; color:#0f172a; line-height:1.15; }
+.client-modal-subtitle { margin-top:4px; font-size:13px; color:#64748b; line-height:1.4; }
+.client-modal-body {
+  flex:1;
+  overflow-y:auto;
+  padding:22px 26px;
+  background:#fff;
+}
+.client-modal-content { display:flex; flex-direction:column; gap:18px; }
+.client-section {
+  border:1px solid #e2e8f0;
+  background:#f8fafc;
+  border-radius:12px;
+  padding:16px;
+}
+.client-section-head { margin-bottom:14px; }
+.client-section-title { font-size:12px; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:.08em; }
+.client-section-desc { margin-top:3px; font-size:12px; color:#64748b; }
+.client-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.client-grid-3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.client-field { min-width:0; }
+.client-field.full { grid-column:1 / -1; }
+.client-field.small { max-width:180px; }
+.client-label { display:block; margin-bottom:6px; font-size:12px; font-weight:700; color:#475569; }
+.client-label .req { color:#ef4444; font-weight:800; }
+#client-modal .finput,
+#client-modal .fsel {
+  width:100%;
+  min-height:42px;
+  background:#fff;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  color:#0f172a;
+  font-size:14px;
+  padding:10px 12px;
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+  transition:border-color .15s, box-shadow .15s, background .15s;
+}
+#client-modal textarea.finput { min-height:86px; line-height:1.45; }
+#client-modal .finput:focus,
+#client-modal .fsel:focus {
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,.12);
+  background:#fff;
+}
+#client-modal .field-invalid {
+  border-color:#fca5a5 !important;
+  box-shadow:0 0 0 3px rgba(239,68,68,.1) !important;
+}
+.client-field-error { display:none; margin-top:6px; font-size:11px; color:#dc2626; }
+.client-inline { display:flex; gap:8px; align-items:stretch; }
+.client-inline .finput { flex:1; }
+.client-icon-btn {
+  min-width:44px;
+  height:42px;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  background:#fff;
+  color:#2563eb;
+  font-size:14px;
+  font-weight:700;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transition:border-color .15s, box-shadow .15s, background .15s;
+}
+.client-icon-btn:hover { border-color:#2563eb; background:#eff6ff; }
+.client-icon-btn:disabled { opacity:.65; cursor:wait; }
+.client-checkbox-row {
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:10px 12px;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  background:#fff;
+}
+.client-checkbox-row input { width:16px; height:16px; accent-color:#2563eb; }
+.client-history {
+  border-top:1px solid #e2e8f0;
+  padding-top:16px;
+  margin-top:2px;
+  display:none;
+}
+.client-history-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.client-history-title { font-size:13px; font-weight:800; color:#334155; }
+.client-history-box { max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc; }
+.client-form-error {
+  display:none;
+  padding:11px 13px;
+  background:#fef2f2;
+  color:#b91c1c;
+  border:1px solid #fecaca;
+  border-radius:10px;
+  font-size:12px;
+}
+.client-modal-footer {
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:16px 26px;
+  border-top:1px solid #e2e8f0;
+  background:#f8fafc;
+}
+.client-footer-spacer { flex:1; }
+.client-btn {
+  min-height:40px;
+  border-radius:10px;
+  padding:0 16px;
+  font-size:13px;
+  font-weight:750;
+  border:1px solid transparent;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  transition:background .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+.client-btn.secondary { background:#fff; color:#334155; border-color:#cbd5e1; }
+.client-btn.secondary:hover { border-color:#94a3b8; background:#f8fafc; }
+.client-btn.danger-outline { background:#fff; color:#b91c1c; border-color:#fecaca; }
+.client-btn.danger-outline:hover { background:#fef2f2; border-color:#fca5a5; }
+.client-btn.primary { min-width:150px; background:#2563eb; color:#fff; border-color:#2563eb; box-shadow:0 8px 18px rgba(37,99,235,.18); }
+.client-btn.primary:hover { background:#1d4ed8; }
+.client-btn:disabled { opacity:.7; cursor:wait; box-shadow:none; }
+@media(max-width:760px) {
+  #client-modal { align-items:flex-end; padding:0; }
+  #client-modal .client-modal-shell { width:100%; max-height:94vh; border-radius:14px 14px 0 0; }
+  .client-modal-header,.client-modal-body,.client-modal-footer { padding-left:16px; padding-right:16px; }
+  .client-grid,.client-grid-3 { grid-template-columns:1fr; }
+  .client-field.small { max-width:none; }
+  .client-modal-footer { flex-wrap:wrap; }
+  .client-footer-spacer { display:none; }
+  .client-btn { flex:1; }
+  .client-btn.primary { flex-basis:100%; order:-1; }
+}
+
 /* ─── VEHICLE BTNS ────────────────────────────── */
 .veh-grid { display:flex; gap:8px; flex-wrap:wrap; }
 .veh-btn {
@@ -2381,157 +2760,205 @@ async function carregarVeiculos(){
 
 <!-- MODAL CLIENTES (NOVO/EDITAR) -->
 <div class="modal-bg" id="client-modal" onclick="if(event.target===event.currentTarget)closeClientModal()">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title" id="client-modal-title">Novo Cliente</div>
-    <div style="padding:0;flex:1;overflow-y:auto">
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Nome *</label>
-          <input id="cli-form-nome" type="text" class="finput" placeholder="Nome do cliente" required>
-        </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">CEP</label>
-            <div style="display:flex;gap:8px">
-              <input id="cli-form-cep" type="text" class="finput" placeholder="00000-000" maxlength="9" onblur="buscarCepCliente()">
-              <button class="btn btn-ghost btn-sm" onclick="buscarCepCliente()" title="Buscar endereço por CEP" style="padding:8px">🔍</button>
-            </div>
-          </div>
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Nível de Urgência</label>
-            <select id="cli-form-urgencia" class="fsel" style="width:100%">
-              <option value="normal">Normal</option>
-              <option value="urgente">Urgente</option>
-              <option value="crítico">Crítico</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Telefone</label>
-          <input id="cli-form-tel" type="text" class="finput" placeholder="(11) 99999-9999">
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Categoria do cliente *</label>
-          <select id="cli-form-categoria" class="fsel" style="width:100%" onchange="togglePeriodicidade()">
-            <option value="eventual">Eventual (Pontual)</option>
-            <option value="contrato">Contrato (Recorrente)</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Tipo de local</label>
-          <select id="cli-form-tipo-local" class="fsel" style="width:100%">
-            <option value="">Selecione...</option>
-            <option value="residencial">Residencial</option>
-            <option value="condominio">Condomínio</option>
-            <option value="restaurante">Restaurante</option>
-            <option value="comercial">Comercial</option>
-            <option value="industrial">Industrial</option>
-            <option value="outro">Outro</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Tipo de pessoa</label>
-          <select id="cli-form-tipo" class="fsel" style="width:100%">
-            <option value="PF">Pessoa física</option>
-            <option value="PJ">Pessoa jurídica</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Rua</label>
-            <input id="cli-form-rua" type="text" class="finput" placeholder="Rua">
-          </div>
-          <div style="width:120px">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Número</label>
-            <input id="cli-form-numero" type="text" class="finput" placeholder="Nº">
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Bairro</label>
-            <input id="cli-form-bairro" type="text" class="finput" placeholder="Bairro">
-          </div>
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Cidade</label>
-            <input id="cli-form-cidade" type="text" class="finput" placeholder="Cidade">
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Complemento</label>
-            <input id="cli-form-complemento" type="text" class="finput" placeholder="Apto, Bloco etc.">
-          </div>
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Referência</label>
-            <input id="cli-form-referencia" type="text" class="finput" placeholder="Perto de...">
-          </div>
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Endereço completo</label>
-          <div style="display:flex;gap:8px">
-            <input id="cli-form-end" type="text" class="finput" placeholder="Rua, nº - Bairro">
-            <button class="btn btn-ghost btn-sm" onclick="geocodeClientAddress()" title="Buscar endereço no Google Maps" style="padding:8px">📍</button>
-          </div>
-          <div id="cli-geocode-suggestions" style="margin-top:4px;display:none"></div>
-        </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-          <div style="display:flex;align-items:center;gap:8px;flex:1">
-            <input type="checkbox" id="cli-form-recorrente" onchange="togglePeriodicidade()">
-            <label for="cli-form-recorrente" style="font-size:12px;color:var(--text2);">Cliente recorrente</label>
-          </div>
-          <div id="cli-form-periodicidade-container" style="display:none;flex:1">
-            <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Periodicidade *</label>
-            <select id="cli-form-periodicidade" class="fsel" style="width:100%">
-              <option value="">Selecione...</option>
-              <option value="semanal">Semanal</option>
-              <option value="quinzenal">Quinzenal</option>
-              <option value="mensal">Mensal</option>
-              <option value="bimestral">Bimestral</option>
-              <option value="trimestral">Trimestral</option>
-              <option value="semestral">Semestral</option>
-              <option value="anual">Anual</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Último serviço</label>
-          <input id="cli-form-ultimo-servico" type="date" class="finput">
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Restrição operacional</label>
-          <textarea id="cli-form-restricoes" class="finput" placeholder="Restrições de acesso, horários ou animais" style="resize:vertical;min-height:70px"></textarea>
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Observações operacionais</label>
-          <textarea id="cli-form-obs-operacionais" class="finput" placeholder="Notas para a equipe técnica" style="resize:vertical;min-height:70px"></textarea>
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">CPF/CNPJ (Opcional)</label>
-          <input id="cli-form-cpf" type="text" class="finput" placeholder="000.000.000-00 ou 00.000.000/0000-00">
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Observações</label>
-          <textarea id="cli-form-obs" class="finput" placeholder="Notas adicionais..." style="resize:vertical;min-height:70px"></textarea>
-        </div>
-
-        <!-- HISTÓRICO OPERACIONAL -->
-        <div id="cli-historico-section" style="border-top:1px solid var(--border2);padding-top:16px;margin-top:16px;display:none">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-            <span style="font-size:14px;font-weight:600;color:var(--text1)">📊 Histórico Operacional</span>
-            <button class="btn btn-ghost btn-xs" onclick="loadClientHistory()" title="Atualizar histórico">🔄</button>
-          </div>
-          <div id="cli-historico-content" style="max-height:200px;overflow-y:auto;border:1px solid var(--border2);border-radius:var(--r2);padding:8px;background:var(--bg2)">
-            <div style="text-align:center;color:var(--text3);font-size:12px">Carregando histórico...</div>
-          </div>
-        </div>
-
-        <div id="cli-form-error" style="padding:10px;background:var(--red-bg);color:var(--red);border-radius:var(--r2);font-size:12px;display:none"></div>
+  <div class="modal client-modal-shell" onclick="event.stopPropagation()">
+    <div class="client-modal-header">
+      <div class="client-modal-icon">✎</div>
+      <div>
+        <div class="client-modal-title" id="client-modal-title">Novo Cliente</div>
+        <div class="client-modal-subtitle" id="client-modal-subtitle">Cadastre os dados cadastrais e operacionais do cliente.</div>
       </div>
     </div>
-    <div class="flex gap2" style="padding:16px 0;border-top:1px solid var(--border);margin-top:16px">
-      <button class="btn btn-ghost btn-sm" onclick="closeClientModal()">Cancelar</button>
-      <button class="btn btn-danger btn-sm" id="cli-form-del" style="display:none" onclick="deleteClient()">🗑 Deletar</button>
-      <button class="btn btn-primary btn-sm" onclick="saveClient()" style="margin-left:auto">💾 Salvar</button>
+
+    <div class="client-modal-body">
+      <div class="client-modal-content">
+        <section class="client-section">
+          <div class="client-section-head">
+            <div class="client-section-title">Dados básicos</div>
+            <div class="client-section-desc">Identificação principal e contato do cliente.</div>
+          </div>
+          <div class="client-grid">
+            <div class="client-field full">
+              <label class="client-label">Nome <span class="req">*</span></label>
+              <input id="cli-form-nome" type="text" class="finput" placeholder="Nome completo ou razão social do cliente" required>
+              <div class="client-field-error" id="cli-error-nome">Nome é obrigatório.</div>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Telefone <span class="req">*</span></label>
+              <input id="cli-form-tel" type="text" class="finput" placeholder="(11) 99999-9999">
+              <div class="client-field-error" id="cli-error-tel">Telefone é obrigatório.</div>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Tipo de pessoa</label>
+              <select id="cli-form-tipo" class="fsel">
+                <option value="PF">Pessoa física</option>
+                <option value="PJ">Pessoa jurídica</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="client-section">
+          <div class="client-section-head">
+            <div class="client-section-title">Classificação</div>
+            <div class="client-section-desc">Dados usados para segmentação, recorrência e prioridade operacional.</div>
+          </div>
+          <div class="client-grid-3">
+            <div class="client-field">
+              <label class="client-label">Categoria do cliente <span class="req">*</span></label>
+              <select id="cli-form-categoria" class="fsel" onchange="togglePeriodicidade()">
+                <option value="eventual">Eventual (Pontual)</option>
+                <option value="contrato">Contrato (Recorrente)</option>
+              </select>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Tipo de local</label>
+              <select id="cli-form-tipo-local" class="fsel">
+                <option value="">Selecione...</option>
+                <option value="residencial">Residencial</option>
+                <option value="condominio">Condomínio</option>
+                <option value="restaurante">Restaurante</option>
+                <option value="comercial">Comercial</option>
+                <option value="industrial">Industrial</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Nível de urgência</label>
+              <select id="cli-form-urgencia" class="fsel">
+                <option value="normal">Normal</option>
+                <option value="urgente">Urgente</option>
+                <option value="crítico">Crítico</option>
+              </select>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Recorrência</label>
+              <label class="client-checkbox-row" for="cli-form-recorrente">
+                <input type="checkbox" id="cli-form-recorrente" onchange="togglePeriodicidade()">
+                <span>Cliente recorrente</span>
+              </label>
+            </div>
+            <div class="client-field" id="cli-form-periodicidade-container" style="display:none">
+              <label class="client-label">Periodicidade <span class="req">*</span></label>
+              <select id="cli-form-periodicidade" class="fsel">
+                <option value="">Selecione...</option>
+                <option value="semanal">Semanal</option>
+                <option value="quinzenal">Quinzenal</option>
+                <option value="mensal">Mensal</option>
+                <option value="bimestral">Bimestral</option>
+                <option value="trimestral">Trimestral</option>
+                <option value="semestral">Semestral</option>
+                <option value="anual">Anual</option>
+              </select>
+              <div class="client-field-error" id="cli-error-periodicidade">Periodicidade é obrigatória.</div>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Último serviço</label>
+              <input id="cli-form-ultimo-servico" type="date" class="finput">
+            </div>
+          </div>
+        </section>
+
+        <section class="client-section">
+          <div class="client-section-head">
+            <div class="client-section-title">Endereço</div>
+            <div class="client-section-desc">Endereço utilizado para roteirização, atendimento e validações operacionais.</div>
+          </div>
+          <div class="client-grid">
+            <div class="client-field small">
+              <label class="client-label">CEP</label>
+              <div class="client-inline">
+                <input id="cli-form-cep" type="text" class="finput" placeholder="00000-000" maxlength="9" onblur="buscarCepCliente()">
+                <button class="client-icon-btn" id="cli-cep-btn" onclick="buscarCepCliente()" title="Buscar endereço por CEP">⌕</button>
+              </div>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Número</label>
+              <input id="cli-form-numero" type="text" class="finput" placeholder="Ex: 42">
+            </div>
+            <div class="client-field full">
+              <label class="client-label">Rua</label>
+              <input id="cli-form-rua" type="text" class="finput" placeholder="Nome da rua, avenida ou condomínio">
+            </div>
+            <div class="client-field">
+              <label class="client-label">Bairro</label>
+              <input id="cli-form-bairro" type="text" class="finput" placeholder="Bairro">
+            </div>
+            <div class="client-field">
+              <label class="client-label">Cidade</label>
+              <input id="cli-form-cidade" type="text" class="finput" placeholder="Cidade">
+            </div>
+            <div class="client-field">
+              <label class="client-label">Complemento</label>
+              <input id="cli-form-complemento" type="text" class="finput" placeholder="Apto, bloco, sala...">
+            </div>
+            <div class="client-field">
+              <label class="client-label">Referência</label>
+              <input id="cli-form-referencia" type="text" class="finput" placeholder="Ponto de referência">
+            </div>
+            <div class="client-field full">
+              <label class="client-label">Endereço completo</label>
+              <div class="client-inline">
+                <input id="cli-form-end" type="text" class="finput" placeholder="Rua, número, bairro e cidade">
+                <button class="client-icon-btn" onclick="geocodeClientAddress()" title="Buscar endereço no Google Maps">⌖</button>
+              </div>
+              <div id="cli-geocode-suggestions" style="margin-top:8px;display:none"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="client-section">
+          <div class="client-section-head">
+            <div class="client-section-title">Operacional</div>
+            <div class="client-section-desc">Informações que ajudam a equipe técnica no atendimento.</div>
+          </div>
+          <div class="client-grid">
+            <div class="client-field">
+              <label class="client-label">Restrição operacional</label>
+              <textarea id="cli-form-restricoes" class="finput" placeholder="Restrições de acesso, horários, animais ou portaria"></textarea>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Observações operacionais</label>
+              <textarea id="cli-form-obs-operacionais" class="finput" placeholder="Notas importantes para a equipe técnica"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <section class="client-section">
+          <div class="client-section-head">
+            <div class="client-section-title">Observações</div>
+            <div class="client-section-desc">Dados complementares para cadastro e consulta administrativa.</div>
+          </div>
+          <div class="client-grid">
+            <div class="client-field">
+              <label class="client-label">CPF/CNPJ</label>
+              <input id="cli-form-cpf" type="text" class="finput" placeholder="000.000.000-00 ou 00.000.000/0000-00">
+            </div>
+            <div class="client-field">
+              <label class="client-label">Observações</label>
+              <textarea id="cli-form-obs" class="finput" placeholder="Notas adicionais do cliente"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <div class="client-history" id="cli-historico-section">
+          <div class="client-history-head">
+            <span class="client-history-title">Histórico Operacional</span>
+            <button class="client-btn secondary" onclick="loadClientHistory()" title="Atualizar histórico" style="min-height:32px;padding:0 10px;font-size:12px">Atualizar</button>
+          </div>
+          <div class="client-history-box" id="cli-historico-content">
+            <div style="text-align:center;color:#64748b;font-size:12px">Carregando histórico...</div>
+          </div>
+        </div>
+
+        <div id="cli-form-error" class="client-form-error"></div>
+      </div>
+    </div>
+
+    <div class="client-modal-footer">
+      <button class="client-btn secondary" onclick="closeClientModal()">Cancelar</button>
+      <button class="client-btn danger-outline" id="cli-form-del" style="display:none" onclick="deleteClient()">Deletar</button>
+      <div class="client-footer-spacer"></div>
+      <button class="client-btn primary" id="cli-form-save" onclick="saveClient()">Salvar alterações</button>
     </div>
   </div>
 </div>
@@ -4243,6 +4670,16 @@ function renderTiposCheckbox(selected = [], containerId = 'tipos-container'){
 
   container.innerHTML = tipos.map(t => {
     const meta = TIPO_SERVICO[t.sigla] || TIPO_SERVICO.OUTRO;
+    if (containerId === 'ed-tipos-container') {
+      return `
+        <label class="svc-edit-type-option">
+          <input type="checkbox" value="${sanitize(t.sigla)}"
+            ${selectedNorm.includes(t.sigla) ? 'checked' : ''}>
+          <span class="svc-edit-type-code" style="color:${meta?.cor || '#2563eb'}">${sanitize(t.sigla)}</span>
+          <span class="svc-edit-type-name">${sanitize(t.nome || t.sigla)}</span>
+        </label>
+      `;
+    }
     return `
       <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;padding:2px 0">
         <input type="checkbox" value="${sanitize(t.sigla)}"
@@ -5410,200 +5847,285 @@ async function setSt(id, st) {
 // showSvcDetail mantido como alias para compatibilidade com outras abas
 function showSvcDetail(id) { openEditSvc(id); }
 
+function getEditServiceVisualStatus(service, statusKey) {
+  const st = statusKey || service?.status || service?.st || 'agendado';
+  const dt = service ? getServiceDateValue(service) : document.getElementById('ed-dt')?.value;
+  const today = new Date().toISOString().split('T')[0];
+  return st === 'agendado' && dt && dt < today ? 'atrasado' : st;
+}
+
+function editServiceStatusLabel(statusKey) {
+  if (statusKey === 'atrasado') return 'Atrasado';
+  return ST_META[statusKey]?.label || statusKey || 'Agendado';
+}
+
+function formatEditServiceDate(dt) {
+  if (!dt) return 'Data não informada';
+  const [y, m, d] = String(dt).split('-');
+  return y && m && d ? `${d}/${m}/${y}` : dt;
+}
+
+function resumoEnderecoServico(endereco) {
+  const clean = String(endereco || '').trim();
+  if (!clean) return '';
+  return clean.length > 92 ? `${clean.slice(0, 89)}...` : clean;
+}
+
+function updateEditServiceStatusBadge() {
+  const st = document.getElementById('ed-st')?.value || 'agendado';
+  const visual = getEditServiceVisualStatus(null, st);
+  ['ed-status-badge', 'ed-status-inline-badge'].forEach(id => {
+    const badge = document.getElementById(id);
+    if (!badge) return;
+    badge.className = `svc-status-badge st-${visual}`;
+    badge.textContent = editServiceStatusLabel(visual);
+  });
+}
+
+function setEditServiceSaveLoading(loading) {
+  const btn = document.getElementById('ed-save-btn');
+  if (!btn) return;
+  btn.disabled = !!loading;
+  btn.textContent = loading ? 'Salvando...' : 'Salvar alterações';
+}
+
 // openEditSvc: modal de edição completa do serviço
 function openEditSvc(id) {
   const s = services.find(x=>sameId(x.id, id));
   if(!s) return;
   const stKey = s.status || s.st || 'agendado';
+  const visualStatus = getEditServiceVisualStatus(s, stKey);
+  const dtValue = getServiceDateValue(s) || '';
+  const hrValue = (s.horario||s.hr||'').substring(0,5);
+  const clienteNome = s.cliente || s.cl || '';
+  const enderecoResumo = resumoEnderecoServico(s.endereco || '');
+  const osValue = s.OS || s.os || '';
   const tiposSelecionados = Array.isArray(s.tipos) && s.tipos.length ? s.tipos : extrairTiposServico(s);
   const tecnicosSelecionados = getServiceTecnicosIds(s);
   const clienteIdSelecionado = s.cliente_id || s.clienteId || '';
   carregarCatalogosServico();
 
-  document.getElementById('modal-title').textContent = `✏️ Editar Serviço #${s.id}`;
+  const modal = document.getElementById('modal');
+  modal.classList.add('svc-edit-modal');
+  document.getElementById('modal-title').textContent = `Editar Serviço #${s.id}`;
   document.getElementById('modal-body').innerHTML = `
-    <!-- Cabeçalho informativo -->
-    <div style="padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px">
-      <div style="font-weight:700;font-size:14px;color:var(--text)">${sanitize(s.cliente||s.cl||'—')}</div>
-      <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${getServiceDateValue(s)||''} · OS ${s.OS||s.os||'—'}</div>
-    </div>
+    <div class="svc-edit-shell">
+      <header class="svc-edit-header">
+        <div class="svc-edit-title-row">
+          <div class="svc-edit-title-wrap">
+            <div class="svc-edit-icon" aria-hidden="true">✎</div>
+            <div>
+              <div class="svc-edit-title">Editar Serviço</div>
+              <div class="svc-edit-subtitle">Atualize os dados do atendimento, status e serviços executados.</div>
+            </div>
+          </div>
+          <div class="svc-edit-id">Serviço #${sanitize(String(s.id))}</div>
+        </div>
+      </header>
 
-    <!-- Linha 1: Data + Horário -->
-    <div class="form-row fr-2 mb3">
-      <div class="field">
-        <label>Data</label>
-        <input type="date" id="ed-dt" value="${getServiceDateValue(s)||''}">
-      </div>
-      <div class="field">
-        <label>Horário</label>
-        <input type="time" id="ed-hr" value="${(s.horario||s.hr||'').substring(0,5)}">
-      </div>
-    </div>
+      <div class="svc-edit-body">
+        <div class="svc-edit-summary">
+          <div>
+            <div class="svc-edit-summary-name">${sanitize(clienteNome || 'Cliente não informado')}</div>
+            <div class="svc-edit-summary-meta">${sanitize(formatEditServiceDate(dtValue))}${hrValue ? ` · ${sanitize(hrValue)}` : ''} · OS ${sanitize(osValue || '—')}</div>
+            ${enderecoResumo ? `<div class="svc-edit-summary-address">${sanitize(enderecoResumo)}</div>` : ''}
+          </div>
+          <span id="ed-status-badge" class="svc-status-badge st-${sanitize(visualStatus)}">${sanitize(editServiceStatusLabel(visualStatus))}</span>
+        </div>
 
-    <!-- Linha 2: Cliente -->
-    <div class="form-row mb3">
-      <div class="field">
-        <label>Cliente cadastrado</label>
-        <select id="ed-client-select" onchange="onServicoClienteSelect('ed')">
-          <option value="">Carregando clientes...</option>
-        </select>
-        <div id="ed-client-hint" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Selecione um cliente cadastrado para preencher o endereço automaticamente.</div>
-      </div>
-    </div>
-    <div class="form-row mb3">
-      <div class="field">
-        <label>Cliente / Condomínio</label>
-        <input type="text" id="ed-cl" value="${sanitize(s.cliente||s.cl||'')}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" oninput="onServicoClienteManualInput('ed')">
-      </div>
-    </div>
+        <div class="svc-edit-content">
+          <section class="svc-edit-section">
+            <div class="svc-edit-section-head">
+              <div class="svc-edit-section-title">Agendamento</div>
+              <div class="svc-edit-section-desc">Data, horário e estágio atual do atendimento.</div>
+            </div>
+            <div class="svc-edit-grid-3">
+              <div class="svc-edit-field">
+                <label class="svc-edit-label" for="ed-dt">Data</label>
+                <input type="date" id="ed-dt" value="${escapeHtmlAttr(dtValue)}" onchange="updateEditServiceStatusBadge()">
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label" for="ed-hr">Horário</label>
+                <input type="time" id="ed-hr" value="${escapeHtmlAttr(hrValue)}">
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label" for="ed-st">Status</label>
+                <div class="svc-edit-status-wrap">
+                  <select id="ed-st" onchange="updateEditServiceStatusBadge()">
+                    ${Object.entries(ST_META).map(([k,m])=>`<option value="${k}" ${stKey===k?'selected':''}>${m.label}</option>`).join('')}
+                  </select>
+                  <span id="ed-status-inline-badge" class="svc-status-badge st-${sanitize(visualStatus)}">${sanitize(editServiceStatusLabel(visualStatus))}</span>
+                </div>
+              </div>
+            </div>
+          </section>
 
-    <!-- Linha 3: Endereço -->
-    <div class="form-row mb3">
-      <div class="field">
-        <label>Endereço completo</label>
-        <input type="text" id="ed-end" value="${sanitize(s.endereco||'')}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" placeholder="Rua, número, bairro, cidade">
-      </div>
-    </div>
+          <section class="svc-edit-section">
+            <div class="svc-edit-section-head">
+              <div class="svc-edit-section-title">Cliente e endereço</div>
+              <div class="svc-edit-section-desc">Use o cadastro para preencher automaticamente, mantendo edição manual quando necessário.</div>
+            </div>
+            <div class="svc-edit-grid">
+              <div class="svc-edit-field full">
+                <label class="svc-edit-label" for="ed-client-select">Cliente cadastrado</label>
+                <select id="ed-client-select" onchange="onServicoClienteSelect('ed')">
+                  <option value="">Selecione um cliente cadastrado</option>
+                </select>
+                <div id="ed-client-hint" class="svc-edit-help">Selecione um cliente cadastrado para preencher o endereço automaticamente.</div>
+              </div>
+              <div class="svc-edit-field full">
+                <label class="svc-edit-label" for="ed-cl">Cliente / Condomínio</label>
+                <input type="text" id="ed-cl" value="${escapeHtmlAttr(clienteNome)}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" oninput="onServicoClienteManualInput('ed')" placeholder="Nome do cliente ou condomínio">
+              </div>
+              <div class="svc-edit-field full">
+                <label class="svc-edit-label" for="ed-end">Endereço completo</label>
+                <input type="text" id="ed-end" value="${escapeHtmlAttr(s.endereco||'')}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" placeholder="Rua, número, bairro, cidade">
+              </div>
+            </div>
+          </section>
 
-    <!-- Linha 4: Tipo(s) de serviço + Status -->
-    <div class="form-row fr-2 mb3">
-      <div class="field">
-        <label>Tipo(s) de Serviço</label>
-        <div id="ed-tipos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:2px"></div>
-        <div id="ed-tipos-preview" style="margin-top:4px;font-size:10px;color:var(--text3);font-family:var(--mono)">${tipoComboLabel(s)}</div>
-      </div>
-      <div class="field">
-        <label>Status</label>
-        <select id="ed-st">
-          ${Object.entries(ST_META).map(([k,m])=>`<option value="${k}" ${stKey===k?'selected':''}>${m.label}</option>`).join('')}
-        </select>
-      </div>
-    </div>
+          <section class="svc-edit-section">
+            <div class="svc-edit-section-head">
+              <div class="svc-edit-section-title">Serviços</div>
+              <div class="svc-edit-section-desc">Marque todos os tipos executados ou previstos para este atendimento.</div>
+            </div>
+            <div id="ed-tipos-container" class="svc-edit-type-grid"></div>
+            <div id="ed-tipos-preview" class="svc-edit-preview">${sanitize(tipoComboLabel(s))}</div>
+            <div class="svc-edit-field full" style="margin-top:14px">
+              <label class="svc-edit-label" for="ed-obs">Observações</label>
+              <textarea id="ed-obs" rows="3" placeholder="Observações, instruções especiais...">${sanitize(s.observacoes||s.obs||'')}</textarea>
+            </div>
+          </section>
 
-    <!-- Linha 5: Equipe + Veículo -->
-    <div class="form-row fr-2 mb3">
-      <div class="field">
-        <label>Técnicos</label>
-        <div id="ed-tecnicos-container" class="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+          <section class="svc-edit-section">
+            <div class="svc-edit-section-head">
+              <div class="svc-edit-section-title">Equipe e referências</div>
+              <div class="svc-edit-section-desc">Técnicos, veículo, OS e escopo operacional do serviço.</div>
+            </div>
+            <div class="svc-edit-grid">
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Técnicos</label>
+                <div id="ed-tecnicos-container" class="tecnicos-container svc-edit-checklist"></div>
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label" for="ed-vei">Veículo</label>
+                <select id="ed-vei">${getVeiculosOptions(s.veiculo || '')}</select>
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label" for="ed-os">OS (Ordem de Serviço)</label>
+                <input type="text" id="ed-os" value="${escapeHtmlAttr(osValue)}" placeholder="Número da OS">
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label" for="ed-sc">Escopo original</label>
+                <input type="text" id="ed-sc" value="${escapeHtmlAttr(s.sc||'')}" placeholder="Descrição do serviço">
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
-      <div class="field">
-        <label>Veículo</label>
-        <select id="ed-vei">${getVeiculosOptions(s.veiculo || '')}</select>
-      </div>
-    </div>
 
-    <!-- Linha 6: OS + Observações -->
-    <div class="form-row fr-2 mb3">
-      <div class="field">
-        <label>OS (Ordem de Serviço)</label>
-        <input type="text" id="ed-os" value="${(s.OS||s.os||'').replace(/"/g,'&quot;')}">
-      </div>
-      <div class="field">
-        <label>Escopo original</label>
-        <input type="text" id="ed-sc" value="${(s.sc||'').replace(/"/g,'&quot;')}" placeholder="Descrição do serviço">
-      </div>
-    </div>
-
-    <div class="form-row mb3">
-      <div class="field">
-        <label>Observações</label>
-        <textarea id="ed-obs" rows="2" placeholder="Observações, instruções especiais...">${(s.observacoes||s.obs||'').replace(/</g,'&lt;')}</textarea>
-      </div>
-    </div>
-
-    <div class="flex gap2">
-      <button class="btn btn-primary btn-sm" onclick="salvarEdicaoSvc(${jsArg(s.id)})">💾 Salvar Alterações</button>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancelar</button>
+      <footer class="svc-edit-footer">
+        <button class="svc-edit-btn secondary" onclick="closeModal()">Cancelar</button>
+        <button class="svc-edit-btn danger-outline" onclick="delRecord()">Excluir</button>
+        <div class="svc-edit-footer-spacer"></div>
+        <button class="svc-edit-btn primary" id="ed-save-btn" onclick="salvarEdicaoSvc(${jsArg(s.id)})">Salvar alterações</button>
+      </footer>
     </div>
   `;
   document.getElementById('modal-del').style.display = 'inline-flex';
   currentDelId = {type:'svc', id};
-  document.getElementById('modal').classList.add('open');
+  modal.classList.add('open');
   renderTecnicos(tecnicosSelecionados, 'ed-tecnicos-container');
   carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s), 'ed-tecnicos-container'));
   carregarVeiculos().then(() => renderVeiculosSelect('ed-vei', s.veiculo || ''));
   renderTiposCheckbox(tiposSelecionados, 'ed-tipos-container');
   bindTiposPreview('ed-tipos-preview', 'ed-tipos-container');
   initServicoClienteSelect('ed', clienteIdSelecionado, s.cliente || s.cl || '');
+  updateEditServiceStatusBadge();
 }
 
 async function salvarEdicaoSvc(id) {
   const s = services.find(x=>sameId(x.id, id));
   if(!s) return;
   const previousService = cloneServiceState(s);
+  setEditServiceSaveLoading(true);
 
-  const novaData  = document.getElementById('ed-dt')?.value;
-  const novoHr    = document.getElementById('ed-hr')?.value;
-  const novoCl    = document.getElementById('ed-cl')?.value.trim();
-  const novoEnd   = document.getElementById('ed-end')?.value.trim();
-  const cliente_id = document.getElementById('ed-cl')?.dataset.clientId || document.getElementById('ed-end')?.dataset.clientId || document.getElementById('ed-client-select')?.value || '';
-  const novoSt    = document.getElementById('ed-st')?.value;
-  const tecnicos_ids = Array.from(
-    document.querySelectorAll('#ed-tecnicos-container input:checked')
-  ).map(el => el.value);
-  if(tecnicos_ids.length === 0){
-    toast('Selecione pelo menos um técnico', 'err');
-    return;
+  try {
+    const novaData  = document.getElementById('ed-dt')?.value;
+    const novoHr    = document.getElementById('ed-hr')?.value;
+    const novoCl    = document.getElementById('ed-cl')?.value.trim();
+    const novoEnd   = document.getElementById('ed-end')?.value.trim();
+    const cliente_id = document.getElementById('ed-cl')?.dataset.clientId || document.getElementById('ed-end')?.dataset.clientId || document.getElementById('ed-client-select')?.value || '';
+    const novoSt    = document.getElementById('ed-st')?.value;
+    const tecnicos_ids = Array.from(
+      document.querySelectorAll('#ed-tecnicos-container input:checked')
+    ).map(el => el.value);
+    if(tecnicos_ids.length === 0){
+      toast('Selecione pelo menos um técnico', 'err');
+      return;
+    }
+    const novaEq    = nomesTecnicos(tecnicos_ids) || s.equipe || s.eq || '';
+    const novoVei   = document.getElementById('ed-vei')?.value;
+    const novoOS    = document.getElementById('ed-os')?.value.trim();
+    const novoSc    = document.getElementById('ed-sc')?.value.trim();
+    const novaObs   = document.getElementById('ed-obs')?.value.trim();
+
+    // Lê tipos via checkboxes (multi-tipo)
+    const tiposSel = Array.from(
+      document.querySelectorAll('#ed-tipos-container input:checked')
+    ).map(el => el.value);
+
+    const candidato = { ...s };
+
+    // Atualizar campos canônicos
+    if(novaData)  { candidato.dt = novaData; candidato.data = novaData;
+      const d = new Date(novaData+'T12:00:00');
+      candidato.dw = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][d.getDay()];
+      candidato.ms = ['','JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'][d.getMonth()+1];
+    }
+    if(novoHr  !== undefined) { candidato.horario = novoHr; candidato.hr = novoHr; }
+    if(novoCl)    { candidato.cliente = novoCl; candidato.cl = novoCl; }
+    candidato.cliente_id = cliente_id;
+    if(novoEnd !== undefined) { candidato.endereco = novoEnd; }
+    // Atualiza tipos[] + tipoServico (string combo para exibição e legado)
+    if(tiposSel.length > 0) {
+      candidato.tipos       = tiposSel;
+      candidato.tipoServico = tiposSel.join(' + ');
+      candidato.sc          = novoSc || tiposSel[0];
+    }
+    if(novoSt)    { candidato.status = novoSt; candidato.st = novoSt; }
+    candidato.tecnicos_ids = tecnicos_ids;
+    if(novaEq  !== undefined) { candidato.equipe = novaEq; }
+    if(novoVei !== undefined) { candidato.veiculo = novoVei; }
+    if(novoOS  !== undefined) { candidato.OS = novoOS; candidato.os = novoOS; }
+    if(novoSc  !== undefined) { candidato.sc = novoSc || candidato.sc; }
+    if(novaObs !== undefined) { candidato.observacoes = novaObs; candidato.obs = novaObs; }
+
+    const avaliacao = await simularAgendamentoOperacional(candidato, { ignoreId: id });
+    if (avaliacao.severity === 'block') {
+      toast(construirMensagemDiagnostico(avaliacao, '⛔ Edição bloqueada'), 'err');
+      return;
+    }
+
+    Object.assign(s, candidato);
+
+    // 1. Salvar localmente (sempre)
+    saveSvcs();
+    closeModal();
+    renderDash();
+    updateBadges();
+    const pageRenders = {agenda:renderAgenda, hoje:renderHoje, rotas:renderRotas, equipes:renderEquipes};
+    if(pageRenders[currentPage]) pageRenders[currentPage]();
+    if (avaliacao.severity === 'warn') {
+      toast(construirMensagemDiagnostico(avaliacao, '⚠ Serviço atualizado com alerta'), 'warn');
+    } else {
+      toast('✓ Serviço atualizado', 'ok');
+    }
+    // 2. Persistir no Supabase (duplo, sem bloquear UI)
+    if (USAR_SUPABASE) { await atualizarServicoSupabase(s, previousService); }
+  } finally {
+    setEditServiceSaveLoading(false);
   }
-  const novaEq    = nomesTecnicos(tecnicos_ids) || s.equipe || s.eq || '';
-  const novoVei   = document.getElementById('ed-vei')?.value;
-  const novoOS    = document.getElementById('ed-os')?.value.trim();
-  const novoSc    = document.getElementById('ed-sc')?.value.trim();
-  const novaObs   = document.getElementById('ed-obs')?.value.trim();
-
-  // Lê tipos via checkboxes (multi-tipo)
-  const tiposSel = Array.from(
-    document.querySelectorAll('#ed-tipos-container input:checked')
-  ).map(el => el.value);
-
-  const candidato = { ...s };
-
-  // Atualizar campos canônicos
-  if(novaData)  { candidato.dt = novaData; candidato.data = novaData;
-    const d = new Date(novaData+'T12:00:00');
-    candidato.dw = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][d.getDay()];
-    candidato.ms = ['','JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'][d.getMonth()+1];
-  }
-  if(novoHr  !== undefined) { candidato.horario = novoHr; candidato.hr = novoHr; }
-  if(novoCl)    { candidato.cliente = novoCl; candidato.cl = novoCl; }
-  candidato.cliente_id = cliente_id;
-  if(novoEnd !== undefined) { candidato.endereco = novoEnd; }
-  // Atualiza tipos[] + tipoServico (string combo para exibição e legado)
-  if(tiposSel.length > 0) {
-    candidato.tipos       = tiposSel;
-    candidato.tipoServico = tiposSel.join(' + ');
-    candidato.sc          = novoSc || tiposSel[0];
-  }
-  if(novoSt)    { candidato.status = novoSt; candidato.st = novoSt; }
-  candidato.tecnicos_ids = tecnicos_ids;
-  if(novaEq  !== undefined) { candidato.equipe = novaEq; }
-  if(novoVei !== undefined) { candidato.veiculo = novoVei; }
-  if(novoOS  !== undefined) { candidato.OS = novoOS; candidato.os = novoOS; }
-  if(novoSc  !== undefined) { candidato.sc = novoSc || candidato.sc; }
-  if(novaObs !== undefined) { candidato.observacoes = novaObs; candidato.obs = novaObs; }
-
-  const avaliacao = await simularAgendamentoOperacional(candidato, { ignoreId: id });
-  if (avaliacao.severity === 'block') {
-    toast(construirMensagemDiagnostico(avaliacao, '⛔ Edição bloqueada'), 'err');
-    return;
-  }
-
-  Object.assign(s, candidato);
-
-  // 1. Salvar localmente (sempre)
-  saveSvcs();
-  closeModal();
-  renderDash();
-  updateBadges();
-  const pageRenders = {agenda:renderAgenda, hoje:renderHoje, rotas:renderRotas, equipes:renderEquipes};
-  if(pageRenders[currentPage]) pageRenders[currentPage]();
-  if (avaliacao.severity === 'warn') {
-    toast(construirMensagemDiagnostico(avaliacao, '⚠ Serviço atualizado com alerta'), 'warn');
-  } else {
-    toast('✓ Serviço atualizado', 'ok');
-  }
-  // 2. Persistir no Supabase (duplo, sem bloquear UI)
-  if (USAR_SUPABASE) { await atualizarServicoSupabase(s, previousService); }
 }
 
 
@@ -6742,7 +7264,8 @@ function openClientModal(clientId = null) {
     clienteEditando = clientesData.find(c => c.id === clientId);
     if (!clienteEditando) return;
     
-    document.getElementById('client-modal-title').textContent = '✏️ Editar Cliente';
+    document.getElementById('client-modal-title').textContent = 'Editar Cliente';
+    document.getElementById('client-modal-subtitle').textContent = 'Atualize os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = clienteEditando.nome || '';
     document.getElementById('cli-form-tel').value = clienteEditando.telefone || '';
     document.getElementById('cli-form-cep').value = clienteEditando.cep || '';
@@ -6778,7 +7301,7 @@ function openClientModal(clientId = null) {
     }
     document.getElementById('cli-form-cpf').value = clienteEditando.cpf_cnpj || '';
     document.getElementById('cli-form-obs').value = clienteEditando.observacoes || '';
-    document.getElementById('cli-form-del').style.display = 'block';
+    document.getElementById('cli-form-del').style.display = 'inline-flex';
     
     togglePeriodicidade();
     
@@ -6788,7 +7311,8 @@ function openClientModal(clientId = null) {
   } else {
     // Novo cliente
     clienteEditando = null;
-    document.getElementById('client-modal-title').textContent = '➕ Novo Cliente';
+    document.getElementById('client-modal-title').textContent = 'Novo Cliente';
+    document.getElementById('client-modal-subtitle').textContent = 'Cadastre os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = '';
     document.getElementById('cli-form-tel').value = '';
     document.getElementById('cli-form-cep').value = '';
@@ -6820,6 +7344,9 @@ function openClientModal(clientId = null) {
   }
   
   document.getElementById('cli-form-error').style.display = 'none';
+  setClientSaveLoading(false);
+  setCepLookupLoading(false);
+  clearClientFormErrors();
   document.getElementById('cli-geocode-suggestions').style.display = 'none';
   document.getElementById('client-modal').classList.add('open');
 }
@@ -6829,6 +7356,41 @@ function closeClientModal() {
   clienteEditando = null;
   document.getElementById('cli-form-error').style.display = 'none';
   document.getElementById('cli-historico-section').style.display = 'none';
+  clearClientFormErrors();
+}
+
+function clearClientFormErrors() {
+  ['cli-form-nome','cli-form-tel','cli-form-periodicidade'].forEach(id => {
+    document.getElementById(id)?.classList.remove('field-invalid');
+  });
+  ['cli-error-nome','cli-error-tel','cli-error-periodicidade'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
+function markClientFieldInvalid(inputId, errorId) {
+  const input = document.getElementById(inputId);
+  if (input) {
+    input.classList.add('field-invalid');
+    input.focus();
+  }
+  const error = document.getElementById(errorId);
+  if (error) error.style.display = 'block';
+}
+
+function setClientSaveLoading(loading) {
+  const btn = document.getElementById('cli-form-save');
+  if (!btn) return;
+  btn.disabled = !!loading;
+  btn.textContent = loading ? 'Salvando...' : 'Salvar alterações';
+}
+
+function setCepLookupLoading(loading) {
+  const btn = document.getElementById('cli-cep-btn');
+  if (!btn) return;
+  btn.disabled = !!loading;
+  btn.textContent = loading ? '...' : '⌕';
 }
 
 // Buscar endereço por CEP
@@ -6842,6 +7404,7 @@ async function buscarCepCliente() {
   }
   
   try {
+    setCepLookupLoading(true);
     toast('🔍 Buscando endereço...', 'ok');
     
     // Usa o backend como proxy para evitar bloqueio por CSP no navegador
@@ -6879,6 +7442,8 @@ async function buscarCepCliente() {
   } catch (error) {
     console.error('Erro buscar CEP:', error);
     toast('Erro ao buscar CEP', 'err');
+  } finally {
+    setCepLookupLoading(false);
   }
 }
 
@@ -6987,6 +7552,7 @@ async function loadClientHistory() {
 
 async function saveClient() {
   try {
+    clearClientFormErrors();
     const isNewClient = !clienteEditando;
     const nome = document.getElementById('cli-form-nome').value.trim();
     const telefone = document.getElementById('cli-form-tel').value.trim();
@@ -7011,20 +7577,24 @@ async function saveClient() {
     const observacoes = document.getElementById('cli-form-obs').value.trim();
     
     const errorEl = document.getElementById('cli-form-error');
+    errorEl.style.display = 'none';
     
     if (!nome) {
       errorEl.textContent = 'Nome é obrigatório';
       errorEl.style.display = 'block';
+      markClientFieldInvalid('cli-form-nome', 'cli-error-nome');
       return;
     }
     if (!telefone) {
       errorEl.textContent = 'Telefone é obrigatório';
       errorEl.style.display = 'block';
+      markClientFieldInvalid('cli-form-tel', 'cli-error-tel');
       return;
     }
     if ((categoria === 'contrato' || recorrente) && !periodicidade) {
       errorEl.textContent = 'Periodicidade é obrigatória para clientes recorrentes ou de contrato';
       errorEl.style.display = 'block';
+      markClientFieldInvalid('cli-form-periodicidade', 'cli-error-periodicidade');
       return;
     }
     
@@ -7067,6 +7637,7 @@ async function saveClient() {
       payload.endereco_completo = geo.endereco_completo || enderecoCompleto;
     }
     
+    setClientSaveLoading(true);
     let response;
     if (clienteEditando) {
       response = await fetch(`${API_BASE_URL}/api/customers/${clienteEditando.id}`, {
@@ -7104,6 +7675,8 @@ async function saveClient() {
     const errorEl = document.getElementById('cli-form-error');
     errorEl.textContent = error.message || 'Erro ao salvar cliente';
     errorEl.style.display = 'block';
+  } finally {
+    setClientSaveLoading(false);
   }
 }
 
@@ -7893,7 +8466,11 @@ async function logout(){
 
 selectAuthProfile('admin');
 
-function closeModal(){document.getElementById('modal').classList.remove('open');currentDelId=null;}
+function closeModal(){
+  const modal = document.getElementById('modal');
+  modal.classList.remove('open','svc-edit-modal');
+  currentDelId=null;
+}
 async function delRecord(){
   if(!currentDelId){return;}
   if(!confirmAction('Excluir permanentemente?'))return;
