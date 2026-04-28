@@ -1588,110 +1588,137 @@ td.bold { color: var(--text); font-weight: 600; }
 }
 
 /* ─── CALENDÁRIO MENSAL (Agenda · Por Data) ──────────────── */
-.cal-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; }
-.cal-nav-center { text-align:center; flex:1; }
-.cal-nav-title { font-family:var(--display); font-size:20px; font-weight:900; letter-spacing:-0.4px; }
-.cal-nav-sub { font-size:11px; color:var(--text3); font-family:var(--mono); margin-top:3px; }
-.cal-nav-btn { padding:7px 14px; border:1px solid var(--border2); border-radius:var(--r2); background:var(--card); color:var(--text2); font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; font-family:var(--body); white-space:nowrap; }
-.cal-nav-btn:hover { border-color:var(--blue); color:var(--blue2); background:var(--blue-bg); }
-.cal-nav-btn.today-btn { background:var(--blue); border-color:var(--blue); color:white; padding:7px 10px; }
-.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
-.cal-dow { text-align:center; font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:1.2px; color:var(--text3); padding:7px 0; font-weight:600; }
-.cal-dow.weekend { color:var(--red); opacity:.65; }
-.cal-cell { background:var(--card); border:1px solid var(--border); border-radius:var(--r2); min-height:96px; padding:7px 8px; cursor:pointer; transition:border-color .15s, box-shadow .15s, transform .15s; position:relative; overflow:hidden; }
-.cal-cell:hover:not(.other-month):not(.no-svc) { border-color:var(--blue); box-shadow:0 0 0 2px rgba(37,99,235,.1); transform:translateY(-1px); }
-.cal-cell.other-month { background:var(--bg); opacity:.4; cursor:default; pointer-events:none; }
-.cal-cell.today { border-color:var(--blue) !important; border-width:2px; }
-.cal-cell.today .cal-day-num { color:var(--blue2); }
-.cal-cell.no-svc { cursor:default; }
-.cal-cell.no-svc:hover { border-color:var(--border); box-shadow:none; transform:none; }
-.cal-cell.past-pending { border-left:3px solid var(--red) !important; }
-.cal-day-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:3px; }
-.cal-day-num { font-family:var(--mono); font-size:11px; font-weight:700; color:var(--text2); }
-.cal-day-alerts { display:flex; gap:2px; flex-wrap:wrap; }
-.cal-alert-pip { font-size:8px; background:rgba(220,38,38,.12); color:var(--red); padding:1px 4px; border-radius:2px; font-family:var(--mono); }
-.cal-alert-pip.warn { background:rgba(234,88,12,.12); color:var(--orange); }
-.cal-alert-pip.reag { background:rgba(180,83,9,.1); color:var(--yellow); }
-.cal-day-count { font-family:var(--display); font-size:22px; font-weight:900; line-height:1; margin:1px 0 3px; }
-.cal-load-bar { height:3px; border-radius:2px; margin-bottom:5px; }
-.cal-mini-svc { font-size:9px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.55; font-family:var(--mono); color:var(--text2); }
-.cal-mini-svc.sem-eq  { color:var(--orange); }
-.cal-mini-svc.reagend { color:var(--orange); opacity:.65; text-decoration:line-through; }
-.cal-mini-svc.exec    { color:var(--green); opacity:.7; }
-.cal-legend { background:var(--card); border:1px solid var(--border); border-radius:var(--r2); padding:10px 16px; margin-bottom:12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
-.cal-legend-item { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px; }
-.cal-stat-chip {
-  font-family: var(--mono);
-  font-size: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  border-radius: 99px;
-  padding: 2px 9px;
-  color: var(--text2);
-  white-space: nowrap;
-}
-/* Heat map: fundo sutil por nível de carga */
-.cal-cell.load-leve   { background: rgba(22,163,74,.04); }
-.cal-cell.load-medio  { background: rgba(217,119,6,.05); }
-.cal-cell.load-alto   { background: rgba(220,38,38,.06); }
-/* Fim de semana: número discretamente colorido */
-.cal-cell.weekend .cal-day-num { color: var(--red); opacity: .7; }
-/* Dia livre: estilo diferenciado */
-.cal-cell.cal-livre { border-style: dashed; }
-/* Mini tag "LIVRE" em dias vazios */
-.cal-livre-tag {
-  font-family: var(--mono);
-  font-size: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text4);
-  margin-top: 6px;
-}
-/* Destaque visual da célula ao passar (só dias com svc) */
-.cal-cell.has-svc { cursor: pointer; }
-.cal-cell.has-svc:hover {
-  border-color: var(--blue) !important;
-  box-shadow: 0 0 0 2px rgba(37,99,235,.1);
-  transform: translateY(-1px);
-}
-/* Barra de carga proporcional */
-.cal-load-bar { height: 3px; border-radius: 2px; margin-bottom: 5px; transition: width .3s; }
-/* Stats panel acima do calendário */
-.cal-month-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
-}
-.cal-month-stat-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  padding: 10px 12px;
-  text-align: center;
-}
-.cal-month-stat-val {
-  font-family: var(--display);
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1;
-  margin-bottom: 3px;
-}
-.cal-month-stat-lbl {
-  font-family: var(--mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text3);
-}
+.cal-shell { display:flex; flex-direction:column; gap:14px; }
+.cal-nav { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.cal-nav-center { text-align:center; flex:1; min-width:180px; }
+.cal-nav-title { font-family:var(--display); font-size:21px; font-weight:900; letter-spacing:-0.3px; color:var(--text); }
+.cal-nav-sub { font-size:11px; color:var(--text3); margin-top:3px; }
+.cal-nav-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+.cal-nav-btn { min-height:34px; padding:0 13px; border:1px solid var(--border2); border-radius:10px; background:var(--card); color:var(--text2); font-size:12px; font-weight:700; cursor:pointer; transition:all .15s; font-family:var(--body); white-space:nowrap; }
+.cal-nav-btn:hover { border-color:var(--blue); color:var(--blue2); background:var(--blue-bg); box-shadow:0 6px 16px rgba(37,99,235,.08); }
+.cal-nav-btn.today-btn { background:var(--blue); border-color:var(--blue); color:white; }
+.cal-month-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:9px; }
+.cal-month-stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:11px 12px; box-shadow:0 8px 22px rgba(15,23,42,.04); }
+.cal-month-stat-val { font-family:var(--display); font-size:21px; font-weight:900; line-height:1; margin-bottom:4px; }
+.cal-month-stat-lbl { font-size:10px; color:var(--text3); }
+.cal-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.cal-legend { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:10px 12px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; box-shadow:0 8px 22px rgba(15,23,42,.04); }
+.cal-legend-item { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.cal-dot { width:9px; height:9px; border-radius:99px; display:inline-block; }
+.cal-dot.ok { background:var(--green); }
+.cal-dot.late { background:var(--red); }
+.cal-dot.warn { background:var(--orange); }
+.cal-dot.today { background:var(--blue); }
+.cal-dot.free { background:var(--border3); }
+.cal-quick-filters { display:flex; gap:6px; flex-wrap:wrap; }
+.cal-quick-btn { min-height:30px; padding:0 10px; border:1px solid var(--border2); border-radius:999px; background:var(--card); color:var(--text3); font-size:11px; font-weight:700; cursor:pointer; transition:all .15s; }
+.cal-quick-btn:hover { color:var(--blue2); border-color:var(--blue); background:var(--blue-bg); }
+.cal-quick-btn.active { color:white; background:var(--blue); border-color:var(--blue); box-shadow:0 8px 18px rgba(37,99,235,.14); }
+.cal-scroll { overflow-x:auto; padding-bottom:2px; }
+.cal-scroll::-webkit-scrollbar { height:8px; }
+.cal-scroll::-webkit-scrollbar-thumb { background:var(--border2); border-radius:999px; }
+.cal-grid { display:grid; grid-template-columns:repeat(7,minmax(132px,1fr)); gap:8px; min-width:924px; }
+.cal-dow { text-align:left; font-size:10px; color:var(--text3); padding:0 4px 2px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+.cal-dow.weekend { color:var(--red); opacity:.72; }
+.cal-cell { min-height:126px; background:var(--card); border:1px solid var(--border); border-left:4px solid var(--border2); border-radius:12px; padding:10px; cursor:pointer; transition:border-color .15s, box-shadow .15s, transform .15s, background .15s; position:relative; overflow:hidden; }
+.cal-cell.has-svc:hover { border-color:rgba(37,99,235,.45); border-left-color:var(--blue); box-shadow:0 12px 26px rgba(15,23,42,.10); transform:translateY(-2px); }
+.cal-cell.other-month { background:var(--bg); opacity:.42; cursor:default; pointer-events:none; border-left-color:var(--border); }
+.cal-cell.today { border-color:rgba(37,99,235,.45) !important; border-left-color:var(--blue) !important; box-shadow:inset 0 0 0 1px rgba(37,99,235,.12); }
+.cal-cell.cal-ok { border-left-color:var(--green); }
+.cal-cell.cal-late { border-left-color:var(--red); background:rgba(220,38,38,.035); }
+.cal-cell.cal-warn { border-left-color:var(--orange); background:rgba(234,88,12,.035); }
+.cal-cell.cal-free { border-style:dashed; border-left-style:solid; border-left-color:var(--border3); cursor:pointer; background:rgba(148,163,184,.035); }
+.cal-cell.cal-free:hover { border-color:rgba(37,99,235,.34); border-left-color:var(--blue); box-shadow:0 10px 22px rgba(15,23,42,.07); transform:translateY(-1px); }
+.cal-cell.cal-filtered-out { opacity:.46; background:rgba(148,163,184,.035); border-left-color:var(--border2); }
+.cal-day-header { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.cal-day-num { font-family:var(--mono); font-size:13px; font-weight:900; color:var(--text); line-height:1; }
+.cal-cell.weekend .cal-day-num { color:var(--red); opacity:.78; }
+.cal-day-status { font-size:9px; font-weight:800; border-radius:999px; padding:2px 7px; color:var(--text3); background:var(--bg2); border:1px solid var(--border); white-space:nowrap; }
+.cal-day-status.ok { color:var(--green); background:var(--green-bg); border-color:rgba(22,163,74,.16); }
+.cal-day-status.late { color:var(--red); background:var(--red-bg); border-color:rgba(220,38,38,.18); }
+.cal-day-status.warn { color:var(--orange); background:var(--orange-bg); border-color:rgba(234,88,12,.18); }
+.cal-day-status.free { color:var(--text4); }
+.cal-day-main { display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.cal-day-count { font-family:var(--display); font-size:24px; font-weight:900; line-height:1; color:var(--text); }
+.cal-day-count span { display:block; margin-top:2px; font-family:var(--body); font-size:10px; font-weight:700; color:var(--text3); }
+.cal-day-metrics { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+.cal-metric { font-family:var(--mono); font-size:9px; line-height:1; padding:3px 5px; border-radius:5px; background:var(--bg2); color:var(--text3); border:1px solid var(--border); }
+.cal-metric.exec { color:var(--green); }
+.cal-metric.pend { color:var(--orange); }
+.cal-metric.late { color:var(--red); }
+.cal-metric.reag { color:var(--yellow); }
+.cal-progress { height:4px; background:var(--border); border-radius:999px; overflow:hidden; margin-bottom:9px; }
+.cal-progress-fill { height:100%; background:var(--green); border-radius:999px; }
+.cal-mini-list { display:flex; flex-direction:column; gap:3px; }
+.cal-mini-svc { font-size:10px; line-height:1.35; color:var(--text2); font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cal-mini-svc.exec { color:var(--green); opacity:.82; }
+.cal-mini-svc.warn { color:var(--orange); }
+.cal-mini-svc.late { color:var(--red); }
+.cal-more { margin-top:4px; font-size:10px; font-weight:700; color:var(--blue2); }
+.cal-livre-tag { font-size:11px; color:var(--text4); margin-top:14px; }
+.cal-livre-action { opacity:0; transform:translateY(3px); transition:all .15s; position:absolute; left:10px; bottom:10px; font-size:11px; font-weight:800; color:var(--blue2); }
+.cal-cell.cal-free:hover .cal-livre-action { opacity:1; transform:translateY(0); }
+.cal-empty-note { padding:18px; border:1px dashed var(--border2); border-radius:12px; color:var(--text3); font-size:12px; text-align:center; background:var(--card); }
+
+#modal.day-detail-modal { background:rgba(15,23,42,.52); backdrop-filter:blur(3px); padding:20px; }
+#modal.day-detail-modal .modal { width:min(920px,96vw); max-width:920px; max-height:min(92vh,860px); padding:0; overflow:hidden; display:flex; flex-direction:column; background:#fff; color:#0f172a; border:1px solid rgba(148,163,184,.28); border-radius:14px; box-shadow:0 28px 80px rgba(15,23,42,.24); }
+#modal.day-detail-modal .modal-title,
+#modal.day-detail-modal .modal > .flex.gap2.mt3 { display:none; }
+#modal.day-detail-modal #modal-body { min-height:0; flex:1; }
+.day-modal-shell { height:min(92vh,860px); max-height:min(92vh,860px); display:flex; flex-direction:column; overflow:hidden; background:#fff; }
+.day-modal-header { flex-shrink:0; padding:22px 26px 18px; border-bottom:1px solid #e2e8f0; background:linear-gradient(180deg,#fff,#f8fafc); display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+.day-modal-title { font-family:var(--display); font-size:21px; font-weight:900; color:#0f172a; line-height:1.15; }
+.day-modal-sub { margin-top:4px; font-size:13px; color:#64748b; text-transform:capitalize; }
+.day-load-badge { display:inline-flex; align-items:center; min-height:30px; padding:0 12px; border-radius:999px; font-size:12px; font-weight:850; white-space:nowrap; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; }
+.day-load-badge.ok { background:#ecfdf5; border-color:#bbf7d0; color:#047857; }
+.day-load-badge.warn { background:#fff7ed; border-color:#fed7aa; color:#c2410c; }
+.day-load-badge.late { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+.day-modal-body { flex:1; overflow-y:auto; padding:22px 26px; background:#fff; }
+.day-modal-body::-webkit-scrollbar { width:10px; }
+.day-modal-body::-webkit-scrollbar-thumb { background:#cbd5e1; border:3px solid #fff; border-radius:999px; }
+.day-summary-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:9px; margin-bottom:16px; }
+.day-summary-card { border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; padding:11px 12px; }
+.day-summary-val { font-family:var(--display); font-size:22px; font-weight:900; line-height:1; color:#0f172a; }
+.day-summary-label { margin-top:5px; font-size:10px; color:#64748b; }
+.day-progress-card { border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; padding:14px; margin-bottom:16px; }
+.day-progress-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; font-size:12px; color:#475569; }
+.day-progress-track { height:8px; border-radius:999px; overflow:hidden; background:#e2e8f0; }
+.day-progress-fill { height:100%; background:#16a34a; border-radius:999px; }
+.day-alert { margin-top:10px; padding:9px 11px; border-radius:10px; border:1px solid #fecaca; background:#fef2f2; color:#b91c1c; font-size:12px; }
+.day-service-list { display:flex; flex-direction:column; gap:9px; margin-bottom:16px; }
+.day-section-label { margin-bottom:9px; font-size:12px; font-weight:850; color:#334155; text-transform:uppercase; letter-spacing:.08em; }
+.day-service-card { background:#fff; border:1px solid #e2e8f0; border-left:4px solid #94a3b8; border-radius:12px; padding:12px 13px; cursor:pointer; transition:border-color .15s, box-shadow .15s, transform .15s; }
+.day-service-card:hover { border-color:#93c5fd; box-shadow:0 12px 26px rgba(15,23,42,.08); transform:translateY(-1px); }
+.day-service-card.exec { border-left-color:#16a34a; }
+.day-service-card.late { border-left-color:#dc2626; background:#fffafa; }
+.day-service-card.reag { border-left-color:#d97706; }
+.day-service-head { display:flex; align-items:flex-start; gap:10px; justify-content:space-between; margin-bottom:7px; }
+.day-service-name { font-size:14px; font-weight:850; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.day-service-badges { display:flex; align-items:center; gap:5px; flex-wrap:wrap; justify-content:flex-end; flex-shrink:0; }
+.day-badge { font-family:var(--mono); font-size:10px; border:1px solid #e2e8f0; border-radius:999px; padding:2px 7px; color:#475569; background:#f8fafc; white-space:nowrap; }
+.day-badge.status { font-family:var(--body); font-weight:800; }
+.day-service-meta { display:flex; gap:8px 12px; flex-wrap:wrap; color:#64748b; font-size:11px; line-height:1.35; }
+.day-service-meta span { min-width:0; }
+.day-service-address { margin-top:7px; color:#64748b; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.day-modal-footer { flex-shrink:0; display:flex; gap:8px; flex-wrap:wrap; padding:16px 26px; border-top:1px solid #e2e8f0; background:#f8fafc; }
+.day-modal-footer .btn { border-radius:10px; }
 @media(max-width:900px) {
-  .cal-grid { gap:3px; }
-  .cal-cell { min-height:70px; padding:5px; }
-  .cal-day-count { font-size:17px; }
-  .cal-mini-svc { display:none; }
-  .cal-nav-btn { padding:6px 10px; font-size:11px; }
-  .cal-month-stats { grid-template-columns: repeat(3,1fr); }
-  .cal-month-stat-val { font-size:18px; }
+  .cal-nav { flex-direction:column; align-items:stretch; }
+  .cal-nav-actions { justify-content:center; }
+  .cal-toolbar { align-items:flex-start; }
+  .cal-month-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .day-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:640px) {
+  #modal.day-detail-modal { align-items:flex-end; padding:0; }
+  #modal.day-detail-modal .modal { width:100%; max-height:94vh; border-radius:14px 14px 0 0; }
+  .day-modal-shell { height:94vh; max-height:94vh; }
+  .day-modal-header,.day-modal-body,.day-modal-footer { padding-left:16px; padding-right:16px; }
+  .day-modal-header { flex-direction:column; }
+  .day-summary-grid { grid-template-columns:1fr; }
+  .day-service-head { flex-direction:column; }
+  .day-service-address { white-space:normal; }
+  .cal-month-stats { grid-template-columns:1fr; }
 }
 
 .tecnicos-container {
@@ -5104,6 +5131,7 @@ function renderDash() {
 // AGENDA — Estado e views
 // ════════════════════════════════════════════════
 let agView = 'data';
+let agQuickFilter = 'todos';
 
 // ── Estado do Calendário Mensal ───────────────────────────
 // Inicializa no mês atual; navega com calNav(±1)
@@ -5399,6 +5427,70 @@ function renderAgendaKanban(svcs) {
   }).join('');
 }
 
+function agSetQuickFilter(filter) {
+  agQuickFilter = filter || 'todos';
+  renderAgenda();
+}
+
+function getDayMetrics(daySvcs, dt, today) {
+  const list = daySvcs || [];
+  const isPast = dt < today;
+  const total = list.length;
+  const executados = list.filter(s => (s.status||s.st) === 'executado').length;
+  const reagendados = list.filter(s => (s.status||s.st) === 'reagendado').length;
+  const cancelados = list.filter(s => (s.status||s.st) === 'cancelado').length;
+  const atrasados = isPast ? list.filter(s => (s.status||s.st) === 'agendado').length : 0;
+  const pendentes = Math.max(0, total - executados - reagendados - cancelados);
+  const semEquipe = list.filter(s => !serviceTemEquipe(s)).length;
+  const pctExec = total ? Math.round(executados / total * 100) : 0;
+  let status = 'free';
+  if (total > 0) {
+    if (atrasados > 0) status = 'late';
+    else if (pendentes > 0 || semEquipe > 0 || reagendados > 0) status = 'warn';
+    else status = 'ok';
+  }
+  if (dt === today) status = status === 'free' ? 'today' : status;
+  return { total, executados, pendentes, atrasados, reagendados, cancelados, semEquipe, pctExec, status };
+}
+
+function dayMatchesQuickFilter(metrics, dt, today) {
+  switch (agQuickFilter) {
+    case 'hoje': return dt === today;
+    case 'atraso': return metrics.atrasados > 0;
+    case 'pendentes': return metrics.pendentes > 0 || metrics.semEquipe > 0;
+    case 'executados': return metrics.total > 0 && metrics.executados === metrics.total;
+    case 'livres': return metrics.total === 0;
+    default: return true;
+  }
+}
+
+function dayStatusLabel(metrics, dt, today) {
+  if (dt === today) return 'Hoje';
+  if (metrics.total === 0) return 'Livre';
+  if (metrics.atrasados > 0) return 'Atraso';
+  if (metrics.pendentes > 0 || metrics.semEquipe > 0) return 'Atenção';
+  return 'Ok';
+}
+
+function dayStatusClass(metrics, dt, today) {
+  if (dt === today) return 'today';
+  if (metrics.total === 0) return 'free';
+  if (metrics.atrasados > 0) return 'late';
+  if (metrics.pendentes > 0 || metrics.semEquipe > 0 || metrics.reagendados > 0) return 'warn';
+  return 'ok';
+}
+
+function compactServiceMonthLine(s, today) {
+  const dt = getServiceDateValue(s) || '';
+  const st = s.status || s.st || 'agendado';
+  const late = st === 'agendado' && dt && dt < today;
+  const cls = late ? 'late' : st === 'executado' ? 'exec' : (st === 'reagendado' || !serviceTemEquipe(s)) ? 'warn' : '';
+  const hora = (s.horario || s.hr || '').slice(0,5);
+  const tipo = tipoComboLabel(s) || s.tipoServico || s.sc || '';
+  const cliente = sanitize(s.cliente || s.cl || '—');
+  return `<div class="cal-mini-svc ${cls}">${hora ? sanitize(hora) + ' ' : ''}${sanitize(tipo).slice(0,8)} ${cliente.slice(0,18)}</div>`;
+}
+
 // ── Vista Calendário Mensal ───────────────────────────────
 function renderAgendaData(svcs, today) {
   const container = document.getElementById('ag-data-grupos');
@@ -5407,6 +5499,167 @@ function renderAgendaData(svcs, today) {
   const MNAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const DOWS   = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+  {
+    const dayMap    = {};
+    const dayMapAll = {};
+
+    svcs.forEach(s => {
+      const dt = getServiceDateValue(s);
+      if (!dt) return;
+      const dd = new Date(dt + 'T12:00:00');
+      if (dd.getFullYear() === calYear && dd.getMonth() === calMonth) {
+        if (!dayMap[dt]) dayMap[dt] = [];
+        dayMap[dt].push(s);
+      }
+    });
+    services.forEach(s => {
+      const dt = getServiceDateValue(s);
+      if (!dt) return;
+      const dd = new Date(dt + 'T12:00:00');
+      if (dd.getFullYear() === calYear && dd.getMonth() === calMonth) {
+        if (!dayMapAll[dt]) dayMapAll[dt] = [];
+        dayMapAll[dt].push(s);
+      }
+    });
+
+    const allMonthSvcs = Object.values(dayMapAll).flat();
+    const totalMes     = allMonthSvcs.length;
+    const diasComSvc   = Object.keys(dayMapAll).length;
+    const maxDia       = diasComSvc ? Math.max(...Object.values(dayMapAll).map(a => a.length)) : 0;
+    const execMes      = allMonthSvcs.filter(s => (s.status||s.st) === 'executado').length;
+    const reagMes      = allMonthSvcs.filter(s => (s.status||s.st) === 'reagendado').length;
+    const atrasMes     = Object.entries(dayMapAll).reduce((sum,[dt,list]) => sum + getDayMetrics(list, dt, today).atrasados, 0);
+    const pendMes      = Object.entries(dayMapAll).reduce((sum,[dt,list]) => sum + getDayMetrics(list, dt, today).pendentes, 0);
+    const pctExec      = totalMes ? Math.round(execMes/totalMes*100) : 0;
+
+    const firstDay  = new Date(calYear, calMonth, 1);
+    const startDow  = firstDay.getDay();
+    const totalDays = new Date(calYear, calMonth + 1, 0).getDate();
+
+    const dowRow = DOWS.map((d, i) =>
+      `<div class="cal-dow${i===0||i===6?' weekend':''}">${d}</div>`
+    ).join('');
+
+    let cells = '';
+    for (let i = 0; i < startDow; i++) {
+      const pd = new Date(calYear, calMonth, i - startDow + 1);
+      cells += `<div class="cal-cell other-month"><div class="cal-day-num">${pd.getDate()}</div></div>`;
+    }
+
+    for (let d = 1; d <= totalDays; d++) {
+      const dt       = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const daySvcs  = dayMap[dt]    || [];
+      const dayAll   = dayMapAll[dt] || [];
+      const metrics  = getDayMetrics(dayAll, dt, today);
+      const filteredMetrics = getDayMetrics(daySvcs, dt, today);
+      const quickMatch = dayMatchesQuickFilter(metrics, dt, today);
+      const isToday  = dt === today;
+      const dow      = new Date(dt+'T12:00:00').getDay();
+      const statusClass = dayStatusClass(metrics, dt, today);
+      const sorted   = [...daySvcs].sort((a,b) =>
+        (a.horario||a.hr||'99:99').localeCompare(b.horario||b.hr||'99:99'));
+      const visible  = quickMatch ? sorted.slice(0,3) : [];
+      const miniHtml = visible.map(s => compactServiceMonthLine(s, today)).join('');
+      const moreTag  = quickMatch && sorted.length > 3
+        ? `<div class="cal-more">+${sorted.length-3} serviços</div>` : '';
+      const statusLabel = dayStatusLabel(metrics, dt, today);
+      const displayTotal = quickMatch ? daySvcs.length : 0;
+      const displayMetrics = quickMatch ? filteredMetrics : { executados:0, pendentes:0, atrasados:0, reagendados:0, pctExec:0 };
+      const cellClick = metrics.total > 0
+        ? `onclick="showDayDetail('${dt}')"`
+        : `onclick="openNewSvcData('${dt}')"`;
+      const title = metrics.total > 0
+        ? `${metrics.total} serviço(s) · ${metrics.executados} executado(s) · ${metrics.pendentes} pendente(s)${metrics.atrasados ? ' · '+metrics.atrasados+' atrasado(s)' : ''}`
+        : 'Dia livre · clique para agendar';
+      let cellClass = `cal-cell ${metrics.total ? 'has-svc' : 'cal-free'} cal-${statusClass}`;
+      if (isToday) cellClass += ' today';
+      if (dow === 0 || dow === 6) cellClass += ' weekend';
+      if (!quickMatch) cellClass += ' cal-filtered-out';
+
+      cells += `<div class="${cellClass}" ${cellClick} title="${sanitize(title)}">
+        <div class="cal-day-header">
+          <div class="cal-day-num">${d}</div>
+          <div class="cal-day-status ${statusClass}">${statusLabel}</div>
+        </div>
+        ${quickMatch && metrics.total > 0 ? `
+          <div class="cal-day-main">
+            <div class="cal-day-count">${displayTotal}<span>serviços</span></div>
+            <div class="cal-day-metrics">
+              <span class="cal-metric exec">✓ ${displayMetrics.executados}</span>
+              <span class="cal-metric pend">• ${displayMetrics.pendentes}</span>
+              ${displayMetrics.atrasados ? `<span class="cal-metric late">! ${displayMetrics.atrasados}</span>` : ''}
+              ${displayMetrics.reagendados ? `<span class="cal-metric reag">↻ ${displayMetrics.reagendados}</span>` : ''}
+            </div>
+          </div>
+          <div class="cal-progress"><div class="cal-progress-fill" style="width:${displayMetrics.pctExec}%"></div></div>
+          <div class="cal-mini-list">${miniHtml}${moreTag}</div>
+        ` : `
+          <div class="cal-livre-tag">${quickMatch ? 'Livre' : 'Fora do filtro'}</div>
+          ${quickMatch ? '<div class="cal-livre-action">+ Agendar</div>' : ''}
+        `}
+      </div>`;
+    }
+
+    const totalCells = startDow + totalDays;
+    const fillEnd    = totalCells % 7 ? 7 - (totalCells % 7) : 0;
+    for (let i = 1; i <= fillEnd; i++) {
+      cells += `<div class="cal-cell other-month"><div class="cal-day-num">${i}</div></div>`;
+    }
+
+    const isCurrentMonth = (calMonth === new Date().getMonth() && calYear === new Date().getFullYear());
+    const quicks = [
+      ['todos','Todos'],
+      ['hoje','Hoje'],
+      ['atraso','Com atraso'],
+      ['pendentes','Pendentes'],
+      ['executados','Executados'],
+      ['livres','Livres'],
+    ].map(([key,label]) =>
+      `<button class="cal-quick-btn ${agQuickFilter===key?'active':''}" onclick="agSetQuickFilter('${key}')">${label}</button>`
+    ).join('');
+
+    container.innerHTML = `
+      <div class="cal-shell">
+        <div class="cal-nav">
+          <button class="cal-nav-btn" onclick="calNav(-1)">← Anterior</button>
+          <div class="cal-nav-center">
+            <div class="cal-nav-title">${MNAMES[calMonth]} ${calYear}</div>
+            <div class="cal-nav-sub">${totalMes} serviço(s) · ${diasComSvc} dia(s) com agenda · pico ${maxDia}/dia</div>
+          </div>
+          <div class="cal-nav-actions">
+            ${!isCurrentMonth?`<button class="cal-nav-btn today-btn" onclick="calIrParaHoje()">Hoje</button>`:''}
+            <button class="cal-nav-btn" onclick="calNav(1)">Próximo →</button>
+          </div>
+        </div>
+
+        <div class="cal-month-stats">
+          <div class="cal-month-stat-card"><div class="cal-month-stat-val cv-blue">${totalMes}</div><div class="cal-month-stat-lbl">Serviços no mês</div></div>
+          <div class="cal-month-stat-card"><div class="cal-month-stat-val cv-green">${pctExec}%</div><div class="cal-month-stat-lbl">Execução</div></div>
+          <div class="cal-month-stat-card"><div class="cal-month-stat-val cv-orange">${pendMes}</div><div class="cal-month-stat-lbl">Pendentes</div></div>
+          <div class="cal-month-stat-card"><div class="cal-month-stat-val cv-red">${atrasMes}</div><div class="cal-month-stat-lbl">Atrasados</div></div>
+          <div class="cal-month-stat-card"><div class="cal-month-stat-val">${reagMes}</div><div class="cal-month-stat-lbl">Reagendados</div></div>
+        </div>
+
+        <div class="cal-toolbar">
+          <div class="cal-legend">
+            <div class="cal-legend-item"><span class="cal-dot ok"></span>Ok/executado</div>
+            <div class="cal-legend-item"><span class="cal-dot late"></span>Atraso</div>
+            <div class="cal-legend-item"><span class="cal-dot warn"></span>Pendente/atenção</div>
+            <div class="cal-legend-item"><span class="cal-dot today"></span>Hoje</div>
+            <div class="cal-legend-item"><span class="cal-dot free"></span>Livre</div>
+          </div>
+          <div class="cal-quick-filters">${quicks}</div>
+        </div>
+
+        <div class="cal-scroll">
+          <div class="cal-grid" style="margin-bottom:6px">${dowRow}</div>
+          <div class="cal-grid">${cells}</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
 
   // ── Mapear serviços (filtrados = para mini-lista; todos = para alertas reais) ─
   const dayMap    = {};   // com filtros aplicados
@@ -5643,6 +5896,101 @@ function showDayDetail(dt) {
   // Usa todos os serviços do dia (visão completa, sem filtros)
   const daySvcs = services.filter(s => getServiceDateValue(s) === dt);
   if (!daySvcs.length) return;
+
+  {
+    const today  = new Date().toISOString().split('T')[0];
+    const d      = new Date(dt + 'T12:00:00');
+    const brLong = d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+    const dtFormatado = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const sorted = [...daySvcs].sort((a,b) =>
+      (a.horario||a.hr||'99:99').localeCompare(b.horario||b.hr||'99:99'));
+    const metrics = getDayMetrics(sorted, dt, today);
+    const loadKind = metrics.atrasados > 0 ? 'late' : metrics.total === 0 ? '' : metrics.total > 6 || metrics.semEquipe > 0 || metrics.pendentes > 0 ? 'warn' : 'ok';
+    const loadText = metrics.atrasados > 0 ? 'Atenção' : metrics.total > 6 ? 'Alta carga' : metrics.total === 0 ? 'Livre' : 'Carga normal';
+    const pct = metrics.pctExec;
+
+    const summaryCards = [
+      ['Serviços', metrics.total, 'cv-blue'],
+      ['Executados', metrics.executados, 'cv-green'],
+      ['Pendentes', metrics.pendentes, 'cv-orange'],
+      ['Atrasados', metrics.atrasados, 'cv-red'],
+      ['Reagendados', metrics.reagendados, ''],
+    ].map(([label,value,cls]) => `
+      <div class="day-summary-card">
+        <div class="day-summary-val ${cls}">${value}</div>
+        <div class="day-summary-label">${label}</div>
+      </div>
+    `).join('');
+
+    const svcCards = sorted.map(s => {
+      const F      = sf(s);
+      const stKey  = F.status || 'agendado';
+      const stMeta = ST_META[stKey] || { label:stKey, chip:'chip-gray' };
+      const isLate = stKey === 'agendado' && dt < today;
+      const semEquipe = !F.equipe.trim();
+      const cardClass = isLate ? 'late' : stKey === 'executado' ? 'exec' : stKey === 'reagendado' ? 'reag' : '';
+      return `<div class="day-service-card ${cardClass}" onclick="closeModal();setTimeout(()=>openEditSvc(${jsArg(s.id)}),100)">
+        <div class="day-service-head">
+          <div class="day-service-name">${sanitize(F.cliente || 'Cliente não informado')}</div>
+          <div class="day-service-badges">
+            ${F.horario&&F.horario!=='—'?`<span class="day-badge">${sanitize(F.horario)}</span>`:''}
+            <span class="day-badge status">${sanitize(stMeta.label)}</span>
+            ${isLate?`<span class="day-badge" style="color:#b91c1c;background:#fef2f2;border-color:#fecaca">Atrasado</span>`:''}
+          </div>
+        </div>
+        <div class="day-service-meta">
+          <span><b>Tipo:</b> ${sanitize(F.tipoLabel || F.tipoRaw || '—')}</span>
+          ${F.os&&F.os!=='—'?`<span><b>OS:</b> ${sanitize(F.os)}</span>`:''}
+          ${semEquipe?`<span style="color:#c2410c"><b>Equipe:</b> sem equipe</span>`:`<span><b>Equipe:</b> ${sanitize(F.equipe)}</span>`}
+          ${F.veiculo?`<span><b>Veículo:</b> ${sanitize(F.veiculo)}</span>`:''}
+          <span style="margin-left:auto;color:#2563eb;font-weight:800">Editar</span>
+        </div>
+        ${F.endereco?`<div class="day-service-address">${sanitize(F.endereco)}</div>`:''}
+      </div>`;
+    }).join('');
+
+    const modal = document.getElementById('modal');
+    modal.classList.add('day-detail-modal');
+    document.getElementById('modal-title').textContent = `Agenda do dia ${dtFormatado}`;
+    document.getElementById('modal-body').innerHTML = `
+      <div class="day-modal-shell">
+        <header class="day-modal-header">
+          <div>
+            <div class="day-modal-title">${dtFormatado}</div>
+            <div class="day-modal-sub">${brLong}</div>
+          </div>
+          <span class="day-load-badge ${loadKind}">${loadText}</span>
+        </header>
+
+        <div class="day-modal-body">
+          <div class="day-summary-grid">${summaryCards}</div>
+
+          <div class="day-progress-card">
+            <div class="day-progress-head">
+              <span>Progresso de execução</span>
+              <b>${metrics.executados}/${metrics.total} executados · ${pct}%</b>
+            </div>
+            <div class="day-progress-track"><div class="day-progress-fill" style="width:${pct}%"></div></div>
+            ${metrics.atrasados ? `<div class="day-alert">${metrics.atrasados} serviço(s) agendado(s) em data passada sem execução registrada.</div>` : ''}
+          </div>
+
+          <div class="day-section-label">Serviços do dia · por horário</div>
+          <div class="day-service-list">${svcCards}</div>
+        </div>
+
+        <footer class="day-modal-footer">
+          <button class="btn btn-primary btn-sm" onclick="closeModal();irParaDia('${dt}')">Ver na tela Hoje</button>
+          <button class="btn btn-ghost btn-sm" onclick="closeModal();openNewSvcData('${dt}')">+ Serviço neste dia</button>
+          <button class="btn btn-ghost btn-sm" onclick="closeModal();irParaRoteiro('${dt}')">Roteiro</button>
+          <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
+        </footer>
+      </div>
+    `;
+    document.getElementById('modal-del').style.display = 'none';
+    currentDelId = null;
+    modal.classList.add('open');
+    return;
+  }
 
   const today  = new Date().toISOString().split('T')[0];
   const isPast = dt < today;
@@ -8468,7 +8816,7 @@ selectAuthProfile('admin');
 
 function closeModal(){
   const modal = document.getElementById('modal');
-  modal.classList.remove('open','svc-edit-modal');
+  modal.classList.remove('open','svc-edit-modal','day-detail-modal');
   currentDelId=null;
 }
 async function delRecord(){
