@@ -223,6 +223,46 @@ CREATE INDEX IF NOT EXISTS idx_checklists_date ON checklists(date);
 CREATE INDEX IF NOT EXISTS idx_checklists_motorista ON checklists(LOWER(motorista));
 CREATE INDEX IF NOT EXISTS idx_checklists_origem ON checklists(origem);
 
+CREATE TABLE IF NOT EXISTS technician_events (
+  id BIGINT PRIMARY KEY,
+  date DATE,
+  tecnico TEXT,
+  equipe TEXT,
+  service_id BIGINT,
+  tipo TEXT,
+  titulo TEXT,
+  detalhes TEXT,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  visto BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS technician_messages (
+  id BIGINT PRIMARY KEY,
+  date DATE,
+  tecnico TEXT,
+  equipe TEXT,
+  mensagem TEXT NOT NULL,
+  prioridade TEXT DEFAULT 'normal',
+  lido BOOLEAN DEFAULT false,
+  lido_em TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS visto BOOLEAN DEFAULT false;
+ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
+ALTER TABLE technician_messages ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'normal';
+ALTER TABLE technician_messages ADD COLUMN IF NOT EXISTS lido BOOLEAN DEFAULT false;
+ALTER TABLE technician_messages ADD COLUMN IF NOT EXISTS lido_em TIMESTAMP WITH TIME ZONE;
+
+CREATE INDEX IF NOT EXISTS idx_technician_events_date ON technician_events(date);
+CREATE INDEX IF NOT EXISTS idx_technician_events_tipo ON technician_events(tipo);
+CREATE INDEX IF NOT EXISTS idx_technician_events_visto ON technician_events(visto);
+CREATE INDEX IF NOT EXISTS idx_technician_messages_date ON technician_messages(date);
+CREATE INDEX IF NOT EXISTS idx_technician_messages_lido ON technician_messages(lido);
+
 -- ─── 5. customers (nova tabela) ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS customers (
@@ -304,4 +344,6 @@ UNION ALL SELECT 'technicians',  COUNT(*) FROM technicians
 UNION ALL SELECT 'vehicles',     COUNT(*) FROM vehicles
 UNION ALL SELECT 'services',     COUNT(*) FROM services
 UNION ALL SELECT 'checklists',   COUNT(*) FROM checklists
+UNION ALL SELECT 'technician_events', COUNT(*) FROM technician_events
+UNION ALL SELECT 'technician_messages', COUNT(*) FROM technician_messages
 UNION ALL SELECT 'customers',    COUNT(*) FROM customers;

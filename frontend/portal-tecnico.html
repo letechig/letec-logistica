@@ -125,7 +125,7 @@
 
     .quick-nav {
       display:grid;
-      grid-template-columns:repeat(3,1fr);
+      grid-template-columns:repeat(4,1fr);
       gap:8px;
       margin-top:14px;
     }
@@ -290,6 +290,17 @@
     }
     .history-card { padding:13px; }
     .history-card strong { display:block; margin-bottom:4px; }
+    .message-highlight {
+      margin-top:12px;
+      padding:12px;
+      border:1px solid #fed7aa;
+      border-radius:14px;
+      background:#fff7ed;
+      color:#9a3412;
+      font-size:13px;
+      font-weight:800;
+      line-height:1.35;
+    }
 
     .bottom-nav {
       position:fixed;
@@ -298,7 +309,7 @@
       transform:translateX(-50%);
       width:min(calc(100% - 24px), 720px);
       display:grid;
-      grid-template-columns:repeat(3,1fr);
+      grid-template-columns:repeat(4,1fr);
       gap:8px;
       padding:8px;
       border:1px solid rgba(219,228,239,.95);
@@ -378,7 +389,7 @@
 
     @media (max-width:430px) {
       .summary-grid { grid-template-columns:repeat(2,1fr); }
-      .quick-nav { grid-template-columns:1fr; }
+      .quick-nav { grid-template-columns:1fr 1fr; }
       .service-grid, .two-col { grid-template-columns:1fr; }
       .fuel-grid { grid-template-columns:1fr; }
       .modal-foot { grid-template-columns:1fr; }
@@ -417,8 +428,11 @@
         <nav class="quick-nav" aria-label="Atalhos do portal">
           <button id="tab-servicos" class="active" onclick="showSection('servicos')">Meus servicos</button>
           <button id="tab-checklist" onclick="showSection('checklist')">Checklist diario</button>
+          <button id="tab-recados" onclick="showSection('recados')">Recados</button>
           <button id="tab-historico" onclick="showSection('historico')">Historico do dia</button>
         </nav>
+        <button class="danger-soft" type="button" onclick="callSupport()" style="width:100%;margin-top:10px">Chamar ajuda</button>
+        <div id="message-highlight"></div>
       </div>
     </header>
 
@@ -524,11 +538,20 @@
       </div>
       <div id="history-list" class="history-list"></div>
     </section>
+
+    <section class="section" id="section-recados">
+      <div class="section-head">
+        <div class="section-title">Recados e lembretes</div>
+        <div class="section-sub">Mensagens enviadas pela operação para sua equipe.</div>
+      </div>
+      <div id="messages-list" class="history-list"></div>
+    </section>
   </main>
 
   <nav class="bottom-nav" aria-label="Navegacao principal">
     <button class="active" data-bottom="servicos" onclick="showSection('servicos')">Servicos</button>
     <button data-bottom="checklist" onclick="showSection('checklist')">Checklist</button>
+    <button data-bottom="recados" onclick="showSection('recados')">Recados</button>
     <button data-bottom="historico" onclick="showSection('historico')">Historico</button>
   </nav>
 
@@ -573,6 +596,7 @@
       data: params.get('data') || new Date().toISOString().slice(0, 10),
       veiculo: params.get('veiculo') || '',
       equipe: params.get('equipe') || '',
+      suporte: (params.get('suporte') || '').replace(/\D/g, ''),
     };
 
     const QUEUE_KEY = 'letec_portal_tecnico_queue';
@@ -585,6 +609,8 @@
       technicians: [],
       vehicles: [],
       checklists: [],
+      messages: [],
+      events: [],
       activeSection: 'servicos',
       finalDailyState: 'ok',
       finishState: 'ok',
@@ -668,6 +694,12 @@
           } else if (item.type === 'checklist-insert') {
             const { error } = await supabaseClient.from('checklists').insert([item.record]);
             if (error) throw error;
+          } else if (item.type === 'event-insert') {
+            const { error } = await supabaseClient.from('technician_events').insert([item.record]);
+            if (error) throw error;
+          } else if (item.type === 'message-read') {
+            const { error } = await supabaseClient.from('technician_messages').update(item.payload).eq('id', item.id);
+            if (error) throw error;
           }
         } catch(e) {
           remaining.push(item);
@@ -698,6 +730,42 @@
     function serviceTypes(s) {
       if (Array.isArray(s.tipos) && s.tipos.length) return s.tipos.join(', ');
       return s.tiposervico || s.tipoServico || s.sc || 'Servico';
+    }
+
+    function currentPortalLink() {
+      return window.location.href;
+    }
+
+    function messageMatchesPortal(msg) {
+      const target = normalizeText(`${msg.tecnico || ''} ${msg.equipe || ''}`);
+      if (!target) return true;
+      const tech = normalizeText(portal.tecnico);
+      const equipe = normalizeText(portal.equipe);
+      return (tech && target.includes(tech)) || (equipe && target.includes(equipe)) || (tech && tech.includes(target));
+    }
+
+    async function recordEvent(tipo, titulo, detalhes = '', service = null, gps = null) {
+      const rec = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        date: portal.data,
+        tecnico: portal.tecnico,
+        equipe: portal.equipe || portal.tecnico,
+        service_id: service?.id ? Number(service.id) : null,
+        tipo,
+        titulo,
+        detalhes,
+        lat: gps ? gps.lat : null,
+        lng: gps ? gps.lng : null,
+        visto: false,
+      };
+      try {
+        const { error } = await supabaseClient.from('technician_events').insert([rec]);
+        if (error) throw error;
+        state.events.unshift(rec);
+        renderHistory();
+      } catch(e) {
+        addQueue({ type:'event-insert', record:rec });
+      }
     }
 
     function execStatus(s) {
@@ -737,19 +805,25 @@
     async function loadData() {
       setSyncState();
       try {
-        const [tecRes, veiRes, svcRes, clRes] = await Promise.all([
+        const [tecRes, veiRes, svcRes, clRes, msgRes, evRes] = await Promise.all([
           supabaseClient.from('technicians').select('*').order('nome'),
           supabaseClient.from('vehicles').select('*').order('nome'),
           supabaseClient.from('services').select('*').or(`date.eq.${portal.data},data.eq.${portal.data}`).order('horario', { ascending:true }),
-          supabaseClient.from('checklists').select('*').eq('date', portal.data).order('created_at', { ascending:false })
+          supabaseClient.from('checklists').select('*').eq('date', portal.data).order('created_at', { ascending:false }),
+          supabaseClient.from('technician_messages').select('*').or(`date.eq.${portal.data},lido.eq.false`).order('created_at', { ascending:false }),
+          supabaseClient.from('technician_events').select('*').eq('date', portal.data).order('created_at', { ascending:false })
         ]);
         if (tecRes.error) throw tecRes.error;
         if (veiRes.error) throw veiRes.error;
         if (svcRes.error) throw svcRes.error;
         if (clRes.error) throw clRes.error;
+        if (msgRes.error) console.warn('Recados indisponíveis:', msgRes.error.message || msgRes.error);
         state.technicians = tecRes.data || [];
         state.vehicles = (veiRes.data || []).filter(v => v.ativo !== false);
+        if (evRes.error) console.warn('Historico indisponivel:', evRes.error.message || evRes.error);
         state.checklists = clRes.data || [];
+        state.messages = msgRes.error ? [] : (msgRes.data || []).filter(messageMatchesPortal);
+        state.events = evRes.error ? [] : (evRes.data || []).filter(messageMatchesPortal);
         matchTechnician();
         state.services = (svcRes.data || []).filter(serviceMatchesPortal);
         renderAll();
@@ -770,6 +844,7 @@
       renderFuel();
       renderEquipment();
       renderChecklistDefaults();
+      renderMessages();
       renderHistory();
     }
 
@@ -847,6 +922,7 @@
     }
 
     async function markArrived(id) {
+      const s = state.services.find(item => String(item.id) === String(id));
       const gps = await getGps();
       const payload = {
         exec_status:'cheguei',
@@ -856,6 +932,7 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
+      await recordEvent('chegada', 'Chegada registrada', `${s?.cliente || 'Serviço'} - ${s?.endereco || ''}`, s, gps);
       addHistory('Chegada registrada no servico.');
     }
 
@@ -869,6 +946,7 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, 'Servico iniciado.');
+      await recordEvent('inicio', 'Serviço iniciado', s?.cliente || 'Serviço iniciado', s, null);
       addHistory('Inicio de servico registrado.');
     }
 
@@ -920,6 +998,13 @@
       updateLocalService(id, payload);
       closeFinishModal();
       await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
+      await recordEvent(
+        state.finishState === 'ok' ? 'finalizacao' : 'problema',
+        state.finishState === 'ok' ? 'Serviço finalizado' : 'Problema registrado',
+        state.finishState === 'ok' ? (s?.cliente || 'Serviço finalizado') : problemText,
+        s,
+        null
+      );
       addHistory(state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado no servico.');
     }
 
@@ -929,6 +1014,61 @@
       document.getElementById(`section-${section}`).classList.add('active');
       document.querySelectorAll('.quick-nav button').forEach(btn => btn.classList.toggle('active', btn.id === `tab-${section}`));
       document.querySelectorAll('.bottom-nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.bottom === section));
+    }
+
+    async function callSupport() {
+      const gps = await getGps();
+      const active = state.services.find(s => ['cheguei','em_execucao'].includes(execStatus(s))) || state.services[0] || null;
+      const location = gps ? `\nLocalização: https://maps.google.com/?q=${encodeURIComponent(`${gps.lat},${gps.lng}`)}` : '';
+      const msg = `Pedido de ajuda - Portal do Técnico
+Técnico/equipe: ${portal.tecnico}
+Data: ${portal.data}
+Serviço: ${active ? `${active.cliente || 'Cliente'} - ${active.endereco || 'sem endereço'}` : 'sem serviço selecionado'}
+Status: ${active ? statusLabel(execStatus(active)) : 'sem status'}
+Portal: ${currentPortalLink()}${location}`;
+      await recordEvent('ajuda', 'Pedido de ajuda', msg, active, gps);
+      const target = portal.suporte ? `55${portal.suporte.replace(/^55/, '')}` : '';
+      const url = target
+        ? `https://wa.me/${target}?text=${encodeURIComponent(msg)}`
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
+    }
+
+    function renderMessages() {
+      const highlight = document.getElementById('message-highlight');
+      const list = document.getElementById('messages-list');
+      const unread = state.messages.filter(m => !m.lido);
+      const high = unread.find(m => m.prioridade === 'alta');
+      if (highlight) {
+        highlight.innerHTML = high ? `<div class="message-highlight">Recado importante: ${escapeHtml(high.mensagem || '')}</div>` : '';
+      }
+      if (!list) return;
+      if (!state.messages.length) {
+        list.innerHTML = '<div class="empty">Nenhum recado para hoje.</div>';
+        return;
+      }
+      list.innerHTML = state.messages.map(msg => `
+        <div class="history-card" style="border-left:5px solid ${msg.prioridade === 'alta' ? 'var(--warning)' : 'var(--primary)'}">
+          <strong>${msg.prioridade === 'alta' ? 'Importante' : 'Recado'} · ${new Date(msg.created_at || Date.now()).toLocaleString('pt-BR')}</strong>
+          <div class="meta">${escapeHtml(msg.mensagem || '')}</div>
+          <div style="margin-top:10px">
+            ${msg.lido ? '<span class="status-badge finalizado">Lido</span>' : `<button class="secondary" type="button" onclick="markMessageRead('${escapeHtml(String(msg.id))}')">Marcar como lido</button>`}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function markMessageRead(id) {
+      const payload = { lido:true, lido_em:nowIso() };
+      state.messages = state.messages.map(m => String(m.id) === String(id) ? { ...m, ...payload } : m);
+      renderMessages();
+      try {
+        const { error } = await supabaseClient.from('technician_messages').update(payload).eq('id', id);
+        if (error) throw error;
+      } catch(e) {
+        addQueue({ type:'message-read', id, payload });
+        toast('Leitura salva neste celular para sincronizar.', 'warn');
+      }
     }
 
     function renderVehicles() {
@@ -1051,6 +1191,7 @@
         const { error } = await supabaseClient.from('checklists').insert([rec]);
         if (error) throw error;
         toast('Checklist salvo com sucesso.', 'ok');
+        await recordEvent('checklist', 'Checklist diário salvo', `${vei} - ${motorista}`, null, null);
         addHistory('Checklist diario salvo.');
         state.checklists.unshift(rec);
         renderHistory();
@@ -1067,10 +1208,18 @@
     function renderHistory() {
       const list = document.getElementById('history-list');
       const local = loadHistory().filter(item => item.date === portal.data && normalizeText(item.tecnico) === normalizeText(portal.tecnico));
+      const events = (state.events || []).map(ev => ({
+        id: ev.id,
+        at: ev.created_at || ev.date,
+        text: `${ev.titulo || ev.tipo || 'Evento'}${ev.detalhes ? ': ' + ev.detalhes : ''}`,
+        source: 'Supabase'
+      }));
       const checks = state.checklists
         .filter(c => normalizeText(c.motorista) === normalizeText(portal.tecnico) || !portal.tecnico)
         .map(c => ({ id:c.id, at:c.created_at || c.date, text:`Checklist ${c.origem === 'portal_tecnico' ? 'do portal' : 'administrativo'} salvo para ${c.vei || 'veiculo nao informado'}.` }));
-      const rows = [...local, ...checks].slice(0, 20);
+      const rows = [...events, ...local, ...checks]
+        .sort((a,b) => new Date(b.at || 0) - new Date(a.at || 0))
+        .slice(0, 30);
       if (!rows.length) {
         list.innerHTML = '<div class="empty">Nenhum historico registrado ainda.</div>';
         return;

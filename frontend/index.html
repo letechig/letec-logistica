@@ -2727,7 +2727,10 @@ async function carregarVeiculos(){
         <button class="btn btn-green" onclick="rotWhatsAppTudo()">📱 Enviar tudo para WhatsApp</button>
         <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">📋 Copiar Tudo</button>
         <button class="btn btn-ghost btn-sm" onclick="rotCopiarLinksPortais()">🔗 Copiar links dos portais</button>
+        <input type="tel" class="finput" id="rot-suporte-whats" placeholder="WhatsApp suporte: 5511999999999" onchange="rotSalvarSuporteWhatsApp()" style="max-width:260px">
       </div>
+
+      <div id="field-ops-panel" style="display:none;margin-bottom:18px"></div>
 
       <div id="rot-sugestao-wrap" style="display:none;margin-bottom:20px">
         <div class="section-title" style="font-size:18px;margin-bottom:4px">Sugestão de Rota</div>
@@ -4592,6 +4595,8 @@ async function carregarServicesDoSupabase() {
 
 let persistedServices = [];
 let clRecords = [];      // check list records
+let technicianEvents = [];
+let technicianMessages = [];
 
 async function carregarChecklistsDoSupabase() {
   try {
@@ -5786,6 +5791,38 @@ function dayMatchesQuickFilter(metrics, dt, today) {
   }
 }
 
+async function carregarEventosCampoDoSupabase() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('technician_events')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(80);
+    if (error) throw error;
+    technicianEvents = data || [];
+    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'roteiro') renderFieldOpsPanel();
+  } catch(e) {
+    console.warn('Eventos de campo indisponíveis:', e.message || e);
+    technicianEvents = [];
+  }
+}
+
+async function carregarRecadosTecnicosDoSupabase() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('technician_messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(120);
+    if (error) throw error;
+    technicianMessages = data || [];
+    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'roteiro') renderFieldOpsPanel();
+  } catch(e) {
+    console.warn('Recados de técnicos indisponíveis:', e.message || e);
+    technicianMessages = [];
+  }
+}
+
 function dayStatusLabel(metrics, dt, today) {
   if (dt === today) return 'Hoje';
   if (metrics.total === 0) return 'Livre';
@@ -6599,6 +6636,7 @@ function openEditSvc(id) {
             <div class="svc-edit-summary-name">${sanitize(clienteNome || 'Cliente não informado')}</div>
             <div class="svc-edit-summary-meta">${sanitize(formatEditServiceDate(dtValue))}${hrValue ? ` · ${sanitize(hrValue)}` : ''} · OS ${sanitize(osValue || '—')}</div>
             ${enderecoResumo ? `<div class="svc-edit-summary-address">${sanitize(enderecoResumo)}</div>` : ''}
+            ${renderExecutionMini(s)}
           </div>
           <span id="ed-status-badge" class="svc-status-badge st-${sanitize(visualStatus)}">${sanitize(editServiceStatusLabel(visualStatus))}</span>
         </div>
@@ -7342,6 +7380,7 @@ function renderHoje() {
             </div>
             ${badges ? `<div class="team-svc-alerts">${badges}</div>` : ''}
             ${F.endereco ? `<div class="team-svc-address">📍 ${sanitize(F.endereco)}</div>` : ''}
+            ${renderExecutionMini(s)}
             <div class="team-svc-actions" onclick="event.stopPropagation()">
               ${!isExec ? `<button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Executado</button>` : `<span class="team-svc-done">✓ Concluído</span>`}
               ${isAgend ? `<button class="svc-btn reagend" onclick="setSt(${jsArg(s.id)},'reagendado');renderHoje()">Reagendar</button>` : ''}
@@ -9217,6 +9256,8 @@ function rotInit() {
   const today = new Date().toISOString().split('T')[0];
   const el = document.getElementById('rot-data');
   if (el && !el.value) el.value = today;
+  const suporte = document.getElementById('rot-suporte-whats');
+  if (suporte && !suporte.value) suporte.value = localStorage.getItem('letec_suporte_whatsapp') || '';
 }
 
 function rotVeiculoPreferencial(servicos, fallback = '') {
@@ -9656,6 +9697,30 @@ function rotPortalBaseUrl() {
   return `${base}/portal-tecnico.html`;
 }
 
+function rotSuporteWhatsApp() {
+  const el = document.getElementById('rot-suporte-whats');
+  const value = (el?.value || localStorage.getItem('letec_suporte_whatsapp') || '').replace(/\D/g, '');
+  return value;
+}
+
+function rotSalvarSuporteWhatsApp() {
+  const value = rotSuporteWhatsApp();
+  if (value) localStorage.setItem('letec_suporte_whatsapp', value);
+  else localStorage.removeItem('letec_suporte_whatsapp');
+  const el = document.getElementById('rot-suporte-whats');
+  if (el) el.value = value;
+  toast(value ? 'WhatsApp de suporte salvo' : 'WhatsApp de suporte removido', value ? 'ok' : 'warn');
+  if (rotDados.length) {
+    const data = document.getElementById('rot-data')?.value;
+    rotDados = rotDados.map(eq => ({
+      ...eq,
+      portalLink: rotMontarLinkPortal(eq, data),
+      portalText: rotMontarTextoPortal(eq, data)
+    }));
+    rotRenderizarLocal(rotDados, data);
+  }
+}
+
 function rotPortalTecnicoNome(eq) {
   const nome = String(eq?.equipe || '').replace(/^⚠\s*/, '').trim();
   return nome || 'Tecnico';
@@ -9672,6 +9737,8 @@ function rotMontarLinkPortal(eq, data) {
   params.set('data', data || document.getElementById('rot-data')?.value || new Date().toISOString().split('T')[0]);
   if (eq.veiculo && eq.veiculo !== '—') params.set('veiculo', eq.veiculo);
   params.set('equipe', rotPortalTecnicoNome(eq));
+  const suporte = rotSuporteWhatsApp();
+  if (suporte) params.set('suporte', suporte);
   return `${rotPortalBaseUrl()}?${params.toString()}`;
 }
 
@@ -9719,6 +9786,7 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-empty').style.display = 'block';
       document.getElementById('rot-sugestao-grid').innerHTML = '';
       document.getElementById('rot-equipes-grid').innerHTML = '';
+      renderFieldOpsPanel(data);
       return;
     }
 
@@ -9755,6 +9823,7 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-kpi-tempo').textContent    = formatarMinutosHM(tempoTotal);
     document.getElementById('rot-kpi-km').textContent       = `${kmTotal} km`;
 
+    renderFieldOpsPanel(data);
     rotRenderizarSugestoes(rotDados);
     rotRenderizarLocal(rotDados, data);
   } catch (e) {
@@ -9767,6 +9836,123 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-sugestao-grid').innerHTML = '';
     document.getElementById('rot-equipes-grid').innerHTML = '';
     toast(`Erro ao gerar roteiro: ${e.message || e}`, 'err');
+  }
+}
+
+function execStatusMeta(s) {
+  const raw = String(s?.exec_status || '').trim() || ((s?.status || s?.st) === 'executado' ? 'finalizado' : 'agendado');
+  const map = {
+    agendado: { label:'A caminho/Agendado', chip:'chip-blue', color:'var(--blue2)' },
+    cheguei: { label:'Cheguei', chip:'chip-blue', color:'var(--blue2)' },
+    em_execucao: { label:'Em execução', chip:'chip-yellow', color:'var(--orange)' },
+    finalizado: { label:'Finalizado', chip:'chip-green', color:'var(--green)' },
+    problema: { label:'Problema', chip:'chip-red', color:'var(--red)' }
+  };
+  return { key: raw, ...(map[raw] || map.agendado) };
+}
+
+function fmtPortalDateTime(value) {
+  if (!value) return '—';
+  try { return new Date(value).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
+  catch(e) { return String(value); }
+}
+
+function renderExecutionMini(s) {
+  const meta = execStatusMeta(s);
+  const maps = s.chegada_lat && s.chegada_lng
+    ? `<a href="https://maps.google.com/?q=${encodeURIComponent(`${s.chegada_lat},${s.chegada_lng}`)}" target="_blank" onclick="event.stopPropagation()" style="color:var(--blue2);font-weight:700;text-decoration:none">Ver localização</a>`
+    : '';
+  const parts = [
+    `<span class="chip ${meta.chip}">${meta.label}</span>`,
+    s.chegada_hora ? `<span>Chegada: ${fmtPortalDateTime(s.chegada_hora)}</span>` : '',
+    s.inicio_hora ? `<span>Início: ${fmtPortalDateTime(s.inicio_hora)}</span>` : '',
+    s.fim_hora ? `<span>Fim: ${fmtPortalDateTime(s.fim_hora)}</span>` : '',
+    Number.isFinite(Number(s.tempo_espera)) ? `<span>Espera: ${s.tempo_espera}min</span>` : '',
+    Number.isFinite(Number(s.tempo_execucao)) ? `<span>Execução: ${s.tempo_execucao}min</span>` : '',
+    maps,
+    s.problema_descricao ? `<span style="color:var(--red);font-weight:700">Problema: ${sanitize(s.problema_descricao)}</span>` : ''
+  ].filter(Boolean).join(' · ');
+  return `<div style="margin-top:8px;font-size:10px;color:var(--text2);line-height:1.7">${parts}</div>`;
+}
+
+function renderFieldOpsPanel(data = document.getElementById('rot-data')?.value) {
+  const el = document.getElementById('field-ops-panel');
+  if (!el) return;
+  const date = data || new Date().toISOString().split('T')[0];
+  const eventos = (technicianEvents || []).filter(ev => !ev.date || ev.date === date).slice(0, 12);
+  const recados = (technicianMessages || []).filter(msg => !msg.date || msg.date === date).slice(0, 8);
+  el.style.display = '';
+  el.innerHTML = `
+    <div class="grid-2" style="align-items:start">
+      <div class="card" style="padding:14px">
+        <div class="flex ic sb mb2">
+          <div>
+            <div class="card-label">Notificações de Campo</div>
+            <div class="section-sub" style="font-size:11px">Chegadas, problemas, ajuda e checklists do portal.</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="carregarEventosCampoDoSupabase()">Atualizar</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${eventos.length ? eventos.map(ev => `
+            <div style="padding:10px;border:1px solid var(--border);border-radius:var(--r2);background:${ev.visto ? 'var(--bg2)' : 'var(--blue-bg)'}">
+              <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+                <div>
+                  <div style="font-weight:800;font-size:12px;color:var(--text)">${sanitize(ev.titulo || ev.tipo || 'Evento')}</div>
+                  <div style="font-size:11px;color:var(--text2);margin-top:2px">${sanitize(ev.tecnico || ev.equipe || 'Equipe')} · ${fmtPortalDateTime(ev.created_at)}</div>
+                </div>
+                ${ev.visto ? '<span class="chip chip-gray">Visto</span>' : `<button class="btn btn-ghost btn-xs" onclick="marcarEventoCampoVisto(${jsArg(ev.id)})">Marcar visto</button>`}
+              </div>
+              ${ev.detalhes ? `<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.45">${sanitize(ev.detalhes)}</div>` : ''}
+              ${ev.lat && ev.lng ? `<a href="https://maps.google.com/?q=${encodeURIComponent(`${ev.lat},${ev.lng}`)}" target="_blank" style="display:inline-flex;margin-top:6px;font-size:11px;color:var(--blue2);font-weight:700;text-decoration:none">Ver localização</a>` : ''}
+            </div>
+          `).join('') : '<div class="text-muted" style="padding:10px">Sem notificações nesta data.</div>'}
+        </div>
+      </div>
+      <div class="card" style="padding:14px">
+        <div class="card-label mb2">Recados / Lembretes</div>
+        <div class="form-row fr-2 mb2">
+          <div class="field"><label>Data</label><input type="date" id="msg-date" value="${escapeHtmlAttr(date)}"></div>
+          <div class="field"><label>Técnico/equipe</label><input type="text" id="msg-equipe" placeholder="Ex: Igor ou Equipe 1"></div>
+        </div>
+        <div class="form-row fr-2 mb2">
+          <div class="field"><label>Prioridade</label><select id="msg-prioridade"><option value="normal">Normal</option><option value="alta">Alta</option></select></div>
+          <div class="field"><label>Mensagem</label><input type="text" id="msg-texto" placeholder="Recado para o portal do técnico"></div>
+        </div>
+        <button class="btn btn-primary btn-sm mb3" onclick="salvarRecadoTecnico()">Enviar recado</button>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          ${recados.length ? recados.map(msg => `<div style="padding:9px;border:1px solid var(--border);border-radius:var(--r2);background:${msg.prioridade === 'alta' ? 'var(--orange-bg)' : 'var(--bg2)'}">
+            <div style="font-size:11px;font-weight:800;color:var(--text)">${sanitize(msg.tecnico || msg.equipe || 'Todos')} ${msg.lido ? '<span class="chip chip-green">Lido</span>' : '<span class="chip chip-orange">Pendente</span>'}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px">${sanitize(msg.mensagem || '')}</div>
+          </div>`).join('') : '<div class="text-muted">Nenhum recado nesta data.</div>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function marcarEventoCampoVisto(id) {
+  try {
+    const { error } = await supabaseClient.from('technician_events').update({ visto:true }).eq('id', id);
+    if (error) throw error;
+    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, visto:true } : ev);
+    renderFieldOpsPanel();
+  } catch(e) { toast('Erro ao marcar evento como visto', 'err'); }
+}
+
+async function salvarRecadoTecnico() {
+  const date = document.getElementById('msg-date')?.value || document.getElementById('rot-data')?.value;
+  const equipe = document.getElementById('msg-equipe')?.value.trim();
+  const mensagem = document.getElementById('msg-texto')?.value.trim();
+  const prioridade = document.getElementById('msg-prioridade')?.value || 'normal';
+  if (!date || !mensagem) { toast('Preencha data e mensagem do recado', 'err'); return; }
+  const rec = { id:Date.now(), date, tecnico:equipe || '', equipe:equipe || '', mensagem, prioridade, lido:false };
+  try {
+    const { error } = await supabaseClient.from('technician_messages').insert([rec]);
+    if (error) throw error;
+    technicianMessages.unshift(rec);
+    toast('Recado enviado para o portal', 'ok');
+    renderFieldOpsPanel(date);
+  } catch(e) {
+    toast('Erro ao enviar recado: ' + (e.message || e), 'err');
   }
 }
 
@@ -9922,6 +10108,7 @@ function rotRenderizarLocal(equipes, data) {
                       <span style="font-family:var(--mono);font-size:10px;color:var(--text3);min-width:52px;flex-shrink:0">${item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined ? formatarHoraDoDia(item.horarioAgendadoMin) : '—'}</span>
                       <div style="flex:1;min-width:0">
                         <div style="font-family:var(--mono);font-size:10px;color:${cor}">${F.tipo||'—'}${F.os&&F.os!=='—'?' · OS '+F.os:''}${item.bairro ? ` · ${item.bairro}` : ''}</div>
+                        ${renderExecutionMini(item.servico)}
                       </div>
                       <span class="chip ${st.chip}" style="font-size:9px;flex-shrink:0">${st.label}</span>
                     </div>`;
@@ -11012,9 +11199,19 @@ window.addEventListener('load', async () => {
   bindAuthEvents();
   const autenticado = await checkAuth();
   if(!autenticado) return;
-  await carregarCatalogosServico();
-  await carregarServicesDoSupabase();
-  await carregarChecklistsDoSupabase();
+    await carregarCatalogosServico();
+    await carregarServicesDoSupabase();
+    await carregarChecklistsDoSupabase();
+    await carregarEventosCampoDoSupabase();
+    await carregarRecadosTecnicosDoSupabase();
+    if (!window._fieldOpsPolling) {
+      window._fieldOpsPolling = setInterval(() => {
+        if (currentPage === 'roteiro') {
+          carregarEventosCampoDoSupabase();
+          carregarRecadosTecnicosDoSupabase();
+        }
+      }, 60000);
+    }
 });
 </script>
 </body>
