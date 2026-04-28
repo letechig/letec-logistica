@@ -1587,6 +1587,141 @@ td.bold { color: var(--text); font-weight: 600; }
   .modal-bg { align-items: flex-end !important; padding: 0 !important; }
 }
 
+/* ─── DASHBOARD OPERACIONAL ───────────────────── */
+.dash-op-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:14px;
+  margin-bottom:18px;
+}
+.dash-op-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.dash-op-critical {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:14px;
+  align-items:center;
+  padding:14px 16px;
+  margin-bottom:16px;
+  border:1px solid rgba(148,163,184,.18);
+  border-left:4px solid var(--green);
+  border-radius:14px;
+  background:var(--card);
+  box-shadow:0 10px 28px rgba(15,23,42,.06);
+}
+.dash-op-critical.has-risk { border-left-color:var(--red); background:linear-gradient(90deg,rgba(220,38,38,.055),var(--card) 48%); }
+.dash-op-critical-title { font-family:var(--display); font-size:14px; font-weight:900; color:var(--text); margin-bottom:4px; }
+.dash-op-critical-sub { font-size:12px; color:var(--text3); line-height:1.45; }
+.dash-op-critical-metrics { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.dash-op-pill {
+  min-width:86px;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--bg2);
+  text-align:center;
+}
+.dash-op-pill-value { font-family:var(--mono); font-size:21px; font-weight:900; line-height:1; color:var(--text); }
+.dash-op-pill-label { margin-top:4px; font-size:10px; color:var(--text3); }
+.dash-op-btn {
+  min-height:38px;
+  padding:0 14px;
+  border-radius:10px;
+  border:1px solid var(--blue);
+  background:var(--blue);
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+  cursor:pointer;
+  box-shadow:0 10px 20px rgba(37,99,235,.16);
+}
+.dash-op-kpis {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  margin-bottom:18px;
+}
+.dash-op-kpi {
+  min-height:116px;
+  padding:16px;
+  border:1px solid rgba(148,163,184,.16);
+  border-radius:14px;
+  background:var(--card);
+  box-shadow:0 10px 26px rgba(15,23,42,.055);
+}
+.dash-op-kpi-label { font-size:11px; color:var(--text3); font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+.dash-op-kpi-value { margin-top:10px; font-family:var(--display); font-size:34px; font-weight:950; line-height:1; color:var(--text); }
+.dash-op-kpi-note { margin-top:8px; font-size:12px; color:var(--text3); }
+.dash-op-grid {
+  display:grid;
+  grid-template-columns:1.05fr 1fr 1fr 1.05fr;
+  gap:14px;
+  margin-bottom:18px;
+}
+.dash-op-card {
+  padding:16px;
+  border:1px solid rgba(148,163,184,.16);
+  border-radius:14px;
+  background:var(--card);
+  box-shadow:0 10px 26px rgba(15,23,42,.05);
+}
+.dash-op-card-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
+.dash-op-card-title { font-family:var(--display); font-size:13px; font-weight:900; color:var(--text); }
+.dash-op-count {
+  min-width:24px;
+  height:24px;
+  padding:0 8px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  color:var(--text3);
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:800;
+}
+.dash-op-list { display:flex; flex-direction:column; gap:8px; }
+.dash-op-row {
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  padding:9px 10px;
+  border-radius:10px;
+  background:var(--bg2);
+  border:1px solid rgba(148,163,184,.14);
+  font-size:12px;
+  color:var(--text2);
+  line-height:1.35;
+}
+.dash-op-row-dot { width:8px; height:8px; margin-top:4px; border-radius:99px; flex-shrink:0; background:var(--border3); }
+.dash-op-row.red .dash-op-row-dot { background:var(--red); }
+.dash-op-row.orange .dash-op-row-dot { background:var(--orange); }
+.dash-op-row.green .dash-op-row-dot { background:var(--green); }
+.dash-op-row.blue .dash-op-row-dot { background:var(--blue); }
+.dash-op-empty { padding:18px 12px; text-align:center; color:var(--green); font-size:12px; }
+.dash-op-cap-value { font-family:var(--display); font-size:32px; font-weight:950; line-height:1; }
+.dash-op-cap-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+.dash-op-cap-mini { padding:9px; border-radius:10px; background:var(--bg2); border:1px solid var(--border); text-align:center; }
+.dash-op-cap-mini b { display:block; font-family:var(--mono); font-size:18px; margin-bottom:3px; }
+.dash-op-cap-mini span { font-size:10px; color:var(--text3); }
+@media(max-width:1100px) {
+  .dash-op-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:760px) {
+  .dash-op-critical,.dash-op-grid,.dash-op-kpis { grid-template-columns:1fr; }
+  .dash-op-critical-metrics { justify-content:stretch; }
+  .dash-op-pill { flex:1; }
+}
+
 /* ─── CALENDÁRIO MENSAL (Agenda · Por Data) ──────────────── */
 .cal-shell { display:flex; flex-direction:column; gap:14px; }
 .cal-nav { display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -2135,13 +2270,13 @@ async function carregarVeiculos(){
     <!-- ═══ DASHBOARD ═══ -->
     <div id="page-dashboard" class="page active">
 
-      <!-- ── Cabeçalho + Filtro de Mês + Painel de Decisão ── -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <!-- ── Cabeçalho + Filtro de Mês ── -->
+      <div class="dash-op-head">
         <div>
           <div class="section-title">Dashboard Operacional</div>
           <div class="section-sub" id="dash-period">Ano inteiro 2026 · carregando...</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="dash-op-actions">
           <select class="fsel" id="dash-mes-filter" onchange="dashSetMes(this.value)" style="min-width:150px;font-weight:600">
             <option value="all">📅 Ano inteiro 2026</option>
             <option value="JAN">Janeiro 2026</option>
@@ -2164,32 +2299,37 @@ async function carregarVeiculos(){
       <div id="dash-decisao-rapida" style="margin-bottom:20px"></div>
 
       <!-- ── ZONA 1: KPIs principais ── -->
-      <div class="grid-kpi mb4" id="dash-kpis"></div>
+      <div class="dash-op-kpis" id="dash-kpis"></div>
 
-      <!-- ── ZONA 2: Críticos | Avisos | Capacidade ── -->
-      <div class="grid-3 mb4">
+      <!-- ── ZONA 2: Ações | Críticos | Avisos | Capacidade ── -->
+      <div class="dash-op-grid">
+        <div class="dash-op-card">
+          <div class="dash-op-card-head">
+            <div class="dash-op-card-title">Ações recomendadas</div>
+          </div>
+          <div id="dash-acoes-recomendadas"></div>
+        </div>
 
-        <!-- Problemas Críticos -->
-        <div class="card" style="border-top:3px solid var(--red)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--red)">🚨 Problemas Críticos</div>
-            <span class="chip chip-red" id="dash-alert-count" style="font-size:11px">0</span>
+        <div class="dash-op-card">
+          <div class="dash-op-card-head">
+            <div class="dash-op-card-title">Problemas críticos</div>
+            <span class="dash-op-count" id="dash-alert-count">0</span>
           </div>
           <div id="dash-alerts"></div>
         </div>
 
-        <!-- Avisos Operacionais -->
-        <div class="card" style="border-top:3px solid var(--orange)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--orange)">⚠️ Avisos Operacionais</div>
-            <span class="chip chip-orange" id="dash-aviso-count" style="font-size:11px">0</span>
+        <div class="dash-op-card">
+          <div class="dash-op-card-head">
+            <div class="dash-op-card-title">Avisos operacionais</div>
+            <span class="dash-op-count" id="dash-aviso-count">0</span>
           </div>
           <div id="dash-avisos"></div>
         </div>
 
-        <!-- Capacidade da Operação -->
-        <div class="card" style="border-top:3px solid var(--blue)">
-          <div style="font-family:var(--display);font-size:13px;font-weight:800;color:var(--blue2);margin-bottom:14px">📊 Capacidade da Equipe</div>
+        <div class="dash-op-card">
+          <div class="dash-op-card-head">
+            <div class="dash-op-card-title">Capacidade da equipe</div>
+          </div>
           <div id="dash-capacidade"></div>
         </div>
       </div>
@@ -4800,6 +4940,14 @@ function dashSetMes(v) {
   updateBadges();
 }
 
+function dashResolveNow() {
+  nav('agenda', null);
+  agSetView('lista');
+  const st = document.getElementById('ag-status');
+  if (st) st.value = 'agendado';
+  renderAgenda();
+}
+
 // ════════════════════════════════════════════════
 // DASHBOARD
 // ════════════════════════════════════════════════
@@ -4854,52 +5002,51 @@ function renderDash() {
   // ── Período ────────────────────────────────────────────────
   document.getElementById('dash-period').textContent = `${mLabel} · ${total} serviços · ${diasComSvc} dias úteis`;
 
-  // ── ZONA 0: Painel de Decisão Rápida ──────────────────────
-  const decidir = () => {
-    if (!total) return { cor:'var(--text3)', bg:'var(--surface)', icon:'📭', msg:'Sem dados para o período selecionado.', acao:'' };
-    if (vencidos.length > 5 || semEquipe.length > 10) return { cor:'var(--red)', bg:'var(--red-bg)', icon:'🚨', msg:`Atenção imediata necessária: ${vencidos.length} serviço(s) vencido(s) sem execução, ${semEquipe.length} sem equipe.`, acao:'Revisar e alocar equipes.' };
-    if (sobrecargaDia) return { cor:'var(--orange)', bg:'var(--orange-bg)', icon:'🔥', msg:`Pico de ${picoOcupacaoDia}% de ocupação em um dia detectado. Equipe no limite operacional.`, acao:'Considerar redistribuição ou reforço.' };
-    if (pctOcup < 45 && total > 10) return { cor:'var(--blue)', bg:'var(--blue-bg)', icon:'📈', msg:`Capacidade ociosa: ${pctOcup}% do tempo útil alocado. Estimativa: ainda cabem ~${slotsLivres} serviços.`, acao:'Há espaço comercial sem comprometer a operação.' };
-    if (pctOcup > 85) return { cor:'var(--orange)', bg:'var(--orange-bg)', icon:'⚠️', msg:`Equipe próxima do limite: ${pctOcup}% do tempo útil já alocado.`, acao:'Avaliar contratação, rebalanceamento ou janela extra.' };
-    return { cor:'var(--green)', bg:'var(--green-bg)', icon:'✅', msg:`Operação equilibrada: ${pctOcup}% do tempo útil utilizado. ${slotsLivres > 0 ? `Ainda cabem ~${slotsLivres} serviços.` : ''}`, acao:'' };
-  };
-  const dec = decidir();
+  // ── ZONA 0: Topo crítico compacto ─────────────────────────
+  const riscoCritico = vencidos.length > 0 || semEquipe.length > 0;
   const decEl = document.getElementById('dash-decisao-rapida');
   if (decEl) decEl.innerHTML = `
-    <div style="padding:14px 18px;background:${dec.bg};border:1.5px solid ${dec.cor}40;border-radius:var(--r);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <span style="font-size:28px;flex-shrink:0">${dec.icon}</span>
-      <div style="flex:1;min-width:200px">
-        <div style="font-family:var(--display);font-weight:800;font-size:13px;color:${dec.cor};margin-bottom:3px">${dec.msg}</div>
-        ${dec.acao ? `<div style="font-size:11px;color:var(--text3)">${dec.acao}</div>` : ''}
+    <div class="dash-op-critical ${riscoCritico ? 'has-risk' : ''}">
+      <div>
+        <div class="dash-op-critical-title">${riscoCritico ? 'Atenção operacional necessária' : 'Operação sem bloqueios críticos'}</div>
+        <div class="dash-op-critical-sub">
+          ${riscoCritico
+            ? `Resolva primeiro ${vencidos.length} serviço(s) atrasado(s) e ${semEquipe.length} sem equipe.`
+            : `Nenhum serviço atrasado ou sem equipe no período selecionado.`}
+        </div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
-        <div style="text-align:center;padding:6px 14px;background:${dec.cor}18;border-radius:var(--r2);border:1px solid ${dec.cor}30">
-          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:${dec.cor}">${pctOcup}%</div>
-          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Ocupação</div>
+      <div class="dash-op-critical-metrics">
+        <div class="dash-op-pill">
+          <div class="dash-op-pill-value" style="color:${vencidos.length?'var(--red)':'var(--green)'}">${vencidos.length}</div>
+          <div class="dash-op-pill-label">Atrasados</div>
         </div>
-        <div style="text-align:center;padding:6px 14px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--border)">
-          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text)">${mediaPerDia}</div>
-          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Serv/dia</div>
+        <div class="dash-op-pill">
+          <div class="dash-op-pill-value" style="color:${semEquipe.length?'var(--red)':'var(--green)'}">${semEquipe.length}</div>
+          <div class="dash-op-pill-label">Sem equipe</div>
         </div>
-        <div style="text-align:center;padding:6px 14px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--border)">
-          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--blue2)">${numTecnicos}</div>
-          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Técnicos</div>
-        </div>
+        <button class="dash-op-btn" onclick="dashResolveNow()">Resolver agora</button>
       </div>
     </div>`;
 
   // ── ZONA 1: KPIs ───────────────────────────────────────────
   const kpiTxColor = txExec>=70?'var(--green)':txExec>=50?'var(--orange)':'var(--red)';
   document.getElementById('dash-kpis').innerHTML = `
-    <div class="card card-accent"><div class="card-label">Total Serviços</div><div class="card-value cv-blue">${total}</div><div class="card-trend">${mLabel}</div></div>
-    <div class="card card-green"><div class="card-label">Executados</div><div class="card-value cv-green">${exec}</div><div class="card-trend up">${txExec}% concluídos</div></div>
-    <div class="card"><div class="card-label">Pendentes</div><div class="card-value">${pend}</div><div class="card-trend">aguardando execução</div></div>
-    <div class="card card-orange"><div class="card-label">Reagendados</div><div class="card-value cv-orange">${reagend}</div><div class="card-trend">necessitam nova data</div></div>
-    <div class="card" style="border-top:2px solid var(--red)"><div class="card-label">⚠ Sem Equipe</div><div class="card-value" style="color:${semEquipe.length?'var(--red)':'var(--green)'}">${semEquipe.length}</div><div class="card-trend">${semEquipe.length?'definir responsável':'✓ todos alocados'}</div></div>
-    <div class="card" style="border-top:2px solid ${vencidos.length?'var(--red)':'var(--green)'}"><div class="card-label">⏰ Vencidos</div><div class="card-value" style="color:${vencidos.length?'var(--red)':'var(--green)'}">${vencidos.length}</div><div class="card-trend">${vencidos.length?'datas passadas, ainda agendado':'✓ em dia'}</div></div>
-    <div class="card card-red"><div class="card-label">Cancelados</div><div class="card-value cv-red">${cancel}</div><div class="card-trend">no período</div></div>
-    <div class="card" style="border-top:2px solid ${kpiTxColor}"><div class="card-label">Taxa Execução</div><div class="card-value" style="color:${kpiTxColor}">${txExec}%</div><div class="card-trend">${txExec>=70?'✓ meta atingida':txExec>=50?'⚠ abaixo da meta':'✕ crítico'}</div></div>
+    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Executados</div><div class="dash-op-kpi-value" style="color:var(--green)">${exec}</div><div class="dash-op-kpi-note">${txExec}% do período concluído</div></div>
+    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Pendentes</div><div class="dash-op-kpi-value" style="color:${pend?'var(--orange)':'var(--green)'}">${pend}</div><div class="dash-op-kpi-note">serviços aguardando execução</div></div>
+    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Atrasados</div><div class="dash-op-kpi-value" style="color:${vencidos.length?'var(--red)':'var(--green)'}">${vencidos.length}</div><div class="dash-op-kpi-note">${vencidos.length?'datas passadas ainda agendadas':'operação em dia'}</div></div>
+    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Taxa de execução</div><div class="dash-op-kpi-value" style="color:${kpiTxColor}">${txExec}%</div><div class="dash-op-kpi-note">${total} serviços · ${mLabel}</div></div>
   `;
+
+  const acoes = [];
+  if (vencidos.length) acoes.push({ cls:'red', txt:`Priorizar ${vencidos.length} serviço(s) atrasado(s) antes de novos encaixes.` });
+  if (semEquipe.length) acoes.push({ cls:'orange', txt:`Definir equipe para ${semEquipe.length} serviço(s) sem responsável.` });
+  if (reagend) acoes.push({ cls:'blue', txt:`Revisar ${reagend} reagendamento(s) e confirmar nova data.` });
+  if (pctOcup >= 85) acoes.push({ cls:'orange', txt:`Redistribuir carga: ocupação estimada em ${pctOcup}%.` });
+  if (!acoes.length) acoes.push({ cls:'green', txt:`Operação equilibrada. Manter acompanhamento e preencher lacunas comerciais.` });
+  const acoesEl = document.getElementById('dash-acoes-recomendadas');
+  if (acoesEl) acoesEl.innerHTML = `<div class="dash-op-list">${acoes.slice(0,4).map(a => `
+    <div class="dash-op-row ${a.cls}"><span class="dash-op-row-dot"></span><span>${a.txt}</span></div>
+  `).join('')}</div>`;
 
   // ── ZONA 2A: Problemas Críticos ────────────────────────────
   const criticos = [];
@@ -4909,18 +5056,13 @@ function renderDash() {
   if (conflitoJornada.length) criticos.push({ icon:'⚡', cor:'var(--red)', txt:`${conflitoJornada.length} conflito(s) noite→manhã detectado(s)` });
 
   const alertCountEl = document.getElementById('dash-alert-count');
-  if (alertCountEl) alertCountEl.textContent = criticos.length + (criticos.length!==1?' problemas':' problema');
+  if (alertCountEl) alertCountEl.textContent = criticos.length;
 
   document.getElementById('dash-alerts').innerHTML = criticos.length
-    ? criticos.map(a => `
-        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:${a.cor}0d;border-radius:var(--r2);border-left:3px solid ${a.cor};margin-bottom:7px">
-          <span style="font-size:16px;flex-shrink:0">${a.icon}</span>
-          <span style="font-size:12px;color:var(--text);line-height:1.4;font-weight:500">${a.txt}</span>
-        </div>`).join('')
-    : `<div style="text-align:center;padding:24px;color:var(--green)">
-        <div style="font-size:32px;margin-bottom:8px">✅</div>
-        <div style="font-size:12px;font-weight:600">Nenhum problema crítico</div>
-      </div>`;
+    ? `<div class="dash-op-list">${criticos.map(a => `
+        <div class="dash-op-row red"><span class="dash-op-row-dot"></span><span>${a.txt}</span></div>
+      `).join('')}</div>`
+    : `<div class="dash-op-empty">Nenhum problema crítico</div>`;
 
   // ── ZONA 2B: Avisos Operacionais ───────────────────────────
   const avisos = [];
@@ -4934,18 +5076,13 @@ function renderDash() {
   if (avarias.length)       avisos.push({ icon:'⚠️', cor:'var(--orange)', txt:`${avarias.length} registro(s) com avaria de veículo` });
 
   const avisoCountEl = document.getElementById('dash-aviso-count');
-  if (avisoCountEl) avisoCountEl.textContent = avisos.length + (avisos.length!==1?' avisos':' aviso');
+  if (avisoCountEl) avisoCountEl.textContent = avisos.length;
 
   document.getElementById('dash-avisos').innerHTML = avisos.length
-    ? avisos.map(a => `
-        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:${a.cor}0d;border-radius:var(--r2);border-left:3px solid ${a.cor};margin-bottom:7px">
-          <span style="font-size:16px;flex-shrink:0">${a.icon}</span>
-          <span style="font-size:12px;color:var(--text);line-height:1.4">${a.txt}</span>
-        </div>`).join('')
-    : `<div style="text-align:center;padding:24px;color:var(--green)">
-        <div style="font-size:32px;margin-bottom:8px">🟢</div>
-        <div style="font-size:12px;font-weight:600">Nenhum aviso operacional</div>
-      </div>`;
+    ? `<div class="dash-op-list">${avisos.slice(0,5).map(a => `
+        <div class="dash-op-row orange"><span class="dash-op-row-dot"></span><span>${a.txt}</span></div>
+      `).join('')}</div>`
+    : `<div class="dash-op-empty">Nenhum aviso operacional</div>`;
 
   // ── ZONA 2C: Capacidade ────────────────────────────────────
   const capEl = document.getElementById('dash-capacidade');
@@ -4957,60 +5094,45 @@ function renderDash() {
       ? `Pode absorver mais ~${slotsLivres} serviços`
       : 'Capacidade bem distribuída';
     capEl.innerHTML = `
-      <div style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-size:11px;color:var(--text3)">% ocupação real</span>
-          <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:${corCap}">${pctOcup}%</span>
-        </div>
-        <div style="height:10px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:6px">
+      <div>
+        <div class="dash-op-cap-value" style="color:${corCap}">${pctOcup}%</div>
+        <div style="font-size:12px;color:${corCap};font-weight:700;margin:6px 0 10px">${msgCap}</div>
+        <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden">
           <div style="height:100%;width:${Math.min(pctOcup,100)}%;background:${corCap};border-radius:99px;transition:width .4s"></div>
         </div>
-        <div style="font-size:11px;color:${corCap};font-weight:600">${msgCap}</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <div style="padding:8px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--border);text-align:center">
-          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--blue2)">${numTecnicos}</div>
-          <div style="font-size:9px;color:var(--text3)">técnicos ativos</div>
+      <div class="dash-op-cap-grid">
+        <div class="dash-op-cap-mini">
+          <b style="color:var(--blue2)">${numTecnicos}</b>
+          <span>técnicos</span>
         </div>
-        <div style="padding:8px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--border);text-align:center">
-          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${picoOcupacaoDia>=90?'var(--red)':'var(--blue2)'}">${picoOcupacaoDia}%</div>
-          <div style="font-size:9px;color:${picoOcupacaoDia>=90?'var(--red)':'var(--text3)'}">pico ocupação/dia</div>
+        <div class="dash-op-cap-mini">
+          <b style="color:${picoOcupacaoDia>=90?'var(--red)':'var(--blue2)'}">${picoOcupacaoDia}%</b>
+          <span>pico/dia</span>
         </div>
-        <div style="padding:8px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--border);text-align:center">
-          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--blue2)">${mediaPerDia}</div>
-          <div style="font-size:9px;color:var(--text3)">média serv/dia</div>
+        <div class="dash-op-cap-mini">
+          <b style="color:var(--blue2)">${mediaPerDia}</b>
+          <span>serv/dia</span>
         </div>
-        <div style="padding:8px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--border);text-align:center">
-          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${slotsLivres>0?'var(--green)':'var(--orange)'}">${slotsLivres}</div>
-          <div style="font-size:9px;color:var(--text3)">serviços absorvíveis</div>
+        <div class="dash-op-cap-mini">
+          <b style="color:${slotsLivres>0?'var(--green)':'var(--orange)'}">${slotsLivres}</b>
+          <span>slots estim.</span>
         </div>
       </div>
-      <div style="margin-bottom:10px;font-size:11px;background:var(--surface);border-radius:var(--r2);padding:7px 10px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-          <span style="color:var(--text3)">⏱ Horas alocadas</span>
+      <div style="margin-top:12px;font-size:11px;background:var(--bg2);border-radius:10px;padding:9px 10px;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--text3)">Horas alocadas</span>
           <span style="font-family:var(--mono);font-weight:600">${formatarMinutosHM(tempoConsumidoTotal)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;">
-          <span style="color:var(--text3)">✅ Horas livres</span>
+          <span style="color:var(--text3)">Horas livres</span>
           <span style="font-family:var(--mono);font-weight:600;color:${tempoLivreTot>0?'var(--green)':'var(--orange)'}">${formatarMinutosHM(tempoLivreTot)}</span>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-top:3px">
-          <span style="color:var(--text3)">🎯 Tempo médio por serviço</span>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          <span style="color:var(--text3)">Tempo médio/serviço</span>
           <span style="font-family:var(--mono);font-weight:600">${formatarMinutosHM(tempoMedioServicoPeriodo)}</span>
         </div>
       </div>
-      <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px">Top técnicos</div>
-      ${capData.slice(0,4).map(d=>{
-        const cor = d.ocupacao>=90?'var(--red)':d.ocupacao>=75?'var(--orange)':'var(--green)';
-        return `<div style="margin-bottom:7px">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-            <span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px" title="${d.nome}">${d.nome.split(' ')[0]}</span>
-            <span style="font-family:var(--mono);font-size:10px;color:${cor}">${d.hAlocado} · ${d.ocupacao}%</span>
-          </div>
-          <div class="prog"><div class="prog-fill" style="width:${Math.min(d.ocupacao,100)}%;background:${cor}"></div></div>
-        </div>`;
-      }).join('')}
-      <div style="font-size:9px;color:var(--text4);margin-top:8px">Base: tempo por tipo + deslocamento dinâmico (15–45min) + buffer de transição (10–15min) · jornada útil 08:00–17:48 menos 1h de almoço</div>
     `;
   }
 
