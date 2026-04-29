@@ -2678,6 +2678,7 @@ async function carregarVeiculos(){
       </div>
       <!-- Barra de progresso do dia -->
       <div id="hoje-summary" style="display:none;margin-bottom:20px"></div>
+      <div id="field-ops-panel" style="display:none;margin-bottom:18px"></div>
       <div id="hoje-kanban" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px"></div>
     </div>
 
@@ -2727,10 +2728,7 @@ async function carregarVeiculos(){
         <button class="btn btn-green" onclick="rotWhatsAppTudo()">📱 Enviar tudo para WhatsApp</button>
         <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">📋 Copiar Tudo</button>
         <button class="btn btn-ghost btn-sm" onclick="rotCopiarLinksPortais()">🔗 Copiar links dos portais</button>
-        <input type="tel" class="finput" id="rot-suporte-whats" placeholder="WhatsApp suporte: 5511999999999" onchange="rotSalvarSuporteWhatsApp()" style="max-width:260px">
       </div>
-
-      <div id="field-ops-panel" style="display:none;margin-bottom:18px"></div>
 
       <div id="rot-sugestao-wrap" style="display:none;margin-bottom:20px">
         <div class="section-title" style="font-size:18px;margin-bottom:4px">Sugestão de Rota</div>
@@ -3031,10 +3029,12 @@ async function carregarVeiculos(){
         <button class="btn btn-primary btn-sm" onclick="showConfigTab('tecnicos')" id="cfg-tab-tecnicos">👷 Técnicos</button>
         <button class="btn btn-ghost btn-sm" onclick="showConfigTab('veiculos')" id="cfg-tab-veiculos">🚗 Veículos</button>
         <button class="btn btn-ghost btn-sm" onclick="showConfigTab('tipos')" id="cfg-tab-tipos">📋 Tipos de Serviço</button>
+        <button class="btn btn-ghost btn-sm" onclick="showConfigTab('operacional')" id="cfg-tab-operacional">📱 Operacional</button>
       </div>
       <div id="config-tecnicos"></div>
       <div id="config-veiculos" style="display:none"></div>
       <div id="config-tipos" style="display:none"></div>
+      <div id="config-operacional" style="display:none"></div>
     </div>
 
   </div><!-- /content -->
@@ -4597,6 +4597,7 @@ let persistedServices = [];
 let clRecords = [];      // check list records
 let technicianEvents = [];
 let technicianMessages = [];
+let fieldOpsSchemaReady = true;
 
 async function carregarChecklistsDoSupabase() {
   try {
@@ -5800,10 +5801,12 @@ async function carregarEventosCampoDoSupabase() {
       .limit(80);
     if (error) throw error;
     technicianEvents = data || [];
-    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'roteiro') renderFieldOpsPanel();
+    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'hoje') renderFieldOpsPanel();
   } catch(e) {
     console.warn('Eventos de campo indisponíveis:', e.message || e);
+    fieldOpsSchemaReady = false;
     technicianEvents = [];
+    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'hoje') renderFieldOpsPanel();
   }
 }
 
@@ -5816,10 +5819,12 @@ async function carregarRecadosTecnicosDoSupabase() {
       .limit(120);
     if (error) throw error;
     technicianMessages = data || [];
-    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'roteiro') renderFieldOpsPanel();
+    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'hoje') renderFieldOpsPanel();
   } catch(e) {
     console.warn('Recados de técnicos indisponíveis:', e.message || e);
+    fieldOpsSchemaReady = false;
     technicianMessages = [];
+    if (typeof renderFieldOpsPanel === 'function' && currentPage === 'hoje') renderFieldOpsPanel();
   }
 }
 
@@ -7041,6 +7046,7 @@ function renderHoje() {
   const br        = `${dm[2]}/${dm[1]}/${dm[0]}`;
   const summaryEl = document.getElementById('hoje-summary');
   const kanbanEl  = document.getElementById('hoje-kanban');
+  renderFieldOpsPanel(d);
 
   // ── Sem serviços ──
   if (!daySvcs.length) {
@@ -9256,8 +9262,6 @@ function rotInit() {
   const today = new Date().toISOString().split('T')[0];
   const el = document.getElementById('rot-data');
   if (el && !el.value) el.value = today;
-  const suporte = document.getElementById('rot-suporte-whats');
-  if (suporte && !suporte.value) suporte.value = localStorage.getItem('letec_suporte_whatsapp') || '';
 }
 
 function rotVeiculoPreferencial(servicos, fallback = '') {
@@ -9698,16 +9702,15 @@ function rotPortalBaseUrl() {
 }
 
 function rotSuporteWhatsApp() {
-  const el = document.getElementById('rot-suporte-whats');
-  const value = (el?.value || localStorage.getItem('letec_suporte_whatsapp') || '').replace(/\D/g, '');
-  return value;
+  const el = document.getElementById('cfg-suporte-whats');
+  return String((el && el.value ? el.value : localStorage.getItem('letec_suporte_whatsapp')) || '').replace(/\D/g, '');
 }
 
-function rotSalvarSuporteWhatsApp() {
-  const value = rotSuporteWhatsApp();
+function salvarSuporteWhatsAppConfig() {
+  const el = document.getElementById('cfg-suporte-whats');
+  const value = String(el?.value || '').replace(/\D/g, '');
   if (value) localStorage.setItem('letec_suporte_whatsapp', value);
   else localStorage.removeItem('letec_suporte_whatsapp');
-  const el = document.getElementById('rot-suporte-whats');
   if (el) el.value = value;
   toast(value ? 'WhatsApp de suporte salvo' : 'WhatsApp de suporte removido', value ? 'ok' : 'warn');
   if (rotDados.length) {
@@ -9720,6 +9723,7 @@ function rotSalvarSuporteWhatsApp() {
     rotRenderizarLocal(rotDados, data);
   }
 }
+function rotSalvarSuporteWhatsApp() { salvarSuporteWhatsAppConfig(); }
 
 function rotPortalTecnicoNome(eq) {
   const nome = String(eq?.equipe || '').replace(/^⚠\s*/, '').trim();
@@ -9786,7 +9790,6 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-empty').style.display = 'block';
       document.getElementById('rot-sugestao-grid').innerHTML = '';
       document.getElementById('rot-equipes-grid').innerHTML = '';
-      renderFieldOpsPanel(data);
       return;
     }
 
@@ -9823,7 +9826,6 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-kpi-tempo').textContent    = formatarMinutosHM(tempoTotal);
     document.getElementById('rot-kpi-km').textContent       = `${kmTotal} km`;
 
-    renderFieldOpsPanel(data);
     rotRenderizarSugestoes(rotDados);
     rotRenderizarLocal(rotDados, data);
   } catch (e) {
@@ -9875,10 +9877,22 @@ function renderExecutionMini(s) {
   return `<div style="margin-top:8px;font-size:10px;color:var(--text2);line-height:1.7">${parts}</div>`;
 }
 
-function renderFieldOpsPanel(data = document.getElementById('rot-data')?.value) {
+function getFieldOpsDate() {
+  return document.getElementById('hoje-date')?.value || new Date().toISOString().split('T')[0];
+}
+
+function renderFieldOpsPanel(data = getFieldOpsDate()) {
   const el = document.getElementById('field-ops-panel');
   if (!el) return;
   const date = data || new Date().toISOString().split('T')[0];
+  if (!fieldOpsSchemaReady) {
+    el.style.display = '';
+    el.innerHTML = `<div class="card" style="padding:14px;border-left:4px solid var(--orange)">
+      <div class="card-label" style="color:var(--orange)">Migração pendente no Supabase</div>
+      <div class="section-sub" style="margin-top:6px">As tabelas <span class="mono">technician_events</span> e <span class="mono">technician_messages</span> ainda não existem no banco. Rode <span class="mono">migration-add-technician-portal.sql</span> no SQL Editor do Supabase para liberar notificações, recados e histórico persistente do portal.</div>
+    </div>`;
+    return;
+  }
   const eventos = (technicianEvents || []).filter(ev => !ev.date || ev.date === date).slice(0, 12);
   const recados = (technicianMessages || []).filter(msg => !msg.date || msg.date === date).slice(0, 8);
   el.style.display = '';
@@ -9887,8 +9901,8 @@ function renderFieldOpsPanel(data = document.getElementById('rot-data')?.value) 
       <div class="card" style="padding:14px">
         <div class="flex ic sb mb2">
           <div>
-            <div class="card-label">Notificações de Campo</div>
-            <div class="section-sub" style="font-size:11px">Chegadas, problemas, ajuda e checklists do portal.</div>
+            <div class="card-label">Central de Campo</div>
+            <div class="section-sub" style="font-size:11px">Chegadas, problemas, ajuda e checklists do portal nesta data.</div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="carregarEventosCampoDoSupabase()">Atualizar</button>
         </div>
@@ -9909,7 +9923,7 @@ function renderFieldOpsPanel(data = document.getElementById('rot-data')?.value) 
         </div>
       </div>
       <div class="card" style="padding:14px">
-        <div class="card-label mb2">Recados / Lembretes</div>
+        <div class="card-label mb2">Recados / Lembretes do Dia</div>
         <div class="form-row fr-2 mb2">
           <div class="field"><label>Data</label><input type="date" id="msg-date" value="${escapeHtmlAttr(date)}"></div>
           <div class="field"><label>Técnico/equipe</label><input type="text" id="msg-equipe" placeholder="Ex: Igor ou Equipe 1"></div>
@@ -9921,7 +9935,10 @@ function renderFieldOpsPanel(data = document.getElementById('rot-data')?.value) 
         <button class="btn btn-primary btn-sm mb3" onclick="salvarRecadoTecnico()">Enviar recado</button>
         <div style="display:flex;flex-direction:column;gap:7px">
           ${recados.length ? recados.map(msg => `<div style="padding:9px;border:1px solid var(--border);border-radius:var(--r2);background:${msg.prioridade === 'alta' ? 'var(--orange-bg)' : 'var(--bg2)'}">
-            <div style="font-size:11px;font-weight:800;color:var(--text)">${sanitize(msg.tecnico || msg.equipe || 'Todos')} ${msg.lido ? '<span class="chip chip-green">Lido</span>' : '<span class="chip chip-orange">Pendente</span>'}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div style="font-size:11px;font-weight:800;color:var(--text)">${sanitize(msg.tecnico || msg.equipe || 'Todos')} ${msg.lido ? '<span class="chip chip-green">Lido</span>' : '<span class="chip chip-orange">Pendente</span>'}</div>
+              ${msg.lido ? '' : `<button class="btn btn-ghost btn-xs" onclick="marcarRecadoTecnicoLido(${jsArg(msg.id)})">Marcar lido</button>`}
+            </div>
             <div style="font-size:11px;color:var(--text2);margin-top:4px">${sanitize(msg.mensagem || '')}</div>
           </div>`).join('') : '<div class="text-muted">Nenhum recado nesta data.</div>'}
         </div>
@@ -9938,8 +9955,23 @@ async function marcarEventoCampoVisto(id) {
   } catch(e) { toast('Erro ao marcar evento como visto', 'err'); }
 }
 
+async function marcarRecadoTecnicoLido(id) {
+  try {
+    const lidoEm = new Date().toISOString();
+    const { error } = await supabaseClient.from('technician_messages').update({ lido:true, lido_em:lidoEm }).eq('id', id);
+    if (error) throw error;
+    technicianMessages = technicianMessages.map(msg => String(msg.id) === String(id) ? { ...msg, lido:true, lido_em:lidoEm } : msg);
+    renderFieldOpsPanel();
+  } catch(e) { toast('Erro ao marcar recado como lido', 'err'); }
+}
+
 async function salvarRecadoTecnico() {
-  const date = document.getElementById('msg-date')?.value || document.getElementById('rot-data')?.value;
+  if (!fieldOpsSchemaReady) {
+    toast('Migração pendente: rode migration-add-technician-portal.sql no Supabase antes de enviar recados.', 'err');
+    renderFieldOpsPanel();
+    return;
+  }
+  const date = document.getElementById('msg-date')?.value || getFieldOpsDate();
   const equipe = document.getElementById('msg-equipe')?.value.trim();
   const mensagem = document.getElementById('msg-texto')?.value.trim();
   const prioridade = document.getElementById('msg-prioridade')?.value || 'normal';
@@ -10865,15 +10897,42 @@ function init(){
 // CONFIGURAÇÕES (ADMIN)
 // ════════════════════════════════════════════════
 function showConfigTab(tab) {
-  ['tecnicos','veiculos','tipos'].forEach(t => {
+  ['tecnicos','veiculos','tipos','operacional'].forEach(t => {
     document.getElementById('config-' + t).style.display = t === tab ? '' : 'none';
     document.getElementById('cfg-tab-' + t).className = t === tab ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
   });
   if (tab === 'tecnicos') carregarTecnicosConfig();
   if (tab === 'veiculos') carregarVeiculosConfig();
   if (tab === 'tipos') carregarTiposServicoConfig();
+  if (tab === 'operacional') carregarOperacionalConfig();
 }
 function renderConfig() { showConfigTab('tecnicos'); }
+
+function carregarOperacionalConfig() {
+  const container = document.getElementById('config-operacional');
+  if (!container) return;
+  const suporte = localStorage.getItem('letec_suporte_whatsapp') || '';
+  container.innerHTML = `
+    <div class="card" style="margin-bottom:16px;padding:16px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div class="card-label">📱 Operação de Campo</div>
+          <div class="section-sub" style="font-size:12px;margin-top:4px">Configurações usadas pelo Portal do Técnico e pelos links enviados no Roteiro do Dia.</div>
+        </div>
+      </div>
+      <div class="form-row fr-2">
+        <div class="field">
+          <label>WhatsApp de suporte</label>
+          <input type="tel" id="cfg-suporte-whats" class="finput" value="${escapeHtmlAttr(suporte)}" placeholder="Ex: 5511999999999" oninput="this.value=this.value.replace(/\\D/g,'')" onchange="salvarSuporteWhatsAppConfig()">
+          <div class="hint">Usado no botão Chamar ajuda do Portal do Técnico. O Roteiro apenas inclui esse número no link enviado.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="salvarSuporteWhatsAppConfig()">Salvar suporte</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cfg-suporte-whats').value='';salvarSuporteWhatsAppConfig()">Remover número</button>
+      </div>
+    </div>`;
+}
 
 async function carregarTecnicosConfig() {
   const container = document.getElementById('config-tecnicos');
@@ -11206,7 +11265,7 @@ window.addEventListener('load', async () => {
     await carregarRecadosTecnicosDoSupabase();
     if (!window._fieldOpsPolling) {
       window._fieldOpsPolling = setInterval(() => {
-        if (currentPage === 'roteiro') {
+        if (currentPage === 'hoje') {
           carregarEventosCampoDoSupabase();
           carregarRecadosTecnicosDoSupabase();
         }
