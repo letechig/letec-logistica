@@ -2376,6 +2376,7 @@ async function carregarVeiculos(){
   <button class="nav-item" onclick="nav('rotas',this)"><span class="ico">🗺</span><span>Rotas & KM</span></button>
   <button class="nav-item" onclick="nav('checklist',this)"><span class="ico">✅</span><span>Check List</span></button>
   <button class="nav-item" onclick="nav('frota',this)"><span class="ico">🚗</span><span>Frota</span><span class="nav-badge green" id="nb-frota">0</span></button>
+  <button class="nav-item" onclick="nav('estoque',this)"><span class="ico">📦</span><span>Estoque</span></button>
 
   <div class="nav-section-label">Análise</div>
   <button class="nav-item" onclick="nav('equipes',this)"><span class="ico">👷</span><span>Equipes</span></button>
@@ -2956,6 +2957,68 @@ async function carregarVeiculos(){
       </div>
     </div>
 
+    <!-- ═══ ESTOQUE ═══ -->
+    <div id="page-estoque" class="page">
+      <div class="flex ic sb mb4" style="gap:12px;flex-wrap:wrap">
+        <div>
+          <div class="section-title">Controle de Estoque</div>
+          <div class="section-sub">Produtos, entradas e saídas por veículo</div>
+        </div>
+        <div class="flex gap2" style="flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="openInventoryMovement('saida')">Registrar saída</button>
+          <button class="btn btn-green btn-sm" onclick="openInventoryMovement('entrada')">Nova entrada</button>
+          <button class="btn btn-ghost btn-sm" onclick="openInventoryMovement('ajuste')">Ajustar estoque</button>
+          <button class="btn btn-ghost btn-sm" onclick="openInventoryProduct()">Novo produto</button>
+        </div>
+      </div>
+
+      <div id="inventory-schema-alert" style="display:none;margin-bottom:16px"></div>
+      <div class="grid-kpi mb4" id="inventory-kpis"></div>
+
+      <div class="card mb4" style="padding:16px">
+        <div class="flex ic sb mb3" style="gap:10px;flex-wrap:wrap">
+          <div>
+            <div class="card-label">Produtos em estoque</div>
+            <div class="section-sub" style="font-size:12px">Saldo calculado por entradas, saídas e ajustes.</div>
+          </div>
+          <input class="finput" id="inventory-product-search" placeholder="Buscar produto..." oninput="renderInventory()" style="max-width:280px">
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Produto</th><th>Un.</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Ajustes</th><th>Atual</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody id="inventory-products-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="padding:16px">
+        <div class="flex ic sb mb3" style="gap:10px;flex-wrap:wrap">
+          <div>
+            <div class="card-label">Histórico de movimentações</div>
+            <div class="section-sub" style="font-size:12px">Registro operacional por data, produto e veículo.</div>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <input type="date" class="fsel" id="inventory-filter-date" onchange="renderInventory()">
+          <select class="fsel" id="inventory-filter-product" onchange="renderInventory()"><option value="">Todos produtos</option></select>
+          <select class="fsel" id="inventory-filter-vehicle" onchange="renderInventory()"><option value="">Todos veículos</option></select>
+          <select class="fsel" id="inventory-filter-type" onchange="renderInventory()">
+            <option value="">Todos tipos</option>
+            <option value="entrada">Entradas</option>
+            <option value="saida">Saídas</option>
+            <option value="ajuste">Ajustes</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="clearInventoryFilters()">Limpar</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Veículo</th><th>Motivo/OS</th><th>Operador</th><th>Obs.</th></tr></thead>
+            <tbody id="inventory-movements-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ EQUIPES ═══ -->
     <div id="page-equipes" class="page">
       <div class="section-title">Análise por Equipes</div>
@@ -3319,6 +3382,18 @@ async function carregarVeiculos(){
 </div>
 
 <!-- MODAL DUPLICATAS -->
+<div class="modal-bg" id="inventory-modal" onclick="if(event.target===event.currentTarget)closeInventoryModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:720px">
+    <div class="modal-title" id="inventory-modal-title">Estoque</div>
+    <div id="inventory-modal-body"></div>
+    <div id="inventory-modal-warning" style="display:none;margin-top:12px;padding:10px;border-radius:var(--r2);background:var(--orange-bg);color:var(--orange);font-size:12px"></div>
+    <div class="flex gap2" style="padding:16px 0;border-top:1px solid var(--border);margin-top:16px">
+      <button class="btn btn-ghost btn-sm" onclick="closeInventoryModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="inventory-modal-save" onclick="saveInventoryModal()" style="margin-left:auto">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="duplicates-modal" onclick="if(event.target===event.currentTarget)closeDuplicatesModal()">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:800px">
     <div class="modal-title" id="duplicates-modal-title">🔍 Gerenciar Duplicatas de Clientes</div>
@@ -4598,6 +4673,11 @@ let clRecords = [];      // check list records
 let technicianEvents = [];
 let technicianMessages = [];
 let fieldOpsSchemaReady = true;
+let inventoryProducts = [];
+let inventoryMovements = [];
+let inventorySchemaReady = true;
+let inventoryModalMode = null;
+let inventoryEditingProductId = null;
 
 async function carregarChecklistsDoSupabase() {
   try {
@@ -5091,6 +5171,7 @@ const PAGE_META = {
   rotas:      { title:'Rotas & KM',          sub:'Eficiência de deslocamento e KM rodados' },
   checklist:  { title:'Check List Diário',  sub:'Registro de saída e retorno' },
   frota:      { title:'Controle de Frota',  sub:'KPIs de veículos e motoristas' },
+  estoque:    { title:'Estoque',            sub:'Produtos, entradas e saídas por veículo' },
   equipes:    { title:'Análise por Equipes',sub:'Produtividade e distribuição' },
   clientes:   { title:'Clientes',           sub:'Base extraída da agenda 2026' },
   historico:  { title:'Histórico',          sub:'Check lists e registros salvos' },
@@ -5114,7 +5195,7 @@ window.nav = function(page, btn) {
   currentPage = page;
   // Para agenda: carrega dados do Supabase antes de renderizar
   const renderAgendaComDados = async () => { await getServices(); renderAgenda(); };
-  const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, equipes: renderEquipes, clientes: renderClientes, historico: renderHist, roteiro: rotGerarDoSistema, config: renderConfig };
+  const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, clientes: renderClientes, historico: renderHist, roteiro: rotGerarDoSistema, config: renderConfig };
   if (renders[page]) renders[page]();
   updateBadges();
 }
@@ -5825,6 +5906,27 @@ async function carregarRecadosTecnicosDoSupabase() {
     fieldOpsSchemaReady = false;
     technicianMessages = [];
     if (typeof renderFieldOpsPanel === 'function' && currentPage === 'hoje') renderFieldOpsPanel();
+  }
+}
+
+async function carregarEstoqueDoSupabase() {
+  try {
+    const [prodRes, movRes] = await Promise.all([
+      supabaseClient.from('inventory_products').select('*').order('nome', { ascending: true }),
+      supabaseClient.from('inventory_movements').select('*').order('data', { ascending: false }).order('created_at', { ascending: false })
+    ]);
+    if (prodRes.error) throw prodRes.error;
+    if (movRes.error) throw movRes.error;
+    inventoryProducts = prodRes.data || [];
+    inventoryMovements = movRes.data || [];
+    inventorySchemaReady = true;
+    if (currentPage === 'estoque') renderInventory();
+  } catch(e) {
+    console.warn('Estoque indisponível:', e.message || e);
+    inventoryProducts = [];
+    inventoryMovements = [];
+    inventorySchemaReady = false;
+    if (currentPage === 'estoque') renderInventory();
   }
 }
 
@@ -10805,6 +10907,7 @@ function refreshPages() {
   if (currentPage === 'agenda') renderAgenda();
   if (currentPage === 'hoje') renderHoje();
   if (currentPage === 'roteiro') rotGerarDoSistema();
+  if (currentPage === 'estoque') renderInventory();
 }
 
 function listenSupabase() {
@@ -10890,6 +10993,360 @@ function init(){
   } else {
     renderDash();
     updateBadges();
+  }
+}
+
+// ════════════════════════════════════════════════
+// ESTOQUE DE PRODUTOS
+// ════════════════════════════════════════════════
+function inventoryNum(value) {
+  const n = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function inventoryFmtQty(value) {
+  const n = inventoryNum(value);
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+}
+
+function inventoryFmtDate(dateStr) {
+  if (!dateStr) return '—';
+  const parts = String(dateStr).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : sanitize(dateStr);
+}
+
+function inventoryProductById(id) {
+  return inventoryProducts.find(p => String(p.id) === String(id));
+}
+
+function inventoryMovementsForProduct(productId) {
+  return inventoryMovements.filter(m => String(m.product_id) === String(productId));
+}
+
+function inventoryCalcProduct(product) {
+  const initial = inventoryNum(product?.estoque_inicial);
+  const moves = inventoryMovementsForProduct(product?.id);
+  const entrada = moves.filter(m => m.tipo === 'entrada').reduce((acc, m) => acc + Math.abs(inventoryNum(m.quantidade)), 0);
+  const saida = moves.filter(m => m.tipo === 'saida').reduce((acc, m) => acc + Math.abs(inventoryNum(m.quantidade)), 0);
+  const ajuste = moves.filter(m => m.tipo === 'ajuste').reduce((acc, m) => acc + inventoryNum(m.quantidade), 0);
+  const atual = initial + entrada + ajuste - saida;
+  return { initial, entrada, saida, ajuste, atual };
+}
+
+function inventoryStatus(product, saldo) {
+  const atual = inventoryNum(saldo);
+  const inicial = inventoryNum(product?.estoque_inicial);
+  const minimo = inventoryNum(product?.estoque_minimo);
+  if (atual <= 0) return { key:'esgotado', label:'Esgotado', chip:'chip-red', color:'var(--red)' };
+  if (minimo > 0) {
+    if (atual <= minimo) return { key:'critico', label:'Crítico', chip:'chip-red', color:'var(--red)' };
+    if (atual <= minimo * 2) return { key:'baixo', label:'Baixo', chip:'chip-orange', color:'var(--orange)' };
+    return { key:'ok', label:'OK', chip:'chip-green', color:'var(--green)' };
+  }
+  if (inicial > 0) {
+    const pct = (atual / inicial) * 100;
+    if (pct < 20) return { key:'critico', label:'Crítico', chip:'chip-red', color:'var(--red)' };
+    if (pct <= 40) return { key:'baixo', label:'Baixo', chip:'chip-orange', color:'var(--orange)' };
+  }
+  return { key:'ok', label:'OK', chip:'chip-green', color:'var(--green)' };
+}
+
+function inventoryMovementMeta(tipo) {
+  const map = {
+    entrada: { label:'Entrada', chip:'chip-green', sign:'+' },
+    saida: { label:'Saída', chip:'chip-red', sign:'-' },
+    ajuste: { label:'Ajuste', chip:'chip-blue', sign:'' }
+  };
+  return map[tipo] || map.ajuste;
+}
+
+function renderInventorySchemaAlert() {
+  const el = document.getElementById('inventory-schema-alert');
+  if (!el) return;
+  if (inventorySchemaReady) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = '';
+  el.innerHTML = `<div class="card" style="padding:14px;border-left:4px solid var(--orange)">
+    <div class="card-label" style="color:var(--orange)">Migração pendente no Supabase</div>
+    <div class="section-sub" style="margin-top:6px">Rode <span class="mono">migration-add-inventory.sql</span> no SQL Editor do Supabase para criar as tabelas <span class="mono">inventory_products</span> e <span class="mono">inventory_movements</span>.</div>
+  </div>`;
+}
+
+function updateInventoryFilterOptions() {
+  const productEl = document.getElementById('inventory-filter-product');
+  const vehicleEl = document.getElementById('inventory-filter-vehicle');
+  if (productEl) {
+    const selected = productEl.value;
+    productEl.innerHTML = '<option value="">Todos produtos</option>' + inventoryProducts.map(p => `<option value="${escapeHtmlAttr(p.id)}">${sanitize(p.nome)}</option>`).join('');
+    productEl.value = selected;
+  }
+  if (vehicleEl) {
+    const selected = vehicleEl.value;
+    const names = [...new Set([
+      ...((window._veiculos || []).map(v => v.nome).filter(Boolean)),
+      ...inventoryMovements.map(m => m.veiculo_nome).filter(Boolean),
+      ...VEICULOS_FALLBACK
+    ])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    vehicleEl.innerHTML = '<option value="">Todos veículos</option>' + names.map(nome => `<option value="${escapeHtmlAttr(nome)}">${sanitize(nome)}</option>`).join('');
+    vehicleEl.value = selected;
+  }
+}
+
+function renderInventory() {
+  renderInventorySchemaAlert();
+  const kpis = document.getElementById('inventory-kpis');
+  const productsBody = document.getElementById('inventory-products-tbody');
+  const movementsBody = document.getElementById('inventory-movements-tbody');
+  if (!kpis || !productsBody || !movementsBody) return;
+
+  updateInventoryFilterOptions();
+
+  if (!inventorySchemaReady) {
+    kpis.innerHTML = '';
+    productsBody.innerHTML = '<tr><td colspan="9" class="text-muted">Estoque indisponível até a migração ser aplicada.</td></tr>';
+    movementsBody.innerHTML = '<tr><td colspan="8" class="text-muted">Sem histórico disponível.</td></tr>';
+    return;
+  }
+
+  const productRows = inventoryProducts.map(product => {
+    const calc = inventoryCalcProduct(product);
+    const status = inventoryStatus(product, calc.atual);
+    return { product, calc, status };
+  });
+  const total = productRows.length;
+  const ok = productRows.filter(r => r.status.key === 'ok').length;
+  const lowCritical = productRows.filter(r => ['baixo','critico'].includes(r.status.key)).length;
+  const empty = productRows.filter(r => r.status.key === 'esgotado').length;
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const saidasMes = inventoryMovements.filter(m => m.tipo === 'saida' && String(m.data || '').startsWith(monthKey)).length;
+
+  kpis.innerHTML = `
+    <div class="card card-accent"><div class="card-label">Produtos</div><div class="card-value cv-blue">${total}</div><div class="card-trend">cadastrados</div></div>
+    <div class="card card-green"><div class="card-label">Produtos OK</div><div class="card-value cv-green">${ok}</div><div class="card-trend">saldo adequado</div></div>
+    <div class="card card-orange"><div class="card-label">Baixo / crítico</div><div class="card-value cv-orange">${lowCritical}</div><div class="card-trend">pedem atenção</div></div>
+    <div class="card card-red"><div class="card-label">Esgotados</div><div class="card-value cv-red">${empty}</div><div class="card-trend">saldo zerado</div></div>
+    <div class="card"><div class="card-label">Saídas do mês</div><div class="card-value">${saidasMes}</div><div class="card-trend">${new Date().toLocaleDateString('pt-BR', { month:'long' })}</div></div>`;
+
+  const search = normalizarNome(document.getElementById('inventory-product-search')?.value || '');
+  const visibleProducts = productRows.filter(({ product }) => !search || normalizarNome(product.nome).includes(search));
+  productsBody.innerHTML = visibleProducts.length ? visibleProducts.map(({ product, calc, status }) => `
+    <tr>
+      <td class="bold">${sanitize(product.nome)}${product.ativo === false ? ' <span class="chip chip-gray">Inativo</span>' : ''}</td>
+      <td class="mono">${sanitize(product.unidade || 'un')}</td>
+      <td class="mono">${inventoryFmtQty(calc.initial)}</td>
+      <td class="mono" style="color:var(--green)">${inventoryFmtQty(calc.entrada)}</td>
+      <td class="mono" style="color:var(--red)">${inventoryFmtQty(calc.saida)}</td>
+      <td class="mono" style="color:${calc.ajuste < 0 ? 'var(--red)' : 'var(--blue2)'}">${inventoryFmtQty(calc.ajuste)}</td>
+      <td class="mono bold" style="color:${status.color}">${inventoryFmtQty(calc.atual)}</td>
+      <td><span class="chip ${status.chip}">${status.label}</span></td>
+      <td style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-xs" onclick="openInventoryMovement('saida', ${jsArg(product.id)})">Saída</button>
+        <button class="btn btn-ghost btn-xs" onclick="openInventoryMovement('entrada', ${jsArg(product.id)})">Entrada</button>
+        <button class="btn btn-ghost btn-xs" onclick="openInventoryProduct(${jsArg(product.id)})">Editar</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="9" class="text-muted">Nenhum produto encontrado.</td></tr>';
+
+  const fDate = document.getElementById('inventory-filter-date')?.value || '';
+  const fProduct = document.getElementById('inventory-filter-product')?.value || '';
+  const fVehicle = document.getElementById('inventory-filter-vehicle')?.value || '';
+  const fType = document.getElementById('inventory-filter-type')?.value || '';
+  const movements = inventoryMovements.filter(m => {
+    if (fDate && m.data !== fDate) return false;
+    if (fProduct && String(m.product_id) !== String(fProduct)) return false;
+    if (fVehicle && String(m.veiculo_nome || '') !== fVehicle) return false;
+    if (fType && m.tipo !== fType) return false;
+    return true;
+  }).slice(0, 200);
+  movementsBody.innerHTML = movements.length ? movements.map(m => {
+    const meta = inventoryMovementMeta(m.tipo);
+    const qty = Math.abs(inventoryNum(m.quantidade));
+    const signed = m.tipo === 'ajuste' ? inventoryFmtQty(inventoryNum(m.quantidade)) : `${meta.sign}${inventoryFmtQty(qty)}`;
+    return `<tr>
+      <td class="mono">${inventoryFmtDate(m.data)}</td>
+      <td><span class="chip ${meta.chip}">${meta.label}</span></td>
+      <td class="bold">${sanitize(m.produto_nome || inventoryProductById(m.product_id)?.nome || '—')}</td>
+      <td class="mono">${signed}</td>
+      <td>${sanitize(m.veiculo_nome || '—')}</td>
+      <td>${sanitize(m.motivo_os || '—')}</td>
+      <td>${sanitize(m.operador || '—')}</td>
+      <td>${sanitize(m.observacoes || '—')}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8" class="text-muted">Nenhuma movimentação encontrada.</td></tr>';
+}
+
+function clearInventoryFilters() {
+  ['inventory-filter-date','inventory-filter-product','inventory-filter-vehicle','inventory-filter-type'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderInventory();
+}
+
+function inventoryProductOptions(selectedId = '') {
+  const selected = String(selectedId || '');
+  return '<option value="">Selecione...</option>' + inventoryProducts
+    .filter(p => p.ativo !== false || String(p.id) === selected)
+    .map(p => `<option value="${escapeHtmlAttr(p.id)}" ${String(p.id) === selected ? 'selected' : ''}>${sanitize(p.nome)}</option>`)
+    .join('');
+}
+
+function inventoryVehicleOptions() {
+  const vehicles = (window._veiculos || []).length
+    ? window._veiculos.map(v => ({ id:String(v.id || v.nome || ''), nome:String(v.nome || '').trim() })).filter(v => v.nome)
+    : VEICULOS_FALLBACK.map(nome => ({ id:nome, nome }));
+  return '<option value="">Selecione...</option>' + vehicles.map(v => (
+    `<option value="${escapeHtmlAttr(`${v.id}|||${v.nome}`)}">${sanitize(v.nome)}</option>`
+  )).join('');
+}
+
+function closeInventoryModal() {
+  const modal = document.getElementById('inventory-modal');
+  if (modal) modal.classList.remove('open');
+  inventoryModalMode = null;
+  inventoryEditingProductId = null;
+}
+
+function openInventoryProduct(productId = null) {
+  inventoryModalMode = 'product';
+  inventoryEditingProductId = productId;
+  const product = productId ? inventoryProductById(productId) : null;
+  document.getElementById('inventory-modal-title').textContent = product ? 'Editar produto' : 'Novo produto';
+  document.getElementById('inventory-modal-body').innerHTML = `
+    <div class="form-row fr-2 mb3">
+      <div class="field"><label>Produto *</label><input class="finput" id="inv-prod-nome" value="${escapeHtmlAttr(product?.nome || '')}" placeholder="Nome do produto"></div>
+      <div class="field"><label>Unidade</label><input class="finput" id="inv-prod-unidade" value="${escapeHtmlAttr(product?.unidade || 'un')}" placeholder="un, L, kg..."></div>
+    </div>
+    <div class="form-row fr-3 mb3">
+      <div class="field"><label>Estoque inicial</label><input type="number" step="0.01" class="finput" id="inv-prod-inicial" value="${escapeHtmlAttr(product?.estoque_inicial ?? 0)}"></div>
+      <div class="field"><label>Estoque mínimo</label><input type="number" step="0.01" class="finput" id="inv-prod-minimo" value="${escapeHtmlAttr(product?.estoque_minimo ?? 0)}"></div>
+      <div class="field"><label>Status</label><select class="fsel" id="inv-prod-ativo"><option value="true" ${product?.ativo !== false ? 'selected' : ''}>Ativo</option><option value="false" ${product?.ativo === false ? 'selected' : ''}>Inativo</option></select></div>
+    </div>
+    <div class="field"><label>Observações</label><textarea class="finput" id="inv-prod-obs" rows="3" placeholder="Detalhes do produto">${sanitize(product?.observacoes || '')}</textarea></div>`;
+  document.getElementById('inventory-modal-warning').style.display = 'none';
+  document.getElementById('inventory-modal-save').textContent = 'Salvar produto';
+  document.getElementById('inventory-modal').classList.add('open');
+}
+
+function openInventoryMovement(tipo = 'saida', productId = '') {
+  inventoryModalMode = 'movement';
+  inventoryEditingProductId = null;
+  const meta = inventoryMovementMeta(tipo);
+  const today = new Date().toISOString().split('T')[0];
+  const needsVehicle = tipo === 'saida';
+  document.getElementById('inventory-modal-title').textContent = meta.label;
+  document.getElementById('inventory-modal-body').innerHTML = `
+    <input type="hidden" id="inv-mov-tipo" value="${escapeHtmlAttr(tipo)}">
+    <div class="form-row fr-2 mb3">
+      <div class="field"><label>Data *</label><input type="date" class="finput" id="inv-mov-data" value="${today}"></div>
+      <div class="field"><label>Produto *</label><select class="fsel" id="inv-mov-produto" onchange="updateInventoryMovementWarning()">${inventoryProductOptions(productId)}</select></div>
+    </div>
+    <div class="form-row fr-2 mb3">
+      <div class="field"><label>${tipo === 'ajuste' ? 'Quantidade do ajuste *' : 'Quantidade *'}</label><input type="number" step="0.01" class="finput" id="inv-mov-qtd" placeholder="${tipo === 'ajuste' ? 'Ex: -2 ou 5' : 'Ex: 3'}" oninput="updateInventoryMovementWarning()"></div>
+      <div class="field"><label>Veículo ${needsVehicle ? '*' : ''}</label><select class="fsel" id="inv-mov-veiculo">${inventoryVehicleOptions()}</select></div>
+    </div>
+    <div class="form-row fr-2 mb3">
+      <div class="field"><label>Motivo / OS</label><input class="finput" id="inv-mov-motivo" placeholder="Ex: OS 3537, reposição, ajuste..."></div>
+      <div class="field"><label>Observações</label><input class="finput" id="inv-mov-obs" placeholder="Observação opcional"></div>
+    </div>
+    <div class="text-muted" style="font-size:12px">${tipo === 'saida' ? 'A saída é registrada por veículo e reduz o saldo calculado.' : tipo === 'entrada' ? 'A entrada aumenta o saldo calculado do produto.' : 'Ajuste positivo aumenta e ajuste negativo reduz o saldo.'}</div>`;
+  document.getElementById('inventory-modal-warning').style.display = 'none';
+  document.getElementById('inventory-modal-save').textContent = `Salvar ${meta.label.toLowerCase()}`;
+  document.getElementById('inventory-modal').classList.add('open');
+}
+
+function updateInventoryMovementWarning() {
+  const warning = document.getElementById('inventory-modal-warning');
+  if (!warning) return;
+  const tipo = document.getElementById('inv-mov-tipo')?.value || '';
+  const product = inventoryProductById(document.getElementById('inv-mov-produto')?.value);
+  const qtd = inventoryNum(document.getElementById('inv-mov-qtd')?.value);
+  if (!product || !qtd || tipo !== 'saida') {
+    warning.style.display = 'none';
+    warning.innerHTML = '';
+    return;
+  }
+  const calc = inventoryCalcProduct(product);
+  const future = calc.atual - Math.abs(qtd);
+  const status = inventoryStatus(product, future);
+  if (future < 0 || status.key !== 'ok') {
+    warning.style.display = '';
+    warning.innerHTML = `Atenção: após esta saída, o saldo de ${sanitize(product.nome)} ficará em <strong>${inventoryFmtQty(future)} ${sanitize(product.unidade || '')}</strong> (${status.label}).`;
+  } else {
+    warning.style.display = 'none';
+    warning.innerHTML = '';
+  }
+}
+
+async function saveInventoryModal() {
+  if (inventoryModalMode === 'product') return saveInventoryProduct();
+  if (inventoryModalMode === 'movement') return saveInventoryMovement();
+}
+
+async function saveInventoryProduct() {
+  const nome = document.getElementById('inv-prod-nome')?.value.trim();
+  if (!nome) { toast('Preencha o nome do produto', 'err'); return; }
+  const payload = {
+    nome,
+    unidade: document.getElementById('inv-prod-unidade')?.value.trim() || 'un',
+    estoque_inicial: inventoryNum(document.getElementById('inv-prod-inicial')?.value),
+    estoque_minimo: inventoryNum(document.getElementById('inv-prod-minimo')?.value),
+    ativo: document.getElementById('inv-prod-ativo')?.value !== 'false',
+    observacoes: document.getElementById('inv-prod-obs')?.value.trim() || '',
+    updated_at: new Date().toISOString()
+  };
+  try {
+    const query = inventoryEditingProductId
+      ? supabaseClient.from('inventory_products').update(payload).eq('id', inventoryEditingProductId)
+      : supabaseClient.from('inventory_products').insert([payload]);
+    const { error } = await query;
+    if (error) throw error;
+    toast('Produto salvo', 'ok');
+    closeInventoryModal();
+    await carregarEstoqueDoSupabase();
+  } catch(e) {
+    toast('Erro ao salvar produto: ' + (e.message || e), 'err');
+  }
+}
+
+async function saveInventoryMovement() {
+  const tipo = document.getElementById('inv-mov-tipo')?.value || 'saida';
+  const data = document.getElementById('inv-mov-data')?.value;
+  const product = inventoryProductById(document.getElementById('inv-mov-produto')?.value);
+  const qtdRaw = inventoryNum(document.getElementById('inv-mov-qtd')?.value);
+  const vehicleParts = String(document.getElementById('inv-mov-veiculo')?.value || '').split('|||');
+  const vehicleId = vehicleParts[0] || '';
+  const vehicleName = vehicleParts[1] || '';
+  if (!data || !product) { toast('Preencha data e produto', 'err'); return; }
+  if (tipo === 'ajuste' ? qtdRaw === 0 : qtdRaw <= 0) { toast('Preencha uma quantidade válida', 'err'); return; }
+  if (tipo === 'saida' && !vehicleName) { toast('Selecione o veículo da saída', 'err'); return; }
+
+  const quantity = tipo === 'ajuste' ? qtdRaw : Math.abs(qtdRaw);
+  const payload = {
+    data,
+    tipo,
+    product_id: product.id,
+    produto_nome: product.nome,
+    quantidade: quantity,
+    vehicle_id: vehicleId || null,
+    veiculo_nome: vehicleName || '',
+    motivo_os: document.getElementById('inv-mov-motivo')?.value.trim() || '',
+    observacoes: document.getElementById('inv-mov-obs')?.value.trim() || '',
+    operador: document.getElementById('auth-user-info')?.textContent?.replace('👤 Logado como', '').trim() || ''
+  };
+  const before = inventoryCalcProduct(product).atual;
+  try {
+    const { error } = await supabaseClient.from('inventory_movements').insert([payload]);
+    if (error) throw error;
+    closeInventoryModal();
+    await carregarEstoqueDoSupabase();
+    const future = tipo === 'saida' ? before - quantity : tipo === 'entrada' ? before + quantity : before + quantity;
+    const status = inventoryStatus(product, future);
+    toast(tipo === 'saida' && status.key !== 'ok' ? `Saída salva. Produto ficou ${status.label.toLowerCase()}.` : 'Movimentação salva', tipo === 'saida' && status.key !== 'ok' ? 'warn' : 'ok');
+  } catch(e) {
+    toast('Erro ao salvar movimentação: ' + (e.message || e), 'err');
   }
 }
 
@@ -11263,6 +11720,7 @@ window.addEventListener('load', async () => {
     await carregarChecklistsDoSupabase();
     await carregarEventosCampoDoSupabase();
     await carregarRecadosTecnicosDoSupabase();
+    await carregarEstoqueDoSupabase();
     if (!window._fieldOpsPolling) {
       window._fieldOpsPolling = setInterval(() => {
         if (currentPage === 'hoje') {
