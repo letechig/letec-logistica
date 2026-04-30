@@ -457,6 +457,53 @@ textarea:focus-visible,
 .svc-btn.exec   { background: var(--green-bg); border-color: rgba(45,214,123,.3); color: var(--green); }
 .svc-btn.reagend { background: var(--orange-bg); border-color: rgba(255,140,66,.3); color: var(--orange); }
 .svc-btn.cancel  { background: var(--red-bg); border-color: rgba(255,83,112,.3); color: var(--red); }
+.svc-card-actions { display:flex; align-items:center; gap:6px; width:100%; }
+.svc-card-actions .svc-btn.exec { flex:1; justify-content:center; }
+.svc-action-menu { position:relative; flex-shrink:0; }
+.svc-action-menu summary {
+  list-style:none;
+  min-width:30px;
+  min-height:28px;
+  padding:0 8px;
+  border:1px solid var(--border2);
+  border-radius:var(--radius-sm);
+  background:var(--card);
+  color:var(--text2);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-weight:800;
+}
+.svc-action-menu summary::-webkit-details-marker { display:none; }
+.svc-action-menu[open] summary { border-color:var(--blue); color:var(--blue2); background:var(--blue-bg); }
+.svc-action-menu-panel {
+  position:absolute;
+  right:0;
+  top:calc(100% + 5px);
+  min-width:138px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  box-shadow:var(--shadow-md);
+  padding:5px;
+  z-index:30;
+}
+.svc-action-menu-panel button {
+  width:100%;
+  min-height:28px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--text2);
+  text-align:left;
+  padding:0 9px;
+  font-size:11px;
+  font-weight:700;
+  cursor:pointer;
+}
+.svc-action-menu-panel button:hover { background:var(--bg2); color:var(--text); }
+.svc-action-menu-panel button.danger { color:var(--red); }
 
 /* ─── HOJE / EQUIPE KANBAN ───────────────────── */
 .team-board {
@@ -5791,15 +5838,37 @@ function renderAgenda() {
       <td style="font-size:11px;color:var(--text2)">${equipeHtml}</td>
       <td><span class="chip ${st.chip}">${st.label}</span>${vencido?'<span style="font-size:9px;color:var(--red);margin-left:3px">⏰</span>':''}</td>
       <td onclick="event.stopPropagation()">
-        <div class="flex gap1">
-          <button class="svc-btn" style="font-size:10px;padding:3px 8px" onclick="openEditSvc(${jsArg(s.id)})">✏️</button>
-          ${stKey!=='executado'?`<button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado')">✓</button>`:''}
-          ${stKey==='agendado' ?`<button class="svc-btn reagend" onclick="setSt(${jsArg(s.id)},'reagendado')">↻</button>`:''}
-          <button class="svc-btn cancel" onclick="setSt(${jsArg(s.id)},'cancelado')">✕</button>
-        </div>
+        ${renderServiceCardActions(s)}
       </td>
     </tr>`;
   }).join('');
+}
+
+function renderServiceCardActions(s, options = {}) {
+  const id = jsArg(s.id);
+  const stKey = s.status || s.st || 'agendado';
+  const after = options.afterStatusChange || '';
+  const primaryLabel = options.primaryLabel || 'Executar';
+  const doneLabel = options.doneLabel || 'Concluído';
+  const canExecute = stKey !== 'executado';
+  const canReagendar = stKey === 'agendado';
+  const canCancel = stKey !== 'cancelado' && stKey !== 'executado';
+  const detailsLabel = options.detailsLabel || 'Ver detalhes';
+  const detailAction = options.detailAction || `openEditSvc(${id})`;
+
+  return `<div class="svc-card-actions" onclick="event.stopPropagation()">
+    ${canExecute
+      ? `<button class="svc-btn exec" onclick="setSt(${id},'executado')${after}">${primaryLabel}</button>`
+      : `<span class="team-svc-done">✓ ${doneLabel}</span>`}
+    <details class="svc-action-menu" onclick="event.stopPropagation()">
+      <summary title="Mais ações">⋮</summary>
+      <div class="svc-action-menu-panel">
+        <button type="button" onclick="${detailAction}">${detailsLabel}</button>
+        ${canReagendar ? `<button type="button" onclick="setSt(${id},'reagendado')${after}">Reagendar</button>` : ''}
+        ${canCancel ? `<button type="button" class="danger" onclick="setSt(${id},'cancelado')${after}">Cancelar</button>` : ''}
+      </div>
+    </details>
+  </div>`;
 }
 
 // ── Kanban por Status (com DnD) ───────────────────────────
@@ -5865,10 +5934,7 @@ function renderAgendaKanban(svcs) {
         <!-- Linha 5: badges de alerta -->
         ${badges?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px">${badges}</div>`:''}
         <!-- Ações rápidas -->
-        <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
-          ${stKey!=='executado'?`<button style="flex:1;padding:3px;font-size:10px;background:var(--green);color:white;border:none;border-radius:3px;cursor:pointer;font-family:var(--mono)" onclick="setSt(${jsArg(s.id)},'executado')">✓ Ok</button>`:'<span style="font-size:10px;color:var(--green);font-family:var(--mono)">✓ Concluído</span>'}
-          <button style="padding:3px 6px;font-size:10px;border:1px solid var(--border2);border-radius:3px;cursor:pointer;background:var(--bg2)" onclick="openEditSvc(${jsArg(s.id)})">✏️</button>
-        </div>
+        ${renderServiceCardActions(s)}
       </div>`;
     }).join('');
 
@@ -7259,7 +7325,7 @@ function renderHoje() {
             <span class="today-alert-label">${F.equipe||'sem equipe'}</span>
             <span class="chip chip-red">+${atrMin}min</span>
             <div class="today-alert-actions">
-              <button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Executado</button>
+              <button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Executar</button>
             </div>
           </div>`;
         }).join('')}
@@ -7541,10 +7607,9 @@ function renderHoje() {
             </div>
             ${badges ? `<div class="team-svc-alerts">${badges}</div>` : ''}
             ${F.endereco ? `<div class="team-svc-address">📍 ${sanitize(F.endereco)}</div>` : ''}
-            ${renderExecutionMini(s)}
+            ${renderExecutionMini(s, { hideDurations: true })}
             <div class="team-svc-actions" onclick="event.stopPropagation()">
-              ${!isExec ? `<button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Executado</button>` : `<span class="team-svc-done">✓ Concluído</span>`}
-              ${isAgend ? `<button class="svc-btn reagend" onclick="setSt(${jsArg(s.id)},'reagendado');renderHoje()">Reagendar</button>` : ''}
+              ${renderServiceCardActions(s, { afterStatusChange: ';renderHoje()', primaryLabel: 'Executar' })}
             </div>
           </div>`;
         }).join('')}
@@ -10079,7 +10144,7 @@ async function rotGerarDoSistema() {
 function execStatusMeta(s) {
   const raw = String(s?.exec_status || '').trim() || ((s?.status || s?.st) === 'executado' ? 'finalizado' : 'agendado');
   const map = {
-    agendado: { label:'A caminho/Agendado', chip:'chip-blue', color:'var(--blue2)' },
+    agendado: { label:'Agendado', chip:'chip-blue', color:'var(--blue2)' },
     cheguei: { label:'Cheguei', chip:'chip-blue', color:'var(--blue2)' },
     em_execucao: { label:'Em execução', chip:'chip-yellow', color:'var(--orange)' },
     finalizado: { label:'Finalizado', chip:'chip-green', color:'var(--green)' },
@@ -10094,7 +10159,7 @@ function fmtPortalDateTime(value) {
   catch(e) { return String(value); }
 }
 
-function renderExecutionMini(s) {
+function renderExecutionMini(s, options = {}) {
   const meta = execStatusMeta(s);
   const maps = s.chegada_lat && s.chegada_lng
     ? `<a href="https://maps.google.com/?q=${encodeURIComponent(`${s.chegada_lat},${s.chegada_lng}`)}" target="_blank" onclick="event.stopPropagation()" style="color:var(--blue2);font-weight:700;text-decoration:none">Ver localização</a>`
@@ -10104,8 +10169,8 @@ function renderExecutionMini(s) {
     s.chegada_hora ? `<span>Chegada: ${fmtPortalDateTime(s.chegada_hora)}</span>` : '',
     s.inicio_hora ? `<span>Início: ${fmtPortalDateTime(s.inicio_hora)}</span>` : '',
     s.fim_hora ? `<span>Fim: ${fmtPortalDateTime(s.fim_hora)}</span>` : '',
-    Number.isFinite(Number(s.tempo_espera)) ? `<span>Espera: ${s.tempo_espera}min</span>` : '',
-    Number.isFinite(Number(s.tempo_execucao)) ? `<span>Execução: ${s.tempo_execucao}min</span>` : '',
+    !options.hideDurations && Number.isFinite(Number(s.tempo_espera)) ? `<span>Espera: ${s.tempo_espera}min</span>` : '',
+    !options.hideDurations && Number.isFinite(Number(s.tempo_execucao)) ? `<span>Execução: ${s.tempo_execucao}min</span>` : '',
     maps,
     s.problema_descricao ? `<span style="color:var(--red);font-weight:700">Problema: ${sanitize(s.problema_descricao)}</span>` : ''
   ].filter(Boolean).join(' · ');
