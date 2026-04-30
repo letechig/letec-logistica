@@ -2428,6 +2428,7 @@ async function carregarVeiculos(){
   <div class="nav-section-label">Análise</div>
   <button class="nav-item" onclick="nav('equipes',this)"><span class="ico">👷</span><span>Equipes</span></button>
   <button class="nav-item" onclick="nav('clientes',this)"><span class="ico">🏢</span><span>Clientes</span></button>
+  <button class="nav-item" onclick="nav('revisao',this)"><span class="ico">🔎</span><span>Revisão de Dados</span></button>
   <button class="nav-item" onclick="nav('historico',this)"><span class="ico">🗂</span><span>Histórico</span></button>
 
   <div class="nav-section-label">Admin</div>
@@ -3107,11 +3108,64 @@ async function carregarVeiculos(){
           <option value="true">Recorrentes</option>
           <option value="false">Não recorrentes</option>
         </select>
+        <select class="fsel" id="cli-status-filter" onchange="renderClientes()">
+          <option value="">Todos os status</option>
+          <option value="Ativo">Ativo</option>
+          <option value="A renovar">A renovar</option>
+          <option value="Vencido">Vencido</option>
+          <option value="Cancelado">Cancelado</option>
+          <option value="Eventual recente">Eventual recente</option>
+          <option value="Eventual antigo">Eventual antigo</option>
+          <option value="Historico/Inativo">Histórico/Inativo</option>
+        </select>
+        <select class="fsel" id="cli-prioridade-filter" onchange="renderClientes()">
+          <option value="">Prioridade</option>
+          <option value="Alta">Alta</option>
+          <option value="Média">Média</option>
+          <option value="Media">Media</option>
+          <option value="Baixa">Baixa</option>
+        </select>
+        <select class="fsel" id="cli-ativo-filter" onchange="renderClientes()">
+          <option value="ativos">Somente ativos</option>
+          <option value="todos">Incluir históricos/inativos</option>
+        </select>
         <div class="text-muted" id="cli-count"></div>
       </div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>#</th><th>Cliente</th><th>Telefone</th><th>Endereço</th><th>Tipo</th><th>Local</th><th>Urgência</th><th>Recorr.</th><th>Period.</th><th>Último</th><th>Ações</th></tr></thead>
+        <thead><tr><th>#</th><th>Cliente</th><th>Telefone</th><th>Endereço</th><th>Tipo</th><th>Status</th><th>Prior.</th><th>Local</th><th>Recorr.</th><th>Último</th><th>Ações</th></tr></thead>
         <tbody id="cli-tbody"></tbody>
+      </table></div>
+    </div>
+
+    <!-- ═══ REVISÃO DE DADOS ═══ -->
+    <div id="page-revisao" class="page">
+      <div class="flex ic sb mb4">
+        <div><div class="section-title">Revisão de Dados</div><div class="section-sub">Pendências da importação e saneamento da base</div></div>
+      </div>
+      <div class="filter-bar">
+        <input class="finput" id="rev-search" placeholder="🔍 Buscar na revisão..." oninput="renderRevisaoDados()">
+        <select class="fsel" id="rev-tipo-filter" onchange="renderRevisaoDados()">
+          <option value="">Todos os problemas</option>
+          <option value="possivel_cliente_existente">Possível cliente existente</option>
+          <option value="possivel_duplicidade">Possível duplicidade</option>
+          <option value="endereco_ausente">Endereço ausente</option>
+          <option value="telefone_ausente">Telefone ausente</option>
+          <option value="cliente_sem_classificacao">Cliente sem classificação</option>
+          <option value="contrato_sem_vencimento">Contrato sem vencimento</option>
+          <option value="contrato_sem_periodicidade">Contrato sem periodicidade</option>
+          <option value="nome_parecido">Nome parecido</option>
+        </select>
+        <select class="fsel" id="rev-status-filter" onchange="renderRevisaoDados()">
+          <option value="pendente">Pendentes</option>
+          <option value="resolvido">Resolvidas</option>
+          <option value="ignorado">Ignoradas</option>
+          <option value="">Todas</option>
+        </select>
+        <div class="text-muted" id="rev-count"></div>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>#</th><th>Problema</th><th>Cliente</th><th>Descrição</th><th>Sugestão</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody id="rev-tbody"></tbody>
       </table></div>
     </div>
 
@@ -3248,9 +3302,13 @@ async function carregarVeiculos(){
               <div class="client-field-error" id="cli-error-nome">Nome é obrigatório.</div>
             </div>
             <div class="client-field">
-              <label class="client-label">Telefone <span class="req">*</span></label>
+              <label class="client-label">Telefone</label>
               <input id="cli-form-tel" type="text" class="finput" placeholder="(11) 99999-9999">
               <div class="client-field-error" id="cli-error-tel">Telefone é obrigatório.</div>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Contato</label>
+              <input id="cli-form-contato" type="text" class="finput" placeholder="Nome do contato">
             </div>
             <div class="client-field">
               <label class="client-label">Tipo de pessoa</label>
@@ -3319,6 +3377,37 @@ async function carregarVeiculos(){
             <div class="client-field">
               <label class="client-label">Último serviço</label>
               <input id="cli-form-ultimo-servico" type="date" class="finput">
+            </div>
+            <div class="client-field">
+              <label class="client-label">Status operacional</label>
+              <select id="cli-form-status-operacional" class="fsel">
+                <option value="">Sem status</option>
+                <option value="Ativo">Ativo</option>
+                <option value="A renovar">A renovar</option>
+                <option value="Vencido">Vencido</option>
+                <option value="Cancelado">Cancelado</option>
+                <option value="Eventual recente">Eventual recente</option>
+                <option value="Eventual antigo">Eventual antigo</option>
+                <option value="Historico/Inativo">Histórico/Inativo</option>
+              </select>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Prioridade</label>
+              <select id="cli-form-prioridade" class="fsel">
+                <option value="">Sem prioridade</option>
+                <option value="Alta">Alta</option>
+                <option value="Média">Média</option>
+                <option value="Media">Media</option>
+                <option value="Baixa">Baixa</option>
+              </select>
+            </div>
+            <div class="client-field">
+              <label class="client-label">Zona</label>
+              <input id="cli-form-zona" type="text" class="finput" placeholder="Zona operacional">
+            </div>
+            <div class="client-field">
+              <label class="client-label">Origem</label>
+              <input id="cli-form-origem" type="text" class="finput" placeholder="Contratos, Access, agenda...">
             </div>
           </div>
         </section>
@@ -5265,6 +5354,7 @@ const PAGE_META = {
   estoque:    { title:'Estoque',            sub:'Produtos, entradas e saídas por veículo' },
   equipes:    { title:'Análise por Equipes',sub:'Produtividade e distribuição' },
   clientes:   { title:'Clientes',           sub:'Base extraída da agenda 2026' },
+  revisao:    { title:'Revisão de Dados',    sub:'Pendências da importação e saneamento da base' },
   historico:  { title:'Histórico',          sub:'Check lists e registros salvos' },
   hoje:       { title:'Painel do Dia',        sub:'Execução, alertas e ações pendentes' },
   config:     { title:'Configurações',        sub:'Gerencie técnicos, veículos e tipos de serviço' }
@@ -5286,7 +5376,7 @@ window.nav = function(page, btn) {
   currentPage = page;
   // Para agenda: carrega dados do Supabase antes de renderizar
   const renderAgendaComDados = async () => { await getServices(); renderAgenda(); };
-  const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, clientes: renderClientes, historico: renderHist, roteiro: rotGerarDoSistema, config: renderConfig };
+  const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, clientes: renderClientes, revisao: renderRevisaoDados, historico: renderHist, roteiro: rotGerarDoSistema, config: renderConfig };
   if (renders[page]) renders[page]();
   updateBadges();
 }
@@ -8155,6 +8245,7 @@ function renderEquipes(){
 // ════════════════════════════════════════════════
 let clientesData = [];
 let clienteEditando = null;
+let revisaoDadosData = [];
 
 async function renderClientes(){
   try {
@@ -8163,8 +8254,15 @@ async function renderClientes(){
     const tipoLocalFilter = (document.getElementById('cli-tipo-local-filter')?.value||'').trim();
     const urgenciaFilter = (document.getElementById('cli-urgencia-filter')?.value||'').trim();
     const recorrenteFilter = (document.getElementById('cli-recorrente-filter')?.value||'').trim();
+    const statusFilter = (document.getElementById('cli-status-filter')?.value||'').trim();
+    const prioridadeFilter = (document.getElementById('cli-prioridade-filter')?.value||'').trim();
+    const ativoFilter = (document.getElementById('cli-ativo-filter')?.value||'ativos').trim();
     
-    const url = `${API_BASE_URL}/api/customers${search ? `?search=${encodeURIComponent(search)}` : ''}`;
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (ativoFilter === 'todos') params.set('include_inactive', 'true');
+    const queryString = params.toString();
+    const url = `${API_BASE_URL}/api/customers${queryString ? `?${queryString}` : ''}`;
     
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Erro ao carregar clientes: ${response.status}`);
@@ -8176,6 +8274,8 @@ async function renderClientes(){
     if (tipoLocalFilter) filtered = filtered.filter(c => c.tipo_local === tipoLocalFilter);
     if (urgenciaFilter) filtered = filtered.filter(c => c.nivel_urgencia_padrao === urgenciaFilter);
     if (recorrenteFilter) filtered = filtered.filter(c => String(!!c.cliente_recorrente) === recorrenteFilter);
+    if (statusFilter) filtered = filtered.filter(c => c.status_operacional === statusFilter);
+    if (prioridadeFilter) filtered = filtered.filter(c => c.prioridade === prioridadeFilter);
     if (search) filtered = filtered.filter(c => c.nome.toLowerCase().includes(search) || (c.telefone||'').includes(search) || (c.endereco||'').toLowerCase().includes(search) || (c.endereco_completo||'').toLowerCase().includes(search));
     
     filtered.sort((a,b) => a.nome.localeCompare(b.nome));
@@ -8184,13 +8284,14 @@ async function renderClientes(){
     
     document.getElementById('cli-tbody').innerHTML = filtered.map((c,i) => {
       const tipoChip = c.tipo === 'PJ' ? '<span class="chip chip-blue">PJ</span>' : '<span class="chip chip-cyan">PF</span>';
-      const categoriaChip = c.categoria === 'contrato' 
-        ? `<span class="chip chip-green">Contrato</span>` 
-        : '<span class="chip chip-gray">Eventual</span>';
+      const categoriaChip = c.tipo_cliente
+        ? (c.tipo_cliente === 'Contrato' ? '<span class="chip chip-green">Contrato</span>' : `<span class="chip chip-gray">${sanitize(c.tipo_cliente)}</span>`)
+        : (c.categoria === 'contrato' ? '<span class="chip chip-green">Contrato</span>' : '<span class="chip chip-yellow">Sem class.</span>');
+      const statusText = c.status_operacional || (c.ativo === false ? 'Historico/Inativo' : '—');
+      const statusClass = ['Ativo','A renovar','Eventual recente'].includes(statusText) ? 'chip-green' : (['Vencido','Cancelado','Historico/Inativo'].includes(statusText) ? 'chip-orange' : 'chip-gray');
+      const prioridadeClass = c.prioridade === 'Alta' ? 'chip-red' : (c.prioridade === 'Baixa' ? 'chip-gray' : 'chip-orange');
       const localChip = c.tipo_local ? `<span class="chip chip-slate">${c.tipo_local}</span>` : '—';
-      const urgenciaChip = c.nivel_urgencia_padrao ? `<span class="chip chip-orange">${c.nivel_urgencia_padrao}</span>` : '—';
       const recorrenteChip = c.cliente_recorrente ? '<span class="chip chip-green">Sim</span>' : '<span class="chip chip-gray">Não</span>';
-      const periodicidade = c.periodicidade ? c.periodicidade : '—';
       const ultimoServico = c.data_ultimo_servico ? c.data_ultimo_servico.slice(0, 10) : '—';
       
       return `<tr>
@@ -8199,10 +8300,10 @@ async function renderClientes(){
         <td class="mono">${c.telefone || '—'}</td>
         <td style="font-size:12px;color:var(--text2)">${c.endereco ? c.endereco.substring(0,35) + (c.endereco.length > 35 ? '...' : '') : '—'}</td>
         <td>${categoriaChip} ${tipoChip}</td>
+        <td><span class="chip ${statusClass}">${sanitize(statusText)}</span></td>
+        <td>${c.prioridade ? `<span class="chip ${prioridadeClass}">${sanitize(c.prioridade)}</span>` : '—'}</td>
         <td>${localChip}</td>
-        <td>${urgenciaChip}</td>
         <td style="text-align:center">${recorrenteChip}</td>
-        <td>${periodicidade}</td>
         <td>${ultimoServico}</td>
         <td style="text-align:center;gap:4px;display:flex;justify-content:center">
           <button class="btn btn-ghost btn-xs" onclick="openServiceFromClient(${c.id})" style="padding:4px 8px;font-size:11px" title="Criar serviço para este cliente">➕</button>
@@ -8237,6 +8338,122 @@ function openServiceFromClient(clientId) {
   }
 }
 
+function labelTipoRevisao(tipo) {
+  const labels = {
+    possivel_cliente_existente: 'Possível cliente existente',
+    possivel_duplicidade: 'Possível duplicidade',
+    endereco_ausente: 'Endereço ausente',
+    telefone_ausente: 'Telefone ausente',
+    cliente_sem_classificacao: 'Cliente sem classificação',
+    contrato_sem_vencimento: 'Contrato sem vencimento',
+    contrato_sem_periodicidade: 'Contrato sem periodicidade',
+    nome_parecido: 'Nome parecido'
+  };
+  return labels[tipo] || tipo || 'Revisão';
+}
+
+function chipStatusRevisao(status) {
+  const meta = {
+    pendente: 'chip-orange',
+    resolvido: 'chip-green',
+    ignorado: 'chip-gray'
+  };
+  return `<span class="chip ${meta[status] || 'chip-gray'}">${sanitize(status || 'pendente')}</span>`;
+}
+
+async function renderRevisaoDados() {
+  const tbody = document.getElementById('rev-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Carregando revisão...</td></tr>';
+
+  try {
+    const search = (document.getElementById('rev-search')?.value || '').trim();
+    const tipo = (document.getElementById('rev-tipo-filter')?.value || '').trim();
+    const status = (document.getElementById('rev-status-filter')?.value || 'pendente').trim();
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (tipo) params.set('tipo_problema', tipo);
+    if (status) params.set('status_revisao', status);
+
+    const response = await fetch(`${API_BASE_URL}/api/data-reviews${params.toString() ? `?${params.toString()}` : ''}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+    revisaoDadosData = Array.isArray(payload) ? payload : (payload.items || []);
+
+    document.getElementById('rev-count').textContent = `${revisaoDadosData.length} pendência(s)${payload.preview ? ' · prévia da planilha' : ''}`;
+    if (!revisaoDadosData.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Nenhuma pendência encontrada</td></tr>';
+      return;
+    }
+
+    const warningRow = payload.preview
+      ? `<tr><td colspan="7" style="color:var(--orange);background:var(--orange-bg);font-size:12px;text-align:center">${sanitize(payload.warning || 'Exibindo prévia da planilha; aplique a migração para salvar e resolver pendências.')}</td></tr>`
+      : '';
+
+    tbody.innerHTML = warningRow + revisaoDadosData.map((item, index) => {
+      const cliente = item.customers || {};
+      const payload = item.payload || {};
+      const nomeCliente = cliente.nome || payload.cliente || 'Sem cliente vinculado';
+      const endereco = cliente.endereco || payload.endereco || '';
+      const tipoCliente = cliente.tipo_cliente || payload.tipo_cliente || '';
+      const statusOperacional = cliente.status_operacional || payload.status_operacional || '';
+      const clienteCell = `
+        <div class="bold">${sanitize(nomeCliente)}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">
+          ${tipoCliente ? `<span class="chip ${String(tipoCliente).toLowerCase().includes('contrato') ? 'chip-green' : 'chip-gray'}">${sanitize(tipoCliente)}</span>` : ''}
+          ${statusOperacional ? `<span class="chip chip-blue">${sanitize(statusOperacional)}</span>` : ''}
+        </div>
+        ${endereco ? `<div style="font-size:11px;color:var(--text3);max-width:220px">${sanitize(String(endereco).slice(0, 80))}</div>` : ''}
+      `;
+      const actions = [
+        item.customer_id ? `<button class="btn btn-ghost btn-xs" onclick="abrirClienteDaRevisao(${jsArg(item.customer_id)})">Abrir</button>` : '',
+        item.preview ? '<span class="text-muted">Prévia</span>' : '',
+        !item.preview && item.status_revisao !== 'resolvido' ? `<button class="btn btn-ghost btn-xs" onclick="atualizarRevisaoDados(${jsArg(item.id)}, 'resolvido')">Resolver</button>` : '',
+        !item.preview && item.status_revisao !== 'ignorado' ? `<button class="btn btn-ghost btn-xs" onclick="atualizarRevisaoDados(${jsArg(item.id)}, 'ignorado')">Ignorar</button>` : ''
+      ].filter(Boolean).join(' ');
+
+      return `<tr>
+        <td class="mono">${index + 1}</td>
+        <td><span class="chip chip-blue">${sanitize(labelTipoRevisao(item.tipo_problema))}</span></td>
+        <td>${clienteCell}</td>
+        <td style="font-size:12px;color:var(--text2);max-width:280px">${sanitize(item.descricao || '—')}</td>
+        <td style="font-size:12px;color:var(--text2);max-width:240px">${sanitize(item.sugestao || '—')}</td>
+        <td>${chipStatusRevisao(item.status_revisao)}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap">${actions || '—'}</td>
+      </tr>`;
+    }).join('');
+  } catch (error) {
+    console.error('Erro renderRevisaoDados:', error);
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red)">Erro ao carregar revisão: ${sanitize(error.message)}</td></tr>`;
+  }
+}
+
+async function abrirClienteDaRevisao(customerId) {
+  const ativoFilter = document.getElementById('cli-ativo-filter');
+  if (ativoFilter) ativoFilter.value = 'todos';
+  await renderClientes();
+  nav('clientes');
+  setTimeout(() => openClientModal(Number(customerId)), 50);
+}
+
+async function atualizarRevisaoDados(id, status) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/data-reviews/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status_revisao: status })
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || `Erro ${response.status}`);
+    }
+    toast('Revisão atualizada', 'ok');
+    await renderRevisaoDados();
+  } catch (error) {
+    toast('Erro ao atualizar revisão: ' + error.message, 'err');
+  }
+}
+
 function openClientModal(clientId = null) {
   if (clientId) {
     // Editar cliente existente
@@ -8247,6 +8464,7 @@ function openClientModal(clientId = null) {
     document.getElementById('client-modal-subtitle').textContent = 'Atualize os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = clienteEditando.nome || '';
     document.getElementById('cli-form-tel').value = clienteEditando.telefone || '';
+    document.getElementById('cli-form-contato').value = clienteEditando.contato || '';
     document.getElementById('cli-form-cep').value = clienteEditando.cep || '';
     document.getElementById('cli-form-rua').value = clienteEditando.rua || '';
     document.getElementById('cli-form-numero').value = clienteEditando.numero || '';
@@ -8268,6 +8486,10 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-form-recorrente').checked = !!clienteEditando.cliente_recorrente;
     document.getElementById('cli-form-periodicidade').value = clienteEditando.periodicidade || '';
     document.getElementById('cli-form-ultimo-servico').value = clienteEditando.data_ultimo_servico ? clienteEditando.data_ultimo_servico.slice(0, 10) : '';
+    document.getElementById('cli-form-status-operacional').value = clienteEditando.status_operacional || '';
+    document.getElementById('cli-form-prioridade').value = clienteEditando.prioridade || '';
+    document.getElementById('cli-form-zona').value = clienteEditando.zona || '';
+    document.getElementById('cli-form-origem').value = clienteEditando.origem || '';
     document.getElementById('cli-form-restricoes').value = clienteEditando.restricoes_operacionais || '';
     document.getElementById('cli-form-obs-operacionais').value = clienteEditando.observacoes_operacionais || '';
     document.getElementById('cli-form-tipo').value = clienteEditando.tipo || 'PF';
@@ -8294,6 +8516,7 @@ function openClientModal(clientId = null) {
     document.getElementById('client-modal-subtitle').textContent = 'Cadastre os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = '';
     document.getElementById('cli-form-tel').value = '';
+    document.getElementById('cli-form-contato').value = '';
     document.getElementById('cli-form-cep').value = '';
     document.getElementById('cli-form-rua').value = '';
     document.getElementById('cli-form-numero').value = '';
@@ -8308,6 +8531,10 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-form-recorrente').checked = false;
     document.getElementById('cli-form-periodicidade').value = '';
     document.getElementById('cli-form-ultimo-servico').value = '';
+    document.getElementById('cli-form-status-operacional').value = '';
+    document.getElementById('cli-form-prioridade').value = '';
+    document.getElementById('cli-form-zona').value = '';
+    document.getElementById('cli-form-origem').value = '';
     document.getElementById('cli-form-restricoes').value = '';
     document.getElementById('cli-form-obs-operacionais').value = '';
     document.getElementById('cli-form-tipo').value = 'PF';
@@ -8554,6 +8781,7 @@ async function saveClient() {
     const isNewClient = !clienteEditando;
     const nome = document.getElementById('cli-form-nome').value.trim();
     const telefone = document.getElementById('cli-form-tel').value.trim();
+    const contato = document.getElementById('cli-form-contato').value.trim();
     const cep = document.getElementById('cli-form-cep').value.trim();
     const enderecoCompleto = document.getElementById('cli-form-end').value.trim();
     const categoria = document.getElementById('cli-form-categoria').value;
@@ -8569,6 +8797,10 @@ async function saveClient() {
     const referencia = document.getElementById('cli-form-referencia').value.trim();
     const nivel_urgencia_padrao = document.getElementById('cli-form-urgencia').value;
     const data_ultimo_servico = document.getElementById('cli-form-ultimo-servico').value || null;
+    const status_operacional = document.getElementById('cli-form-status-operacional').value;
+    const prioridade = document.getElementById('cli-form-prioridade').value;
+    const zona = document.getElementById('cli-form-zona').value.trim();
+    const origem = document.getElementById('cli-form-origem').value.trim();
     const restricoes_operacionais = document.getElementById('cli-form-restricoes').value.trim();
     const observacoes_operacionais = document.getElementById('cli-form-obs-operacionais').value.trim();
     const cpf_cnpj = document.getElementById('cli-form-cpf').value.trim();
@@ -8581,12 +8813,6 @@ async function saveClient() {
       errorEl.textContent = 'Nome é obrigatório';
       errorEl.style.display = 'block';
       markClientFieldInvalid('cli-form-nome', 'cli-error-nome');
-      return;
-    }
-    if (!telefone) {
-      errorEl.textContent = 'Telefone é obrigatório';
-      errorEl.style.display = 'block';
-      markClientFieldInvalid('cli-form-tel', 'cli-error-tel');
       return;
     }
     if ((categoria === 'contrato' || recorrente) && !periodicidade) {
@@ -8605,9 +8831,15 @@ async function saveClient() {
     const payload = {
       nome,
       telefone,
+      contato,
       cep,
       endereco: enderecoCompleto,
       categoria,
+      tipo_cliente: categoria === 'contrato' ? 'Contrato' : 'Eventual',
+      status_operacional,
+      prioridade,
+      zona,
+      origem,
       periodicidade,
       tipo,
       tipo_local,

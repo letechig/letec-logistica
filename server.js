@@ -3,12 +3,15 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const readXlsxFile = require('read-excel-file/node');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
+const CLIENT_IMPORT_WORKBOOK = process.env.CLIENT_IMPORT_WORKBOOK ||
+  path.resolve(__dirname, '..', 'BASE_CLIENTES_TRATADA_LETEC (1).xlsx');
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
@@ -65,6 +68,58 @@ function buildMatrixUrl(origins, destinations) {
 
 function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeDocument(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function cleanCell(value) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function rowToObject(headers, row) {
+  return headers.reduce((acc, header, index) => {
+    if (header) acc[header] = row[index] === undefined ? null : row[index];
+    return acc;
+  }, {});
+}
+
+async function readImportSheet(sheetName) {
+  const sheetResults = await readXlsxFile(CLIENT_IMPORT_WORKBOOK, { sheets: [sheetName] });
+  const rows = sheetResults[0]?.data || [];
+  const headers = (rows.shift() || []).map(header => cleanCell(header));
+  return rows
+    .map(row => rowToObject(headers, row))
+    .filter(row => Object.values(row).some(value => value !== null && value !== ''));
+}
+
+function buildReviewPreviewItem(row, index) {
+  const problem = row.contrato_match_nome ? 'nome_parecido' : 'possivel_duplicidade';
+  return {
+    id: `preview-${index + 1}`,
+    customer_id: null,
+    tipo_problema: row.observacao_revisao
+      ? problem
+      : (!row.endereco ? 'endereco_ausente' : (!row.telefone ? 'telefone_ausente' : problem)),
+    descricao: cleanCell(row.observacao_revisao) || `Registro de "${cleanCell(row.cliente_oficial) || 'cliente'}" precisa de revisao.`,
+    sugestao: 'Previa da planilha: aplique a migracao e rode a importacao para habilitar resolucao.',
+    status_revisao: 'pendente',
+    origem: [cleanCell(row.origem_cadastro), cleanCell(row.origem_agenda)].filter(Boolean).join(', ') || 'Planilha tratada',
+    payload: {
+      cliente: cleanCell(row.cliente_oficial),
+      endereco: cleanCell(row.endereco),
+      telefone: cleanCell(row.telefone),
+      cnpjcpf: cleanCell(row.cnpjcpf),
+      proposta: cleanCell(row.proposta),
+      status_operacional: cleanCell(row.status_operacional),
+      tipo_cliente: cleanCell(row.tipo_cliente_final)
+    },
+    customers: null,
+    preview: true
+  };
 }
 
 function normalizeCustomerName(value) {
@@ -167,13 +222,19 @@ function buildCustomerAddress({ rua, numero, bairro, cidade, complemento, refere
   return address.trim() || null;
 }
 
-async function findDuplicateCustomer({ id, nome, telefone }) {
+async function findDuplicateCustomer({ id, nome, telefone, cpf_cnpj, endereco, endereco_completo, rua, numero, bairro, cidade }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
+  const documentoNormalizado = normalizeDocument(cpf_cnpj);
+  const enderecoNormalizado = normalizeAddress(
+    endereco_completo ||
+    endereco ||
+    buildCustomerAddress({ rua, numero, bairro, cidade })
+  );
 
   const { data, error } = await supabase
     .from('customers')
-    .select('id,nome,telefone,nome_normalizado')
+    .select('id,nome,telefone,nome_normalizado,cpf_cnpj,endereco,endereco_completo,rua,numero,bairro,cidade')
     .eq('ativo', true);
 
   if (error) throw error;
@@ -184,9 +245,12 @@ async function findDuplicateCustomer({ id, nome, telefone }) {
 
     const itemNomeNorm = item.nome_normalizado || normalizeCustomerName(item.nome);
     const itemTelNorm = normalizePhone(item.telefone);
+    const itemDocumentoNorm = normalizeDocument(item.cpf_cnpj);
+    const itemEnderecoNorm = buildCustomerAddressFingerprint(item);
 
-    if (nomeNormalizado && itemNomeNorm === nomeNormalizado) return true;
     if (telefoneNormalizado && itemTelNorm && itemTelNorm === telefoneNormalizado) return true;
+    if (documentoNormalizado && itemDocumentoNorm === documentoNormalizado && enderecoNormalizado && itemEnderecoNorm === enderecoNormalizado) return true;
+    if (nomeNormalizado && itemNomeNorm === nomeNormalizado && enderecoNormalizado && itemEnderecoNorm === enderecoNormalizado) return true;
     return false;
   });
 }
@@ -517,12 +581,25 @@ app.get('/api/cep/:cep', async (req, res) => {
 // CUSTOMERS CRUD
 app.get('/api/customers', async (req, res) => {
   try {
-    const { search, tipo_local, bairro, nivel_urgencia_padrao, cliente_recorrente } = req.query;
+    const {
+      search,
+      tipo_local,
+      bairro,
+      nivel_urgencia_padrao,
+      cliente_recorrente,
+      tipo_cliente,
+      status_operacional,
+      prioridade,
+      include_inactive
+    } = req.query;
     let query = supabase
       .from('customers')
       .select('*')
-      .eq('ativo', true)
       .order('nome', { ascending: true });
+
+    if (String(include_inactive) !== 'true') {
+      query = query.eq('ativo', true);
+    }
     
     if (search && typeof search === 'string') {
       const safeSearch = search.trim().substring(0, 100);
@@ -533,6 +610,9 @@ app.get('/api/customers', async (req, res) => {
     if (tipo_local) query = query.eq('tipo_local', tipo_local);
     if (bairro) query = query.ilike('bairro', `%${String(bairro).trim()}%`);
     if (nivel_urgencia_padrao) query = query.eq('nivel_urgencia_padrao', nivel_urgencia_padrao);
+    if (tipo_cliente) query = query.eq('tipo_cliente', tipo_cliente);
+    if (status_operacional) query = query.eq('status_operacional', status_operacional);
+    if (prioridade) query = query.eq('prioridade', prioridade);
     if (cliente_recorrente !== undefined) {
       query = query.eq('cliente_recorrente', String(cliente_recorrente) === 'true');
     }
@@ -571,7 +651,13 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       complemento,
       referencia,
       cliente_recorrente,
-      data_ultimo_servico
+      data_ultimo_servico,
+      contato,
+      zona,
+      tipo_cliente,
+      status_operacional,
+      prioridade,
+      origem
     } = req.body;
 
     const telefoneNormalizado = normalizePhone(telefone);
@@ -582,7 +668,7 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
     const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
 
-    if (!nome || !telefoneNormalizado) {
+    if (!nome) {
       return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
     }
 
@@ -594,7 +680,17 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes recorrentes' });
     }
 
-    const duplicate = await findDuplicateCustomer({ nome, telefone: telefoneNormalizado });
+    const duplicate = await findDuplicateCustomer({
+      nome,
+      telefone: telefoneNormalizado,
+      cpf_cnpj,
+      endereco: enderecoFinal,
+      endereco_completo: enderecoCompletoFinal,
+      rua,
+      numero,
+      bairro,
+      cidade
+    });
     if (duplicate) {
       return res.status(409).json({
         error: `Cliente potencialmente duplicado: ${duplicate.nome}`,
@@ -627,6 +723,12 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
         data_ultimo_servico: dataUltimoServicoISO,
         tipo: tipo || 'PF',
         cpf_cnpj,
+        contato: contato ? String(contato).trim() : null,
+        zona: zona ? String(zona).trim() : null,
+        tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
+        status_operacional: status_operacional ? String(status_operacional).trim() : null,
+        prioridade: prioridade ? String(prioridade).trim() : null,
+        origem: origem ? String(origem).trim() : null,
         observacoes,
         ativo: true
       }])
@@ -672,7 +774,13 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       complemento,
       referencia,
       cliente_recorrente,
-      data_ultimo_servico
+      data_ultimo_servico,
+      contato,
+      zona,
+      tipo_cliente,
+      status_operacional,
+      prioridade,
+      origem
     } = req.body;
 
     const telefoneNormalizado = normalizePhone(telefone);
@@ -683,7 +791,7 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
     const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
     const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
 
-    if (!nome || !telefoneNormalizado) {
+    if (!nome) {
       return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
     }
 
@@ -695,7 +803,18 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes recorrentes' });
     }
 
-    const duplicate = await findDuplicateCustomer({ id, nome, telefone: telefoneNormalizado });
+    const duplicate = await findDuplicateCustomer({
+      id,
+      nome,
+      telefone: telefoneNormalizado,
+      cpf_cnpj,
+      endereco: enderecoFinal,
+      endereco_completo: enderecoCompletoFinal,
+      rua,
+      numero,
+      bairro,
+      cidade
+    });
     if (duplicate) {
       return res.status(409).json({
         error: `Cliente potencialmente duplicado: ${duplicate.nome}`,
@@ -729,6 +848,12 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
         categoria: categoria || 'eventual',
         tipo,
         cpf_cnpj,
+        contato: contato ? String(contato).trim() : null,
+        zona: zona ? String(zona).trim() : null,
+        tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
+        status_operacional: status_operacional ? String(status_operacional).trim() : null,
+        prioridade: prioridade ? String(prioridade).trim() : null,
+        origem: origem ? String(origem).trim() : null,
         observacoes,
         updated_at: new Date().toISOString()
       })
@@ -941,6 +1066,140 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
   } catch (error) {
     console.error('[POST /api/customers/merge] Error:', error.message);
     res.status(500).json({ error: 'Falha ao mesclar clientes' });
+  }
+});
+
+app.get('/api/contracts', async (req, res) => {
+  try {
+    const { customer_id, status_contrato } = req.query;
+    let query = supabase
+      .from('contracts')
+      .select('*')
+      .order('data_vencimento', { ascending: true, nullsFirst: false });
+
+    if (customer_id) query = query.eq('customer_id', Number(customer_id));
+    if (status_contrato) query = query.eq('status_contrato', String(status_contrato));
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/contracts] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar contratos' });
+  }
+});
+
+app.get('/api/customer-service-history', async (req, res) => {
+  try {
+    const { customer_id } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+    let query = supabase
+      .from('customer_service_history')
+      .select('*')
+      .order('data_atendimento', { ascending: false, nullsFirst: false })
+      .limit(limit);
+
+    if (customer_id) query = query.eq('customer_id', Number(customer_id));
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/customer-service-history] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar historico importado' });
+  }
+});
+
+app.get('/api/data-reviews', async (req, res) => {
+  try {
+    const { tipo_problema, status_revisao, search } = req.query;
+    let query = supabase
+      .from('data_reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (tipo_problema) query = query.eq('tipo_problema', String(tipo_problema));
+    if (status_revisao) query = query.eq('status_revisao', String(status_revisao));
+    if (search && typeof search === 'string') {
+      const safeSearch = search.trim().substring(0, 100);
+      query = query.or(`descricao.ilike.%${safeSearch}%,sugestao.ilike.%${safeSearch}%,origem.ilike.%${safeSearch}%`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const reviews = data || [];
+    const customerIds = [...new Set(reviews.map(item => item.customer_id).filter(Boolean))];
+    let customersById = new Map();
+
+    if (customerIds.length) {
+      const { data: customers, error: customersError } = await supabase
+        .from('customers')
+        .select('id,nome,telefone,endereco,cidade,bairro,tipo_cliente,status_operacional,prioridade')
+        .in('id', customerIds);
+      if (customersError) throw customersError;
+      customersById = new Map((customers || []).map(customer => [customer.id, customer]));
+    }
+
+    res.json(reviews.map(item => ({
+      ...item,
+      customers: item.customer_id ? customersById.get(item.customer_id) || null : null
+    })));
+  } catch (error) {
+    console.error('[GET /api/data-reviews] Error:', error.message);
+    if (error.code === '42P01' || /data_reviews/i.test(error.message || '')) {
+      try {
+        const previewRows = await readImportSheet('REVISAR');
+        const { tipo_problema, search } = req.query;
+        const searchTerm = String(search || '').trim().toLowerCase();
+        let preview = previewRows.map(buildReviewPreviewItem);
+        if (tipo_problema) preview = preview.filter(item => item.tipo_problema === String(tipo_problema));
+        if (searchTerm) {
+          preview = preview.filter(item => [
+            item.descricao,
+            item.sugestao,
+            item.origem,
+            item.payload?.cliente,
+            item.payload?.endereco
+          ].some(value => String(value || '').toLowerCase().includes(searchTerm)));
+        }
+        return res.json({
+          preview: true,
+          warning: 'Tabela data_reviews ainda nao existe. Exibindo previa da aba REVISAR da planilha.',
+          items: preview
+        });
+      } catch (previewError) {
+        return res.status(503).json({
+          error: 'Tabela data_reviews ainda nao existe. Aplique migration-import-client-base.sql no Supabase antes da importacao.',
+          detail: previewError.message
+        });
+      }
+    }
+    res.status(500).json({ error: 'Falha ao buscar revisoes de dados', detail: error.message });
+  }
+});
+
+app.put('/api/data-reviews/:id', strictLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status_revisao } = req.body;
+    const allowed = ['pendente', 'resolvido', 'ignorado'];
+    if (!allowed.includes(String(status_revisao))) {
+      return res.status(400).json({ error: 'status_revisao invalido' });
+    }
+
+    const { data, error } = await supabase
+      .from('data_reviews')
+      .update({ status_revisao, updated_at: new Date().toISOString() })
+      .eq('id', Number(id))
+      .select();
+
+    if (error) throw error;
+    if (!data.length) return res.status(404).json({ error: 'Revisao nao encontrada' });
+    res.json(data[0]);
+  } catch (error) {
+    console.error('[PUT /api/data-reviews/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao atualizar revisao' });
   }
 });
 
