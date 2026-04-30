@@ -3773,7 +3773,49 @@ function getTecnicosUnicos(servicos){
   return Array.from(set);
 }
 
+function minutesBetweenTimestamps(start, end) {
+  if (!start || !end) return null;
+  const a = new Date(start);
+  const b = new Date(end);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  const diff = Math.round((b.getTime() - a.getTime()) / 60000);
+  return diff > 0 ? diff : null;
+}
+
+function getTempoServicoRealMin(servico) {
+  const saved = Number(servico?.tempo_execucao);
+  if (Number.isFinite(saved) && saved > 0) return saved;
+  return minutesBetweenTimestamps(servico?.inicio_hora, servico?.fim_hora);
+}
+
+function getHoraFimServicoRealMin(servico) {
+  if (!servico?.fim_hora) return null;
+  const fim = new Date(servico.fim_hora);
+  if (Number.isNaN(fim.getTime())) return null;
+  const fimMin = fim.getHours() * 60 + fim.getMinutes();
+  const dt = getServiceDateValue(servico);
+  if (!dt) return fimMin;
+  const fimDate = [
+    fim.getFullYear(),
+    String(fim.getMonth() + 1).padStart(2, '0'),
+    String(fim.getDate()).padStart(2, '0')
+  ].join('-');
+  if (fimDate > dt) return fimMin + 1440;
+  return fimMin;
+}
+
+function serviceTemTempoReal(servico) {
+  return getTempoServicoRealMin(servico) !== null;
+}
+
 function calcularTempoServico(s, opts = {}) {
+  const real = opts.usarEstimativa === true ? null : getTempoServicoRealMin(s);
+  if (real !== null) {
+    const deslocamento = opts.incluirDeslocamento
+      ? Math.max(TEMPO_DESLOCAMENTO_MIN, opts.deslocamentoMin || TEMPO_DESLOCAMENTO)
+      : 0;
+    return Math.round(real + deslocamento);
+  }
   const base = calcularTempoServicoBase(s);
   const buffer = calcularBufferServico(s);
   const deslocamento = opts.incluirDeslocamento
@@ -4298,6 +4340,8 @@ function avaliarDescansoMinimoRota(servicos, primeiroInicioMin) {
       .filter(s => getServiceTecnicosIds(s).map(id => String(id)).includes(techId))
       .map(s => {
         const inicio = getHorarioServicoMin(s);
+        const fimReal = getHoraFimServicoRealMin(s);
+        if (fimReal !== null) return { servico: s, fim: fimReal };
         if (inicio === null) return null;
         return {
           servico: s,
@@ -5259,7 +5303,10 @@ function renderDash() {
   const vencidos    = svcs.filter(s => getServiceDateValue(s) < today && (s.status||s.st) === 'agendado');
   const noturnos    = svcs.filter(s => { const h=parseInt((s.horario||s.hr||'').substring(0,2)); return !isNaN(h) && h>=20 && (s.status||s.st)==='agendado'; });
 
-  // Capacidade — baseada em TEMPO REAL (v7.4)
+  const servicosComTempoReal = svcs.filter(serviceTemTempoReal).length;
+  const usaTempoReal = servicosComTempoReal > 0;
+
+  // Capacidade — usa tempo real do portal quando disponível e estimativa como fallback
   const capData    = analisarCapacidade(svcs);
   const numTecnicos= getTecnicosDisponiveisCapacidade(svcs).length || getTecnicosUnicos(svcs).length;
   const diasComSvc = new Set(svcs.map(s => getServiceDateValue(s)).filter(Boolean)).size;
@@ -5325,11 +5372,12 @@ function renderDash() {
   `;
 
   const acoes = [];
-  if (vencidos.length) acoes.push({ cls:'red', txt:`Priorizar ${vencidos.length} serviço(s) atrasado(s) antes de novos encaixes.` });
-  if (semEquipe.length) acoes.push({ cls:'orange', txt:`Definir equipe para ${semEquipe.length} serviço(s) sem responsável.` });
-  if (reagend) acoes.push({ cls:'blue', txt:`Revisar ${reagend} reagendamento(s) e confirmar nova data.` });
-  if (pctOcup >= 85) acoes.push({ cls:'orange', txt:`Redistribuir carga: ocupação estimada em ${pctOcup}%.` });
-  if (!acoes.length) acoes.push({ cls:'green', txt:`Operação equilibrada. Manter acompanhamento e preencher lacunas comerciais.` });
+  if (semEquipe.length) acoes.push({ cls:'orange', txt:'Abrir a agenda e atribuir responsáveis aos serviços sem equipe.' });
+  if (vencidos.length) acoes.push({ cls:'red', txt:'Reprogramar ou concluir os serviços atrasados antes de aceitar novos encaixes.' });
+  if (reagend) acoes.push({ cls:'blue', txt:`Conferir ${reagend} serviço(s) reagendado(s) e validar a próxima data.` });
+  if (pctOcup >= 85) acoes.push({ cls:'orange', txt:'Redistribuir carga entre equipes antes de confirmar novos serviços.' });
+  if (usaTempoReal && servicosComTempoReal < total) acoes.push({ cls:'blue', txt:`Estimativa calibrada por ${servicosComTempoReal} OS com tempo real; faltam registros do portal no restante.` });
+  if (!acoes.length) acoes.push({ cls:'green', txt:'Operação sem bloqueios; acompanhar execução pelo portal técnico.' });
   const acoesEl = document.getElementById('dash-acoes-recomendadas');
   if (acoesEl) acoesEl.innerHTML = `<div class="dash-op-list">${acoes.slice(0,4).map(a => `
     <div class="dash-op-row ${a.cls}"><span class="dash-op-row-dot"></span><span>${a.txt}</span></div>
@@ -5337,8 +5385,8 @@ function renderDash() {
 
   // ── ZONA 2A: Problemas Críticos ────────────────────────────
   const criticos = [];
-  if (vencidos.length)    criticos.push({ icon:'⏰', cor:'var(--red)',    txt:`${vencidos.length} serviço(s) com data passada ainda "agendado"` });
-  if (semEquipe.length)   criticos.push({ icon:'👷', cor:'var(--red)',    txt:`${semEquipe.length} serviço(s) sem equipe definida` });
+  if (vencidos.length)    criticos.push({ icon:'⏰', cor:'var(--red)',    txt:`${vencidos.length} serviço(s) atrasado(s)` });
+  if (semEquipe.length)   criticos.push({ icon:'👷', cor:'var(--red)',    txt:`${semEquipe.length} serviço(s) sem equipe` });
   const conflitoJornada = typeof detectarConflitosJornada==='function' ? detectarConflitosJornada(svcs) : [];
   if (conflitoJornada.length) criticos.push({ icon:'⚡', cor:'var(--red)', txt:`${conflitoJornada.length} conflito(s) noite→manhã detectado(s)` });
 
@@ -5353,7 +5401,7 @@ function renderDash() {
 
   // ── ZONA 2B: Avisos Operacionais ───────────────────────────
   const avisos = [];
-  if (reagend)              avisos.push({ icon:'🔄', cor:'var(--orange)', txt:`${reagend} serviço(s) reagendado(s) sem nova data confirmada` });
+  if (reagend)              avisos.push({ icon:'🔄', cor:'var(--orange)', txt:`${reagend} serviço(s) reagendado(s) no período` });
   if (noturnos.length)      avisos.push({ icon:'🌙', cor:'var(--purple)', txt:`${noturnos.length} serviço(s) noturno(s) (≥20h) ainda pendentes` });
   if (sobrecargaDia)        avisos.push({ icon:'🔥', cor:'var(--orange)', txt:`Pico de ${maxDia} serviços em um único dia` });
   if (ociosDia)             avisos.push({ icon:'📉', cor:'var(--blue)',   txt:`Ritmo abaixo do esperado: média ${mediaPerDia} serv/dia` });
@@ -5376,10 +5424,10 @@ function renderDash() {
   if (capEl) {
     const corCap = pctOcup>=90?'var(--red)':pctOcup>=75?'var(--orange)':'var(--green)';
     const msgCap = pctOcup>=90
-      ? 'No limite da jornada útil — redistribuir ou reforçar'
+      ? 'Estimativa no limite da jornada útil'
       : slotsLivres>0
-      ? `Pode absorver mais ~${slotsLivres} serviços`
-      : 'Capacidade bem distribuída';
+      ? `Estimativa conservadora: até ~${slotsLivres} encaixe(s)`
+      : 'Estimativa sem folga clara';
     capEl.innerHTML = `
       <div>
         <div class="dash-op-cap-value" style="color:${corCap}">${pctOcup}%</div>
@@ -5418,6 +5466,11 @@ function renderDash() {
         <div style="display:flex;justify-content:space-between;margin-top:4px">
           <span style="color:var(--text3)">Tempo médio/serviço</span>
           <span style="font-family:var(--mono);font-weight:600">${formatarMinutosHM(tempoMedioServicoPeriodo)}</span>
+        </div>
+        <div style="margin-top:8px;color:var(--text3);font-size:10px;line-height:1.35">
+          ${usaTempoReal
+            ? `${servicosComTempoReal}/${total} OS com tempo real do portal; demais usam estimativa por tipo.`
+            : 'Sem OS com tempo real no portal; capacidade exibida como estimativa.'}
         </div>
       </div>
     `;
@@ -7547,6 +7600,32 @@ function renderRotas() {
     document.getElementById('rota-date').value = rotaDate;
 
   const recs = clRecords;
+  const rotasTotalKm   = recs.reduce((s,r) => s + (r.kmD > 0 ? r.kmD : 0), 0);
+  const rotasRecsComKm = recs.filter(r => r.kmD > 0);
+  const rotasAvgKm     = rotasRecsComKm.length ? Math.round(rotasTotalKm / rotasRecsComKm.length) : 0;
+  const rotasMaxKmRec  = recs.reduce((a,b) => (b.kmD||0) > (a.kmD||0) ? b : a, {});
+
+  const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  setHtml('rotas-validation-indicators', `
+    <div class="card card-accent" style="grid-column:1/-1">
+      <div class="card-label mb2">Rotas & KM reorganizado</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.5">
+        O link de rota completa foi removido. KM rodado, combustível, avarias e eficiência agora ficam consolidados em Frota; o roteiro operacional fica em Roteiro do Dia e Portal do Técnico.
+      </div>
+      <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="nav('frota')">Abrir Frota</button>
+    </div>
+  `);
+  setHtml('rotas-kpis', `
+    <div class="card card-green"><div class="card-label">KM Total Registrado</div><div class="card-value cv-green">${rotasTotalKm.toLocaleString('pt-BR')}</div><div class="card-trend">${rotasRecsComKm.length} saída(s) com KM</div></div>
+    <div class="card"><div class="card-label">Média KM / Saída</div><div class="card-value">${rotasAvgKm.toLocaleString('pt-BR')}</div><div class="card-trend">fonte: checklists</div></div>
+    <div class="card"><div class="card-label">Pico de KM</div><div class="card-value cv-orange">${(rotasMaxKmRec.kmD||0).toLocaleString('pt-BR')}</div><div class="card-trend">${rotasMaxKmRec.date ? rotasMaxKmRec.date.slice(8,10)+'/'+rotasMaxKmRec.date.slice(5,7) : '—'} · ${rotasMaxKmRec.vei||'—'}</div></div>
+  `);
+  setHtml('km-analysis', '<div class="text-muted">Análise mensal movida para Frota.</div>');
+  setHtml('mapa-simples', '<div class="text-muted" style="padding:18px;text-align:center">Rota multi-endereço desativada. Use Roteiro do Dia para sequência por técnico.</div>');
+  setHtml('rotas-eficiencia', '<div class="text-muted">Eficiência por veículo e últimos registros agora ficam em Frota.</div>');
+  setHtml('rotas-km-tbody', '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px">Registros de KM movidos para Frota e Histórico.</td></tr>');
+  return;
+
   const svcs = filteredSvcs();
 
   // ── Validação de Rotas ───────────────────────────────────
@@ -7892,9 +7971,27 @@ function renderFrota(){
   const md={};recs.forEach(r=>{if(!r.motorista)return;if(!md[r.motorista])md[r.motorista]={km:0,d:0,av:0};md[r.motorista].km+=(r.kmD||0);md[r.motorista].d++;if(r.hasAv)md[r.motorista].av++;});
   document.getElementById('frota-mot-tbody').innerHTML=Object.entries(md).sort((a,b)=>b[1].km-a[1].km).map(([m,d])=>`<tr><td class="bold">${m}</td><td class="mono">${d.d}</td><td class="mono text-blue">${d.km.toLocaleString('pt-BR')}</td><td class="mono">${d.d?Math.round(d.km/d.d):0}</td><td>${d.av>0?`<span class="chip chip-orange">âš ï¸ ${d.av}</span>`:'<span class="chip chip-green">✓</span>'}</td></tr>`).join('');
 
-  // Avarias list
+  // Últimos registros de KM + avarias
+  const ultimosKm = [...recs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,12);
+  const kmHtml = `<div class="card">
+    <div class="card-label mb3">Últimos registros de KM</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Data</th><th>Veículo</th><th>Motorista</th><th>KM Saída</th><th>KM Chegada</th><th>Percorrido</th><th>Horário</th></tr></thead>
+      <tbody>${ultimosKm.length ? ultimosKm.map(r=>`<tr>
+        <td class="mono">${r.date?.slice(8,10)}/${r.date?.slice(5,7)}</td>
+        <td><span class="chip chip-blue">${r.vei||'—'}</span></td>
+        <td class="bold">${r.motorista||'—'}</td>
+        <td class="mono">${(r.kmS||0).toLocaleString('pt-BR')}</td>
+        <td class="mono">${(r.kmC||0).toLocaleString('pt-BR')}</td>
+        <td class="mono ${r.kmD>0?'text-green':''}">${r.kmD>0?'+'+r.kmD.toLocaleString('pt-BR'):'—'}</td>
+        <td class="mono">${r.hrS||'—'} → ${r.hrC||'—'}</td>
+      </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:18px">Sem registros de KM.</td></tr>'}</tbody>
+    </table></div>
+  </div>`;
+
   const avList=recs.filter(r=>r.hasAv);
-  document.getElementById('avarias-section').innerHTML=avList.length?`<div class="card"><div class="card-label mb3">âš ï¸ Histórico de Avarias</div><div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Motorista</th><th>Veículo</th><th>Descrição</th></tr></thead><tbody>${avList.map(r=>`<tr><td class="mono">${r.date?.slice(8,10)}/${r.date?.slice(5,7)}</td><td class="bold">${r.motorista}</td><td><span class="chip chip-blue">${r.vei||'—'}</span></td><td style="color:var(--orange)">${r.avTxt||'(sem descrição)'}</td></tr>`).join('')}</tbody></table></div></div>`:'';
+  const avariasHtml = avList.length?`<div class="card"><div class="card-label mb3">Histórico de Avarias</div><div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Motorista</th><th>Veículo</th><th>Descrição</th></tr></thead><tbody>${avList.map(r=>`<tr><td class="mono">${r.date?.slice(8,10)}/${r.date?.slice(5,7)}</td><td class="bold">${r.motorista}</td><td><span class="chip chip-blue">${r.vei||'—'}</span></td><td style="color:var(--orange)">${r.avTxt||'(sem descrição)'}</td></tr>`).join('')}</tbody></table></div></div>`:'';
+  document.getElementById('avarias-section').innerHTML=kmHtml + avariasHtml;
 }
 
 // ════════════════════════════════════════════════
@@ -8328,7 +8425,18 @@ async function loadClientHistory() {
     const response = await fetch(`${API_BASE_URL}/api/services?cliente=${encodeURIComponent(nomeCliente)}&limit=10`);
     if (!response.ok) throw new Error('Erro ao carregar histórico');
     
-    const services = await response.json();
+    const demoNames = new Set([
+      'cliente a - empresa xyz',
+      'cliente b - shopping center',
+      'cliente c - condomínio abc',
+      'cliente d - escritório central',
+      'cliente e - residencial',
+      'cliente f - indústria abc'
+    ]);
+    const services = (await response.json()).filter(service => {
+      const nome = String(service.cliente || service.cl || '').trim().toLowerCase();
+      return !demoNames.has(nome);
+    });
     
     if (services.length === 0) {
       contentEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px">Nenhum serviço encontrado</div>';
@@ -8346,6 +8454,13 @@ async function loadClientHistory() {
         cancelado: { icon: '❌', label: 'Cancelado', color: 'var(--red)' }
       }[status] || { icon: '⏳', label: status, color: 'var(--text3)' };
       const tipoServico = service.tiposervico || service.tipo_servico || service.tipoServico || service.sc || 'Serviço';
+      const os = service.os || service.OS || '';
+      const espera = Number(service.tempo_espera);
+      const execucao = Number(service.tempo_execucao) || getTempoServicoRealMin(service);
+      const tempos = [
+        Number.isFinite(espera) && espera > 0 ? `espera ${espera}min` : '',
+        Number.isFinite(execucao) && execucao > 0 ? `execução ${execucao}min` : ''
+      ].filter(Boolean).join(' · ');
       
       return `
         <div style="padding:6px 8px;border-bottom:1px solid var(--border2);font-size:11px">
@@ -8353,8 +8468,9 @@ async function loadClientHistory() {
             <span>${statusMeta.icon} ${data}</span>
             <span style="color:${statusMeta.color}">${statusMeta.label}</span>
           </div>
-          <div style="color:var(--text3);margin-top:2px">${tipoServico}</div>
-          ${service.endereco ? `<div style="color:var(--text3);margin-top:2px">${service.endereco.substring(0,40)}${service.endereco.length > 40 ? '...' : ''}</div>` : ''}
+          <div style="color:var(--text2);margin-top:2px">${sanitize(tipoServico)}${os ? ` · OS ${sanitize(os)}` : ''}</div>
+          ${tempos ? `<div style="color:var(--blue2);margin-top:2px;font-family:var(--mono)">${sanitize(tempos)}</div>` : ''}
+          ${service.endereco ? `<div style="color:var(--text3);margin-top:2px">${sanitize(service.endereco.substring(0,40))}${service.endereco.length > 40 ? '...' : ''}</div>` : ''}
         </div>
       `;
     }).join('');
@@ -9312,7 +9428,31 @@ async function delRecord(){
       );
     }
   } else if(currentDelId.type==='cl'){
-    clRecords=clRecords.filter(r=>r.id!==currentDelId.id);saveCLs();renderHist();
+    const id = currentDelId.id;
+    const oldRec = clRecords.find(r=>String(r.id)===String(id));
+    clRecords=clRecords.filter(r=>String(r.id)!==String(id));
+    saveCLs();
+    renderHist();
+    if(currentPage==='frota') renderFrota();
+    if(currentPage==='rotas') renderRotas();
+
+    if(USAR_SUPABASE){
+      try {
+        const { error } = await supabaseClient.from('checklists').delete().eq('id', id);
+        if (error) throw error;
+      } catch(e) {
+        if(oldRec){
+          clRecords.unshift(oldRec);
+          saveCLs();
+          if(currentPage==='historico') renderHist();
+          if(currentPage==='frota') renderFrota();
+          if(currentPage==='rotas') renderRotas();
+        }
+        toast('Erro ao excluir no Supabase: ' + e.message, 'err');
+        closeModal();
+        return;
+      }
+    }
   }
   closeModal();
   toast('Excluído','ok');
@@ -9763,37 +9903,30 @@ function rotMontarTextoWhatsApp(eq, data) {
   const paradas = groupConsecutiveOperationalStops(eq.sequencia);
   const linhas = paradas.map(parada => {
     const base = sf(parada.servicoBase);
-    const maps = parada.servicoBase?.endereco ? ` - https://maps.google.com/?q=${encodeURIComponent(parada.servicoBase.endereco + ', São Paulo')}` : '';
-    const deslocamento = parada.ordem > 1 ? ` → ${parada.deslocamentoMin} min | ${rotKmFmt(parada.km)} km` : '';
-    const bairro = parada.bairro && parada.bairro !== 'Sem endereço' ? ` - ${parada.bairro}` : '';
-    const janela = formatarJanelaOperacional(parada.inicioSugeridoMin, parada.fimSugeridoMin);
-    const titulo = `${parada.ordem}. ${janela}${deslocamento} - ${base.cliente}${bairro}${maps}`;
     const tarefas = parada.items.map(item => {
       const F = sf(item.servico);
       const os = F.os && F.os !== '—' ? `OS ${F.os}` : 'sem OS';
       const hr = item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined ? formatarHoraDoDia(item.horarioAgendadoMin) : 'sem horário';
-      return `   - ${hr} · ${F.tipo || F.tipoLabel || '—'} · ${os}`;
-    }).join('\n');
-    return `${titulo}\n${tarefas}`;
+      return `${hr} · ${F.tipo || F.tipoLabel || 'Serviço'} · ${os}`;
+    }).join(' / ');
+    return `${parada.ordem}. ${base.cliente}\n   ${tarefas}`;
   }).join('\n');
 
-  const idaVoltaTxt = eq.idaVoltaAplicada && eq.idaVolta
-    ? `\nIda + Volta (Base ${ROT_BASE_PLUS_CODE}): ida ${eq.idaVolta.idaMin} min | ${rotKmFmt(eq.idaVolta.idaKm)} km · volta ${eq.idaVolta.voltaMin} min | ${rotKmFmt(eq.idaVolta.voltaKm)} km`
-    : '';
-
   const observacoes = uniqueReasons([...(eq.blockReasons || []), ...(eq.warningReasons || [])]);
-  const observacoesTxt = observacoes.length ? `\nObservações operacionais: ${observacoes.join(' · ')}` : '';
+  const observacoesTxt = observacoes.length ? `\nAtenção: ${observacoes.join(' · ')}` : '';
+  const portalLink = eq.portalLink || rotMontarLinkPortal(eq, data);
 
   return `TÉCNICO: ${eq.equipe}
 Veículo: ${eq.veiculo || '—'}
 Data: ${rotFmtData(data)}
-Resumo: ${eq.sequencia.length} serviço(s) · ${paradas.length} parada(s) · ${formatarMinutosHM(eq.tempoTotalMin)} totais · ${eq.kmTotal} km aprox. · ocupação ${eq.ocupacaoPct}%
+Resumo: ${eq.sequencia.length} serviço(s) · ${paradas.length} parada(s)
 
-Sequência sugerida:
+Sequência:
 ${linhas}
-${idaVoltaTxt}${observacoesTxt}
+${observacoesTxt}
 
-KM total estimado: ${rotKmFmt(eq.kmTotal)} km | Tempo deslocamento: ${Math.round(eq.tempoDeslocamentoMin || 0)} min`;
+Portal do técnico:
+${portalLink}`;
 }
 
 function rotPortalBaseUrl() {
