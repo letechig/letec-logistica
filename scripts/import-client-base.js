@@ -5,7 +5,10 @@ require('dotenv').config();
 
 const DEFAULT_WORKBOOK = path.resolve(__dirname, '..', '..', 'BASE_CLIENTES_TRATADA_LETEC (1).xlsx');
 const workbookPath = path.resolve(process.argv.find(arg => arg.endsWith('.xlsx')) || DEFAULT_WORKBOOK);
-const apply = process.argv.includes('--apply');
+const apply = process.argv.includes('--apply') ||
+  process.argv.includes('apply') ||
+  String(process.env.IMPORT_APPLY || '').trim() === '1' ||
+  String(process.env.IMPORT_APPLY || '').trim().toLowerCase() === 'true';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
