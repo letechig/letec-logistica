@@ -1590,6 +1590,15 @@ td.bold { color: var(--text); font-weight: 600; }
 .fsel option { background:var(--surface); }
 .finput { min-height:var(--control-h); background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius-md); color:var(--text); font-size:12px; padding:7px 11px; outline:none; transition:border-color .15s, box-shadow .15s; }
 .finput:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+.pill-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+.pill-btn { min-height:30px; padding:5px 12px; border-radius:999px; border:1px solid var(--border2); background:var(--bg2); color:var(--text2); font-size:12px; font-weight:700; cursor:pointer; transition:background .15s, border-color .15s, color .15s, box-shadow .15s; white-space:nowrap; }
+.pill-btn:hover { border-color:rgba(79,142,247,.45); color:var(--blue2); background:var(--blue-bg); }
+.pill-btn.active { background:var(--blue); border-color:var(--blue); color:#fff; box-shadow:0 8px 18px rgba(37,99,235,.14); }
+.inventory-category-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px; margin-bottom:14px; }
+.inventory-cat-card { border:1px solid var(--border2); background:var(--bg2); border-radius:var(--r2); padding:10px 12px; text-align:left; color:inherit; cursor:pointer; transition:border-color .15s, background .15s; }
+.inventory-cat-card:hover { border-color:rgba(79,142,247,.35); background:var(--card); }
+.inventory-cat-card-title { font-weight:800; font-size:12px; color:var(--text); margin-bottom:4px; }
+.inventory-cat-card-meta { font-size:11px; color:var(--text3); line-height:1.45; }
 
 /* ─── AGENDA KANBAN ───────────────────────────── */
 .kanban { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
@@ -1763,6 +1772,9 @@ td.bold { color: var(--text); font-weight: 600; }
   .filter-bar { flex-wrap: wrap; gap: 6px; }
   .filter-bar .finput { min-width: 0; width: 100%; }
   .filter-bar .fsel { min-width: 0; flex: 1; }
+  .pill-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .pill-bar .pill-btn { flex: 0 0 auto; }
+  .inventory-category-summary { grid-template-columns: 1fr; }
   /* Roteiro cards */
   .rot-card { padding: 10px; }
   /* Modal full height */
@@ -3031,9 +3043,20 @@ async function carregarVeiculos(){
           </div>
           <input class="finput" id="inventory-product-search" placeholder="Buscar produto..." oninput="renderInventory()" style="max-width:280px">
         </div>
+        <div id="inventory-category-summary" class="inventory-category-summary"></div>
+        <div class="pill-bar" id="inventory-product-filters">
+          <button type="button" class="pill-btn active" data-filter="todos" onclick="setInventoryProductFilter('todos')">Todos</button>
+          <button type="button" class="pill-btn" data-filter="desratizacao" onclick="setInventoryProductFilter('desratizacao')">Desratização</button>
+          <button type="button" class="pill-btn" data-filter="desentupimento" onclick="setInventoryProductFilter('desentupimento')">Desentupimento</button>
+          <button type="button" class="pill-btn" data-filter="desinsetizacao" onclick="setInventoryProductFilter('desinsetizacao')">Desinsetização</button>
+          <button type="button" class="pill-btn" data-filter="caixa_agua" onclick="setInventoryProductFilter('caixa_agua')">Caixa d'Água</button>
+          <button type="button" class="pill-btn" data-filter="outros" onclick="setInventoryProductFilter('outros')">Outros</button>
+          <button type="button" class="pill-btn" data-filter="baixo_critico" onclick="setInventoryProductFilter('baixo_critico')">Baixo / Crítico</button>
+          <button type="button" class="pill-btn" data-filter="esgotados" onclick="setInventoryProductFilter('esgotados')">Esgotados</button>
+        </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Produto</th><th>Un.</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Ajustes</th><th>Atual</th><th>Status</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Produto</th><th>Categoria</th><th>Un.</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Ajustes</th><th>Atual</th><th>Status</th><th>Ações</th></tr></thead>
             <tbody id="inventory-products-tbody"></tbody>
           </table>
         </div>
@@ -4858,6 +4881,7 @@ let inventoryMovements = [];
 let inventorySchemaReady = true;
 let inventoryModalMode = null;
 let inventoryEditingProductId = null;
+let inventoryProductFilter = 'todos';
 
 async function carregarChecklistsDoSupabase() {
   try {
@@ -11449,6 +11473,59 @@ function inventoryProductById(id) {
   return inventoryProducts.find(p => String(p.id) === String(id));
 }
 
+const INVENTORY_CATEGORIES = [
+  { key:'desratizacao', label:'Desratização', chip:'chip-blue', terms:['raticida','isca','porta isca','armadilha','cola','rato','roedor'] },
+  { key:'desentupimento', label:'Desentupimento', chip:'chip-cyan', terms:['desentupidor','cabo','mola','produto desentupimento'] },
+  { key:'desinsetizacao', label:'Desinsetização', chip:'chip-purple', terms:['inseticida','gel','pulverizador','cipermetrina','blatum','baraticida','formicida'] },
+  { key:'caixa_agua', label:"Caixa d'Água", chip:'chip-green', terms:['cloro','hipoclorito','escova','bomba','mangueira','caixa d agua','caixa dagua'] },
+  { key:'outros', label:'Outros', chip:'chip-gray', terms:[] }
+];
+
+function inventoryNormalizeCategory(value) {
+  const normalized = normalizarNome(String(value || '')).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const aliases = {
+    desratizacao:'desratizacao',
+    desratizacao_servico:'desratizacao',
+    desentupimento:'desentupimento',
+    desinsetizacao:'desinsetizacao',
+    dedetizacao:'desinsetizacao',
+    limpeza_de_caixa_d_agua:'caixa_agua',
+    limpeza_caixa_agua:'caixa_agua',
+    caixa_d_agua:'caixa_agua',
+    caixa_agua:'caixa_agua',
+    outros:'outros',
+    geral:'outros'
+  };
+  const key = aliases[normalized] || normalized;
+  return INVENTORY_CATEGORIES.some(c => c.key === key) ? key : 'outros';
+}
+
+function inventoryInferCategory(product) {
+  const searchableName = normalizarNome(product?.nome || '').replace(/[^a-z0-9]+/g, ' ');
+  const match = INVENTORY_CATEGORIES.find(cat => cat.key !== 'outros' && cat.terms.some(term => searchableName.includes(normalizarNome(term).replace(/[^a-z0-9]+/g, ' '))));
+  return match ? match.key : 'outros';
+}
+
+function inventoryProductCategory(product) {
+  const raw = String(product?.categoria || '').trim();
+  return raw ? inventoryNormalizeCategory(raw) : inventoryInferCategory(product);
+}
+
+function inventoryCategoryMeta(value) {
+  const key = inventoryNormalizeCategory(value);
+  return INVENTORY_CATEGORIES.find(c => c.key === key) || INVENTORY_CATEGORIES[INVENTORY_CATEGORIES.length - 1];
+}
+
+function inventoryCategoryBadge(value) {
+  const meta = inventoryCategoryMeta(value);
+  return `<span class="chip ${meta.chip}">${meta.label}</span>`;
+}
+
+function inventoryCategoryOptions(selectedCategory = 'outros') {
+  const selected = inventoryNormalizeCategory(selectedCategory);
+  return INVENTORY_CATEGORIES.map(cat => `<option value="${cat.key}" ${cat.key === selected ? 'selected' : ''}>${cat.label}</option>`).join('');
+}
+
 function inventoryMovementsForProduct(productId) {
   return inventoryMovements.filter(m => String(m.product_id) === String(productId));
 }
@@ -11505,6 +11582,38 @@ function renderInventorySchemaAlert() {
   </div>`;
 }
 
+function setInventoryProductFilter(filter) {
+  inventoryProductFilter = filter || 'todos';
+  document.querySelectorAll('#inventory-product-filters .pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === inventoryProductFilter);
+  });
+  renderInventory();
+}
+
+function inventoryApplyProductFilter(row, search) {
+  const category = inventoryProductCategory(row.product);
+  if (search && !normalizarNome(row.product.nome).includes(search)) return false;
+  if (inventoryProductFilter === 'todos') return true;
+  if (inventoryProductFilter === 'baixo_critico') return ['baixo','critico'].includes(row.status.key);
+  if (inventoryProductFilter === 'esgotados') return row.status.key === 'esgotado';
+  return category === inventoryProductFilter;
+}
+
+function renderInventoryCategorySummary(productRows) {
+  const el = document.getElementById('inventory-category-summary');
+  if (!el) return;
+  el.innerHTML = INVENTORY_CATEGORIES.map(cat => {
+    const rows = productRows.filter(row => inventoryProductCategory(row.product) === cat.key);
+    const ok = rows.filter(row => row.status.key === 'ok').length;
+    const lowCritical = rows.filter(row => ['baixo','critico'].includes(row.status.key)).length;
+    const empty = rows.filter(row => row.status.key === 'esgotado').length;
+    return `<button type="button" class="inventory-cat-card" onclick="setInventoryProductFilter('${cat.key}')">
+      <div class="inventory-cat-card-title">${cat.label}</div>
+      <div class="inventory-cat-card-meta">${rows.length} produtos · ${ok} OK · ${lowCritical} críticos · ${empty} esgotados</div>
+    </button>`;
+  }).join('');
+}
+
 function updateInventoryFilterOptions() {
   const productEl = document.getElementById('inventory-filter-product');
   const vehicleEl = document.getElementById('inventory-filter-vehicle');
@@ -11536,7 +11645,9 @@ function renderInventory() {
 
   if (!inventorySchemaReady) {
     kpis.innerHTML = '';
-    productsBody.innerHTML = '<tr><td colspan="9" class="text-muted">Estoque indisponível até a migração ser aplicada.</td></tr>';
+    const summary = document.getElementById('inventory-category-summary');
+    if (summary) summary.innerHTML = '';
+    productsBody.innerHTML = '<tr><td colspan="10" class="text-muted">Estoque indisponível até a migração ser aplicada.</td></tr>';
     movementsBody.innerHTML = '<tr><td colspan="8" class="text-muted">Sem histórico disponível.</td></tr>';
     return;
   }
@@ -11560,11 +11671,17 @@ function renderInventory() {
     <div class="card card-red"><div class="card-label">Esgotados</div><div class="card-value cv-red">${empty}</div><div class="card-trend">saldo zerado</div></div>
     <div class="card"><div class="card-label">Saídas do mês</div><div class="card-value">${saidasMes}</div><div class="card-trend">${new Date().toLocaleDateString('pt-BR', { month:'long' })}</div></div>`;
 
+  renderInventoryCategorySummary(productRows);
+  document.querySelectorAll('#inventory-product-filters .pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === inventoryProductFilter);
+  });
+
   const search = normalizarNome(document.getElementById('inventory-product-search')?.value || '');
-  const visibleProducts = productRows.filter(({ product }) => !search || normalizarNome(product.nome).includes(search));
+  const visibleProducts = productRows.filter(row => inventoryApplyProductFilter(row, search));
   productsBody.innerHTML = visibleProducts.length ? visibleProducts.map(({ product, calc, status }) => `
     <tr>
       <td class="bold">${sanitize(product.nome)}${product.ativo === false ? ' <span class="chip chip-gray">Inativo</span>' : ''}</td>
+      <td>${inventoryCategoryBadge(inventoryProductCategory(product))}</td>
       <td class="mono">${sanitize(product.unidade || 'un')}</td>
       <td class="mono">${inventoryFmtQty(calc.initial)}</td>
       <td class="mono" style="color:var(--green)">${inventoryFmtQty(calc.entrada)}</td>
@@ -11577,7 +11694,7 @@ function renderInventory() {
         <button class="btn btn-ghost btn-xs" onclick="openInventoryMovement('entrada', ${jsArg(product.id)})">Entrada</button>
         <button class="btn btn-ghost btn-xs" onclick="openInventoryProduct(${jsArg(product.id)})">Editar</button>
       </td>
-    </tr>`).join('') : '<tr><td colspan="9" class="text-muted">Nenhum produto encontrado.</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="10" class="text-muted">Nenhum produto encontrado.</td></tr>';
 
   const fDate = document.getElementById('inventory-filter-date')?.value || '';
   const fProduct = document.getElementById('inventory-filter-product')?.value || '';
@@ -11645,8 +11762,9 @@ function openInventoryProduct(productId = null) {
   const product = productId ? inventoryProductById(productId) : null;
   document.getElementById('inventory-modal-title').textContent = product ? 'Editar produto' : 'Novo produto';
   document.getElementById('inventory-modal-body').innerHTML = `
-    <div class="form-row fr-2 mb3">
+    <div class="form-row fr-3 mb3">
       <div class="field"><label>Produto *</label><input class="finput" id="inv-prod-nome" value="${escapeHtmlAttr(product?.nome || '')}" placeholder="Nome do produto"></div>
+      <div class="field"><label>Categoria</label><select class="fsel" id="inv-prod-categoria">${inventoryCategoryOptions(product ? inventoryProductCategory(product) : 'outros')}</select></div>
       <div class="field"><label>Unidade</label><input class="finput" id="inv-prod-unidade" value="${escapeHtmlAttr(product?.unidade || 'un')}" placeholder="un, L, kg..."></div>
     </div>
     <div class="form-row fr-3 mb3">
@@ -11720,6 +11838,7 @@ async function saveInventoryProduct() {
   if (!nome) { toast('Preencha o nome do produto', 'err'); return; }
   const payload = {
     nome,
+    categoria: inventoryNormalizeCategory(document.getElementById('inv-prod-categoria')?.value || 'outros'),
     unidade: document.getElementById('inv-prod-unidade')?.value.trim() || 'un',
     estoque_inicial: inventoryNum(document.getElementById('inv-prod-inicial')?.value),
     estoque_minimo: inventoryNum(document.getElementById('inv-prod-minimo')?.value),
