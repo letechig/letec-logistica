@@ -27,10 +27,17 @@
     }
 
     * { box-sizing:border-box; }
-    html { min-height:100%; background:var(--bg); }
+    html {
+      height:100%;
+      min-height:100%;
+      overflow:hidden;
+      background:var(--bg);
+    }
     body {
       margin:0;
+      height:100%;
       min-height:100%;
+      overflow:hidden;
       color:var(--text);
       background:
         radial-gradient(circle at top left, rgba(37,99,235,.14), transparent 34rem),
@@ -43,20 +50,33 @@
 
     .app {
       width:min(100%, 760px);
+      height:100dvh;
+      min-height:100dvh;
       margin:0 auto;
-      min-height:100vh;
-      padding:14px 14px 96px;
+      padding:0 14px;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
     }
 
     .hero {
       position:sticky;
       top:0;
       z-index:20;
-      margin:-14px -14px 12px;
-      padding:18px 14px 14px;
-      background:rgba(248,251,255,.92);
-      backdrop-filter: blur(16px);
+      flex:0 0 auto;
+      margin:0 -14px 0;
+      padding:12px 14px 10px;
+      background:#f8fbff;
       border-bottom:1px solid rgba(219,228,239,.9);
+    }
+    .app-scroll {
+      flex:1;
+      min-height:0;
+      overflow-y:auto;
+      overflow-x:hidden;
+      -webkit-overflow-scrolling:touch;
+      overscroll-behavior-y:contain;
+      padding:10px 0 calc(112px + env(safe-area-inset-bottom, 0px));
     }
     .brand-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .brand-kicker { font-size:12px; color:var(--muted); font-weight:700; letter-spacing:.02em; }
@@ -81,12 +101,12 @@
     .sync-pill.offline .sync-dot { background:var(--warning); }
 
     .profile-card {
-      margin-top:14px;
-      padding:14px;
+      margin-top:0;
+      padding:12px;
       border-radius:var(--radius);
-      background:linear-gradient(135deg,#fff,#f8fbff);
+      background:#fff;
       border:1px solid rgba(219,228,239,.95);
-      box-shadow:var(--shadow-sm);
+      box-shadow:0 4px 14px rgba(15,23,42,.06);
     }
     .profile-main { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
     .tech-name { font-size:19px; font-weight:900; }
@@ -107,18 +127,19 @@
     .summary-grid {
       display:grid;
       grid-template-columns:repeat(4,1fr);
-      gap:8px;
-      margin-top:14px;
+      gap:6px;
+      margin-top:10px;
     }
     .metric {
-      padding:10px 8px;
+      min-width:0;
+      padding:8px 6px;
       border:1px solid var(--border);
       border-radius:var(--radius-sm);
       background:#fff;
       text-align:center;
     }
-    .metric strong { display:block; font-size:20px; line-height:1; }
-    .metric span { display:block; margin-top:4px; color:var(--muted); font-size:11px; font-weight:700; }
+    .metric strong { display:block; font-size:18px; line-height:1; }
+    .metric span { display:block; min-width:0; margin-top:3px; color:var(--muted); font-size:10px; font-weight:700; overflow:hidden; text-overflow:ellipsis; }
     .metric.warn strong { color:var(--warning); }
     .metric.ok strong { color:var(--success); }
     .metric.blue strong { color:var(--primary); }
@@ -126,18 +147,20 @@
     .quick-nav {
       display:grid;
       grid-template-columns:repeat(4,1fr);
-      gap:8px;
-      margin-top:14px;
+      gap:6px;
+      margin-top:10px;
     }
     .quick-nav button, .bottom-nav button {
+      min-width:0;
       border:1px solid var(--border);
       background:#fff;
       color:var(--text-2);
-      border-radius:14px;
-      min-height:46px;
-      padding:8px 10px;
+      border-radius:12px;
+      min-height:40px;
+      padding:7px 8px;
       font-weight:800;
-      font-size:13px;
+      font-size:12px;
+      overflow-wrap:anywhere;
       transition:background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
     }
     .quick-nav button.active, .bottom-nav button.active {
@@ -291,8 +314,8 @@
     .history-card { padding:13px; }
     .history-card strong { display:block; margin-bottom:4px; }
     .message-highlight {
-      margin-top:12px;
-      padding:12px;
+      margin-top:10px;
+      padding:10px;
       border:1px solid #fed7aa;
       border-radius:14px;
       background:#fff7ed;
@@ -305,18 +328,17 @@
     .bottom-nav {
       position:fixed;
       left:50%;
-      bottom:12px;
+      bottom:env(safe-area-inset-bottom, 0px);
       transform:translateX(-50%);
       width:min(calc(100% - 24px), 720px);
       display:grid;
       grid-template-columns:repeat(4,1fr);
       gap:8px;
-      padding:8px;
+      padding:8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
       border:1px solid rgba(219,228,239,.95);
       border-radius:20px;
-      background:rgba(255,255,255,.94);
-      box-shadow:var(--shadow);
-      backdrop-filter: blur(18px);
+      background:#fff;
+      box-shadow:0 8px 24px rgba(15,23,42,.12);
       z-index:30;
     }
 
@@ -381,19 +403,31 @@
     }
 
     @media (min-width:720px) {
-      .app { padding-top:24px; }
-      .hero { border:1px solid rgba(219,228,239,.95); border-radius:24px; margin:0 0 14px; top:12px; }
+      .app { padding:12px 14px 0; }
+      .hero { border:1px solid rgba(219,228,239,.95); border-radius:24px; margin:0 0 14px; top:0; }
       .modal-bg { align-items:center; }
       .service-actions { grid-template-columns:auto 1fr; }
     }
 
     @media (max-width:430px) {
-      .summary-grid { grid-template-columns:repeat(2,1fr); }
       .quick-nav { grid-template-columns:1fr 1fr; }
       .service-grid, .two-col { grid-template-columns:1fr; }
       .fuel-grid { grid-template-columns:1fr; }
       .modal-foot { grid-template-columns:1fr; }
       h1 { font-size:22px; }
+      .hero { padding-top:10px; padding-bottom:8px; }
+      .brand-kicker { font-size:11px; }
+      .subtitle { font-size:12px; }
+      .profile-card { padding:10px; margin-top:8px; box-shadow:none; }
+      .profile-main { gap:8px; }
+      .tech-name { font-size:17px; }
+      .date-text { font-size:12px; }
+      .vehicle-chip, .sync-pill { min-height:26px; padding:0 8px; font-size:11px; }
+      .metric { padding:6px 4px; }
+      .metric strong { font-size:16px; }
+      .metric span { font-size:9px; }
+      .profile-card .danger-soft { min-height:38px; margin-top:8px !important; font-size:13px; }
+      .bottom-nav button { min-height:42px; padding:6px 4px; font-size:12px; }
     }
   </style>
 </head>
@@ -410,7 +444,9 @@
         </div>
         <div class="sync-pill" id="sync-pill"><span class="sync-dot"></span><span id="sync-text">Online</span></div>
       </div>
+    </header>
 
+    <div class="app-scroll">
       <div class="profile-card">
         <div class="profile-main">
           <div>
@@ -434,35 +470,33 @@
         <button class="danger-soft" type="button" onclick="callSupport()" style="width:100%;margin-top:10px">Chamar ajuda</button>
         <div id="message-highlight"></div>
       </div>
-    </header>
-
-    <section class="section active" id="section-servicos">
-      <div class="section-head">
-        <div class="section-title">Meus servicos</div>
-        <div class="section-sub">Use os botoes grandes para registrar cada etapa do atendimento.</div>
-      </div>
-      <div id="services-list" class="service-list"><div class="loading">Carregando servicos...</div></div>
-    </section>
-
-    <section class="section" id="section-checklist">
-      <div class="section-head">
-        <div class="section-title">Meu Checklist Diario</div>
-        <div class="section-sub">Registre saida, retorno, veiculo e equipamentos.</div>
-      </div>
-
-      <form id="daily-form" onsubmit="event.preventDefault(); saveDailyChecklist();">
-        <div class="form-panel">
-          <div class="step-title">1. Equipe</div>
-          <div class="step-sub">Dados principais do dia.</div>
-          <div class="two-col">
-            <div class="field"><label for="cl-data">Data</label><input id="cl-data" type="date" required></div>
-            <div class="field"><label for="cl-motorista">Motorista</label><input id="cl-motorista" type="text" required placeholder="Nome do motorista"></div>
-          </div>
-          <div class="two-col">
-            <div class="field"><label for="cl-assistente">Assistente</label><input id="cl-assistente" type="text" placeholder="Nome do assistente"></div>
-            <div class="field"><label for="cl-cartao">Cartao combustivel</label><input id="cl-cartao" type="text" placeholder="Numero do cartao"></div>
-          </div>
+      <section class="section active" id="section-servicos">
+        <div class="section-head">
+          <div class="section-title">Meus servicos</div>
+          <div class="section-sub">Use os botoes grandes para registrar cada etapa do atendimento.</div>
         </div>
+        <div id="services-list" class="service-list"><div class="loading">Carregando servicos...</div></div>
+      </section>
+
+      <section class="section" id="section-checklist">
+        <div class="section-head">
+          <div class="section-title">Meu Checklist Diario</div>
+          <div class="section-sub">Registre saida, retorno, veiculo e equipamentos.</div>
+        </div>
+
+        <form id="daily-form" onsubmit="event.preventDefault(); saveDailyChecklist();">
+          <div class="form-panel">
+            <div class="step-title">1. Equipe</div>
+            <div class="step-sub">Dados principais do dia.</div>
+            <div class="two-col">
+              <div class="field"><label for="cl-data">Data</label><input id="cl-data" type="date" required></div>
+              <div class="field"><label for="cl-motorista">Motorista</label><input id="cl-motorista" type="text" required placeholder="Nome do motorista"></div>
+            </div>
+            <div class="two-col">
+              <div class="field"><label for="cl-assistente">Assistente</label><input id="cl-assistente" type="text" placeholder="Nome do assistente"></div>
+              <div class="field"><label for="cl-cartao">Cartao combustivel</label><input id="cl-cartao" type="text" placeholder="Numero do cartao"></div>
+            </div>
+          </div>
 
         <div class="form-panel">
           <div class="step-title">2. Veiculo</div>
@@ -546,6 +580,7 @@
       </div>
       <div id="messages-list" class="history-list"></div>
     </section>
+    </div>
   </main>
 
   <nav class="bottom-nav" aria-label="Navegacao principal">
@@ -1014,6 +1049,7 @@
       document.getElementById(`section-${section}`).classList.add('active');
       document.querySelectorAll('.quick-nav button').forEach(btn => btn.classList.toggle('active', btn.id === `tab-${section}`));
       document.querySelectorAll('.bottom-nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.bottom === section));
+      document.querySelector('.app-scroll')?.scrollTo({ top:0, behavior:'auto' });
     }
 
     async function callSupport() {
