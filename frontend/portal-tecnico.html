@@ -222,6 +222,23 @@
     .status-badge.problema { color:#991b1b; background:#fee2e2; }
     .client { margin-top:10px; font-size:18px; font-weight:900; line-height:1.2; }
     .meta { margin-top:7px; color:var(--muted); font-size:13px; line-height:1.35; }
+    .route-row { margin-top:9px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .maps-link {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      min-height:34px;
+      padding:0 11px;
+      border:1px solid #bfdbfe;
+      border-radius:999px;
+      background:#eff6ff;
+      color:#1d4ed8;
+      font-size:12px;
+      font-weight:900;
+      text-decoration:none;
+    }
+    .maps-link:active { transform:translateY(1px); }
     .service-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
     .mini {
       padding:8px 10px;
@@ -912,6 +929,7 @@
               </div>
               <div class="client">${escapeHtml(s.cliente || s.cl || 'Cliente')}</div>
               <div class="meta">${escapeHtml(s.endereco || 'Endereco nao informado')}</div>
+              ${renderMapsAction(s)}
               <div class="service-grid">
                 <div class="mini">Tipo: ${escapeHtml(serviceTypes(s))}</div>
                 <div class="mini">OS: ${escapeHtml(os || '-')}</div>
@@ -922,6 +940,21 @@
             <div class="service-actions">${renderServiceAction(s, status)}</div>
           </article>`;
       }).join('');
+    }
+
+    function serviceAddress(s) {
+      return String(s?.endereco || '').trim();
+    }
+
+    function buildGoogleMapsUrl(address) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    }
+
+    function renderMapsAction(s) {
+      const address = serviceAddress(s);
+      if (!address) return '';
+      const url = buildGoogleMapsUrl(address);
+      return `<div class="route-row"><a class="maps-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">⌖ Maps</a></div>`;
     }
 
     function renderServiceAction(s, status) {
