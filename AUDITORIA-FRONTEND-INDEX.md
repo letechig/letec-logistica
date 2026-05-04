@@ -10,10 +10,12 @@ Atualizacao de progresso:
 - duplicatas: deteccao e fluxo de revisao foram refinados
 - legado: `extrairTecnicos`, `calcularTempoServicoLegacy`, `getSvcs` e `getCLs` foram removidas do `frontend/index.html` por nao terem uso interno
 - roteiro: o fluxo atual usa copiar/WhatsApp direto por equipe e no lote; nao foram encontrados vestigios ativos do `rot-modal`
+- revisao pratica 2026-05-04: `frontend/js/app.js` e `frontend/js/api.js` foram arquivados em `archive/nao-usados/frontend-js-legado/`; a chave Google saiu do frontend ativo; `rotGoogleConfigured()` agora depende de `/api/health` (`mapsProxy`)
+- revisao pratica 2026-05-04: criada a checagem repetivel `npm run audit:frontend`, que valida scripts inline, IDs reais duplicados, handlers inline e ausencia de chave Google no HTML oficial
 
 ## Resumo executivo
 
-Esta auditoria trata `frontend/index.html` como a fonte oficial do frontend. Os arquivos `letec_v76_auditado.html`, `frontend/js/app.js` e `frontend/js/api.js` foram considerados somente como comparacao e risco de deriva.
+Esta auditoria trata `frontend/index.html` como a fonte oficial do frontend. O arquivo `letec_v76_auditado.html` e os JS arquivados em `archive/nao-usados/frontend-js-legado/` devem ser considerados somente como comparacao historica e risco de deriva.
 
 O arquivo oficial passa em uma checagem basica de sintaxe dos scripts inline, e os handlers inline principais (`onclick`, `onchange`, `oninput`, `onblur`) nao apontam para funcoes globais ausentes. Os riscos mais relevantes remanescentes sao divergencia entre o HTML oficial e os arquivos JS externos, dependencia de handlers inline globais, e a necessidade de manter esta auditoria sincronizada com as correcoes ja aplicadas no arquivo oficial.
 
@@ -38,7 +40,7 @@ Estado inicial observado:
 - Inspecao de carregamento de scripts.
   - O HTML carrega Supabase por CDN em `frontend/index.html:871`.
   - Existem dois scripts inline em `frontend/index.html:872` e `frontend/index.html:2161`.
-  - Nao ha referencia carregando `frontend/js/app.js` ou `frontend/js/api.js`.
+  - Nao ha referencia carregando `js/app.js` ou `js/api.js`.
 
 ## Achados
 
@@ -87,12 +89,13 @@ Estado inicial observado:
 
 - Local:
   - `frontend/index.html:872` e `frontend/index.html:2161` contem os scripts que rodam no app.
-  - `frontend/js/app.js` existe com tamanho aproximado de `318651` bytes.
-  - `frontend/js/api.js` existe com tamanho aproximado de `5737` bytes.
+  - `archive/nao-usados/frontend-js-legado/app.js` guarda a copia legada antes localizada em `frontend/js/app.js`.
+  - `archive/nao-usados/frontend-js-legado/api.js` guarda a copia legada antes localizada em `frontend/js/api.js`.
 - Evidencia: `frontend/index.html` nao referencia `frontend/js/app.js` nem `frontend/js/api.js`; a busca por `js/app.js` e `js/api.js` no HTML nao retornou carregamentos ativos.
 - Impacto provavel: correcoes feitas em `frontend/js/app.js` ou `frontend/js/api.js` nao chegam ao usuario se o app servido continuar sendo `frontend/index.html`. Isso aumenta risco de corrigir o arquivo errado.
-- Recomendacao: documentar `frontend/index.html` como fonte unica ate uma refatoracao formal. Em uma etapa posterior, decidir entre remover arquivos JS nao usados ou migrar o HTML para carrega-los de fato.
-- Seguro corrigir agora: nao como parte deste relatorio. Depende de decisao de arquitetura.
+- Recomendacao: documentar `frontend/index.html` como fonte unica ate uma refatoracao formal.
+- Status: corrigido na revisao pratica de 2026-05-04 com arquivamento em `archive/nao-usados/frontend-js-legado/`.
+- Seguro corrigir agora: concluido.
 
 ### Codigo morto ou legado
 
@@ -155,6 +158,5 @@ Executar estes fluxos no navegador depois de qualquer correcao:
 ## Proximos passos sugeridos
 
 1. Validar manualmente o fluxo completo de `Roteiro do Dia` e, se tudo estiver certo, marcar a remocao de `rot-modal` como encerrada.
-2. Decidir oficialmente o destino de `frontend/js/app.js` e `frontend/js/api.js`: remover como legado ou migrar o HTML para usa-los.
-3. Considerar uma etapa futura para reduzir dependencia de handlers inline globais.
-4. Repetir periodicamente as checagens estaticas desta auditoria apos mudancas estruturais no `frontend/index.html`.
+2. Considerar uma etapa futura para reduzir dependencia de handlers inline globais.
+3. Repetir periodicamente `npm run audit:frontend` apos mudancas estruturais no `frontend/index.html`.

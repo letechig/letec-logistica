@@ -2183,11 +2183,27 @@ gap: 6px;
 
   const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
-  const GOOGLE_MAPS_API_KEY = 'AIzaSyCiblls0PJ8xwc8tZogLVeJ3zMzshbtEQY';
   const API_BASE_URL = window.LETEC_API_BASE_URL || localStorage.getItem('letec_api_base_url') || (function() {
     if (window.location.protocol === 'file:') return 'http://localhost:8000';
     return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
   })();
+  const LETEC_BACKEND_CAPABILITIES = { checked: false, mapsProxy: false };
+
+  async function refreshBackendCapabilities() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/health`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      LETEC_BACKEND_CAPABILITIES.checked = true;
+      LETEC_BACKEND_CAPABILITIES.mapsProxy = !!data.mapsProxy;
+      return LETEC_BACKEND_CAPABILITIES;
+    } catch (e) {
+      LETEC_BACKEND_CAPABILITIES.checked = true;
+      LETEC_BACKEND_CAPABILITIES.mapsProxy = false;
+      console.warn('[Backend] Nao foi possivel consultar /api/health:', e.message || e);
+      return LETEC_BACKEND_CAPABILITIES;
+    }
+  }
   window.setLeteApiBaseUrl = function(url) {
     const value = String(url || '').trim();
     if (!value) {
@@ -4030,10 +4046,6 @@ function decomporHorarioOperacional(totalMin) {
   const time = formatarHoraDoDia(absMin);
   const label = dayOffset > 0 ? `${time} (D+${dayOffset})` : time;
   return { totalMin: absMin, minuteOfDay, dayOffset, time, label };
-}
-
-function formatarHorarioOperacional(totalMin) {
-  return decomporHorarioOperacional(totalMin).label;
 }
 
 function formatarJanelaOperacional(inicioMin, fimMin) {
@@ -9909,8 +9921,7 @@ function rotAgruparPorTecnico(servicos) {
 }
 
 function rotGoogleConfigured() {
-  const key = String(GOOGLE_MAPS_API_KEY || '').trim();
-  return !!key && key !== 'SUA_CHAVE_AQUI';
+  return !!LETEC_BACKEND_CAPABILITIES.mapsProxy;
 }
 
 function rotNormalizarEnderecoMaps(endereco) {
@@ -10279,7 +10290,6 @@ function salvarSuporteWhatsAppConfig() {
     rotRenderizarLocal(rotDados, data);
   }
 }
-function rotSalvarSuporteWhatsApp() { salvarSuporteWhatsAppConfig(); }
 
 function rotPortalTecnicoNome(eq) {
   const nome = String(eq?.equipe || '').replace(/^⚠\s*/, '').trim();
@@ -11385,6 +11395,7 @@ function listenSupabase() {
 // ════════════════════════════════════════════════
 function init(){
   loadState();
+  refreshBackendCapabilities();
   carregarTecnicos();
   carregarCatalogosServico();
   rotInit();
@@ -11986,8 +11997,6 @@ async function toggleTecnico(id, ativo) {
     toast('❌ Erro: ' + e.message, 'err');
   }
 }
-async function excluirTecnico(id) { await toggleTecnico(id, false); }
-
 async function carregarVeiculosConfig() {
   const container = document.getElementById('config-veiculos');
   container.innerHTML = '<div class="text-muted">Carregando...</div>';
@@ -12038,8 +12047,6 @@ async function toggleVeiculo(id, ativo) {
     toast('❌ Erro: ' + e.message, 'err');
   }
 }
-async function excluirVeiculo(id) { await toggleVeiculo(id, false); }
-
 async function carregarTiposServicoConfig() {
   const container = document.getElementById('config-tipos');
   container.innerHTML = '<div class="text-muted">Carregando...</div>';
@@ -12262,6 +12269,7 @@ window.addEventListener('resize', () => {
 window.addEventListener('load', async () => {
   console.log('🚀 Letec Log v7.8 - Modo Produção iniciado');
   bindAuthEvents();
+  await refreshBackendCapabilities();
   const autenticado = await checkAuth();
   if(!autenticado) return;
     await carregarCatalogosServico();
