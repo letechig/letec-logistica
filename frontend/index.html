@@ -1486,6 +1486,30 @@ td.bold { color: var(--text); font-weight: 600; }
   background:#fff;
 }
 .client-modal-content { display:flex; flex-direction:column; gap:18px; }
+.client-tabs {
+  display:flex;
+  gap:6px;
+  padding:4px;
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  background:#f8fafc;
+  overflow-x:auto;
+}
+.client-tab-btn {
+  min-height:36px;
+  border:0;
+  border-radius:9px;
+  padding:0 13px;
+  background:transparent;
+  color:#475569;
+  font-size:13px;
+  font-weight:750;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.client-tab-btn.active { background:#fff; color:#1d4ed8; box-shadow:0 1px 4px rgba(15,23,42,.08); }
+.client-tab-panel { display:none; flex-direction:column; gap:16px; }
+.client-tab-panel.active { display:flex; }
 .client-section {
   border:1px solid #e2e8f0;
   background:#f8fafc;
@@ -1566,6 +1590,19 @@ td.bold { color: var(--text); font-weight: 600; }
 .client-history-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
 .client-history-title { font-size:13px; font-weight:800; color:#334155; }
 .client-history-box { max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc; }
+.client-system-info {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.client-system-item {
+  border:1px solid #e2e8f0;
+  border-radius:10px;
+  background:#fff;
+  padding:10px 12px;
+}
+.client-system-label { font-size:11px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:.06em; }
+.client-system-value { margin-top:4px; font-size:13px; color:#0f172a; word-break:break-word; }
 .client-form-error {
   display:none;
   padding:11px 13px;
@@ -1611,6 +1648,7 @@ td.bold { color: var(--text); font-weight: 600; }
   #client-modal .client-modal-shell { width:100%; max-height:94vh; border-radius:14px 14px 0 0; }
   .client-modal-header,.client-modal-body,.client-modal-footer { padding-left:16px; padding-right:16px; }
   .client-grid,.client-grid-3 { grid-template-columns:1fr; }
+  .client-system-info { grid-template-columns:1fr; }
   .client-field.small { max-width:none; }
   .client-modal-footer { flex-wrap:wrap; }
   .client-footer-spacer { display:none; }
@@ -3435,218 +3473,250 @@ async function carregarVeiculos(){
 
     <div class="client-modal-body">
       <div class="client-modal-content">
-        <section class="client-section">
-          <div class="client-section-head">
-            <div class="client-section-title">Dados básicos</div>
-            <div class="client-section-desc">Identificação principal e contato do cliente.</div>
-          </div>
-          <div class="client-grid">
-            <div class="client-field full">
-              <label class="client-label">Nome <span class="req">*</span></label>
-              <input id="cli-form-nome" type="text" class="finput" placeholder="Nome completo ou razão social do cliente" required>
-              <div class="client-field-error" id="cli-error-nome">Nome é obrigatório.</div>
-            </div>
-            <div class="client-field">
-              <label class="client-label">Telefone</label>
-              <input id="cli-form-tel" type="text" class="finput" placeholder="(11) 99999-9999">
-              <div class="client-field-error" id="cli-error-tel">Telefone é obrigatório.</div>
-            </div>
-            <div class="client-field">
-              <label class="client-label">Contato</label>
-              <input id="cli-form-contato" type="text" class="finput" placeholder="Nome do contato">
-            </div>
-            <div class="client-field">
-              <label class="client-label">Tipo de pessoa</label>
-              <select id="cli-form-tipo" class="fsel">
-                <option value="PF">Pessoa física</option>
-                <option value="PJ">Pessoa jurídica</option>
-              </select>
-            </div>
-          </div>
-        </section>
+        <div class="client-tabs" role="tablist" aria-label="Cadastro do cliente">
+          <button class="client-tab-btn active" id="client-tab-identificacao" onclick="switchClientTab('identificacao')" role="tab" aria-selected="true" aria-controls="client-panel-identificacao">Identificação</button>
+          <button class="client-tab-btn" id="client-tab-endereco" onclick="switchClientTab('endereco')" role="tab" aria-selected="false" aria-controls="client-panel-endereco">Endereço</button>
+          <button class="client-tab-btn" id="client-tab-operacional" onclick="switchClientTab('operacional')" role="tab" aria-selected="false" aria-controls="client-panel-operacional">Operacional</button>
+          <button class="client-tab-btn" id="client-tab-historico" onclick="switchClientTab('historico')" role="tab" aria-selected="false" aria-controls="client-panel-historico">Histórico</button>
+        </div>
 
-        <section class="client-section">
-          <div class="client-section-head">
-            <div class="client-section-title">Classificação</div>
-            <div class="client-section-desc">Dados usados para segmentação, recorrência e prioridade operacional.</div>
-          </div>
-          <div class="client-grid-3">
-            <div class="client-field">
-              <label class="client-label">Categoria do cliente <span class="req">*</span></label>
-              <select id="cli-form-categoria" class="fsel" onchange="togglePeriodicidade()">
-                <option value="eventual">Eventual (Pontual)</option>
-                <option value="contrato">Contrato (Recorrente)</option>
-              </select>
+        <div class="client-tab-panel active" id="client-panel-identificacao" role="tabpanel" aria-labelledby="client-tab-identificacao">
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Identificação</div>
+              <div class="client-section-desc">Dados principais, contato e classificação do cliente.</div>
             </div>
-            <div class="client-field">
-              <label class="client-label">Tipo de local</label>
-              <select id="cli-form-tipo-local" class="fsel">
-                <option value="">Selecione...</option>
-                <option value="residencial">Residencial</option>
-                <option value="condominio">Condomínio</option>
-                <option value="restaurante">Restaurante</option>
-                <option value="comercial">Comercial</option>
-                <option value="industrial">Industrial</option>
-                <option value="outro">Outro</option>
-              </select>
-            </div>
-            <div class="client-field">
-              <label class="client-label">Nível de urgência</label>
-              <select id="cli-form-urgencia" class="fsel">
-                <option value="normal">Normal</option>
-                <option value="urgente">Urgente</option>
-                <option value="crítico">Crítico</option>
-              </select>
-            </div>
-            <div class="client-field">
-              <label class="client-label">Recorrência</label>
-              <label class="client-checkbox-row" for="cli-form-recorrente">
-                <input type="checkbox" id="cli-form-recorrente" onchange="togglePeriodicidade()">
-                <span>Cliente recorrente</span>
-              </label>
-            </div>
-            <div class="client-field" id="cli-form-periodicidade-container" style="display:none">
-              <label class="client-label">Periodicidade <span class="req">*</span></label>
-              <select id="cli-form-periodicidade" class="fsel">
-                <option value="">Selecione...</option>
-                <option value="semanal">Semanal</option>
-                <option value="quinzenal">Quinzenal</option>
-                <option value="mensal">Mensal</option>
-                <option value="bimestral">Bimestral</option>
-                <option value="trimestral">Trimestral</option>
-                <option value="semestral">Semestral</option>
-                <option value="anual">Anual</option>
-              </select>
-              <div class="client-field-error" id="cli-error-periodicidade">Periodicidade é obrigatória.</div>
-            </div>
-            <div class="client-field">
-              <label class="client-label">Último serviço</label>
-              <input id="cli-form-ultimo-servico" type="date" class="finput">
-            </div>
-            <div class="client-field">
-              <label class="client-label">Status operacional</label>
-              <select id="cli-form-status-operacional" class="fsel">
-                <option value="">Sem status</option>
-                <option value="Ativo">Ativo</option>
-                <option value="A renovar">A renovar</option>
-                <option value="Vencido">Vencido</option>
-                <option value="Cancelado">Cancelado</option>
-                <option value="Eventual recente">Eventual recente</option>
-                <option value="Eventual antigo">Eventual antigo</option>
-                <option value="Historico/Inativo">Histórico/Inativo</option>
-              </select>
-            </div>
-            <div class="client-field">
-              <label class="client-label">Prioridade</label>
-              <select id="cli-form-prioridade" class="fsel">
-                <option value="">Sem prioridade</option>
-                <option value="Alta">Alta</option>
-                <option value="Média">Média</option>
-                <option value="Media">Media</option>
-                <option value="Baixa">Baixa</option>
-              </select>
-            </div>
-            <div class="client-field">
-              <label class="client-label">Zona</label>
-              <input id="cli-form-zona" type="text" class="finput" placeholder="Zona operacional">
-            </div>
-            <div class="client-field">
-              <label class="client-label">Origem</label>
-              <input id="cli-form-origem" type="text" class="finput" placeholder="Contratos, Access, agenda...">
-            </div>
-          </div>
-        </section>
-
-        <section class="client-section">
-          <div class="client-section-head">
-            <div class="client-section-title">Endereço</div>
-            <div class="client-section-desc">Endereço utilizado para roteirização, atendimento e validações operacionais.</div>
-          </div>
-          <div class="client-grid">
-            <div class="client-field small">
-              <label class="client-label">CEP</label>
-              <div class="client-inline">
-                <input id="cli-form-cep" type="text" class="finput" placeholder="00000-000" maxlength="9" onblur="buscarCepCliente()">
-                <button class="client-icon-btn" id="cli-cep-btn" onclick="buscarCepCliente()" title="Buscar endereço por CEP">⌕</button>
+            <div class="client-grid">
+              <div class="client-field">
+                <label class="client-label">Tipo de pessoa</label>
+                <select id="cli-form-tipo" class="fsel">
+                  <option value="PF">Pessoa física</option>
+                  <option value="PJ">Pessoa jurídica</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">CPF/CNPJ</label>
+                <input id="cli-form-cpf" type="text" class="finput" placeholder="000.000.000-00 ou 00.000.000/0000-00">
+              </div>
+              <div class="client-field full">
+                <label class="client-label">Nome / Razão social <span class="req">*</span></label>
+                <input id="cli-form-nome" type="text" class="finput" placeholder="Nome completo ou razão social do cliente" required>
+                <div class="client-field-error" id="cli-error-nome">Nome é obrigatório.</div>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Telefone</label>
+                <input id="cli-form-tel" type="text" class="finput" placeholder="(11) 99999-9999">
+                <div class="client-field-error" id="cli-error-tel">Telefone é obrigatório.</div>
+              </div>
+              <div class="client-field">
+                <label class="client-label">WhatsApp</label>
+                <input id="cli-form-whatsapp" type="text" class="finput" placeholder="(11) 99999-9999">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Contato responsável</label>
+                <input id="cli-form-contato" type="text" class="finput" placeholder="Nome do contato">
+              </div>
+              <div class="client-field">
+                <label class="client-label">E-mail</label>
+                <input id="cli-form-email" type="email" class="finput" placeholder="cliente@email.com">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Categoria do cliente <span class="req">*</span></label>
+                <select id="cli-form-categoria" class="fsel" onchange="togglePeriodicidade()">
+                  <option value="eventual">Eventual (Pontual)</option>
+                  <option value="contrato">Contrato (Recorrente)</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Status operacional</label>
+                <select id="cli-form-status-operacional" class="fsel">
+                  <option value="">Sem status</option>
+                  <option value="Ativo">Ativo</option>
+                  <option value="A renovar">A renovar</option>
+                  <option value="Vencido">Vencido</option>
+                  <option value="Cancelado">Cancelado</option>
+                  <option value="Eventual recente">Eventual recente</option>
+                  <option value="Eventual antigo">Eventual antigo</option>
+                  <option value="Historico/Inativo">Histórico/Inativo</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Prioridade</label>
+                <select id="cli-form-prioridade" class="fsel">
+                  <option value="">Sem prioridade</option>
+                  <option value="Alta">Alta</option>
+                  <option value="Média">Média</option>
+                  <option value="Media">Media</option>
+                  <option value="Baixa">Baixa</option>
+                </select>
               </div>
             </div>
-            <div class="client-field">
-              <label class="client-label">Número</label>
-              <input id="cli-form-numero" type="text" class="finput" placeholder="Ex: 42">
+          </section>
+        </div>
+
+        <div class="client-tab-panel" id="client-panel-endereco" role="tabpanel" aria-labelledby="client-tab-endereco">
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Endereço</div>
+              <div class="client-section-desc">Endereço utilizado para roteirização, atendimento e localização do cliente.</div>
             </div>
-            <div class="client-field full">
-              <label class="client-label">Rua</label>
-              <input id="cli-form-rua" type="text" class="finput" placeholder="Nome da rua, avenida ou condomínio">
-            </div>
-            <div class="client-field">
-              <label class="client-label">Bairro</label>
-              <input id="cli-form-bairro" type="text" class="finput" placeholder="Bairro">
-            </div>
-            <div class="client-field">
-              <label class="client-label">Cidade</label>
-              <input id="cli-form-cidade" type="text" class="finput" placeholder="Cidade">
-            </div>
-            <div class="client-field">
-              <label class="client-label">Complemento</label>
-              <input id="cli-form-complemento" type="text" class="finput" placeholder="Apto, bloco, sala...">
-            </div>
-            <div class="client-field">
-              <label class="client-label">Referência</label>
-              <input id="cli-form-referencia" type="text" class="finput" placeholder="Ponto de referência">
-            </div>
-            <div class="client-field full">
-              <label class="client-label">Endereço completo</label>
-              <div class="client-inline">
-                <input id="cli-form-end" type="text" class="finput" placeholder="Rua, número, bairro e cidade">
-                <button class="client-icon-btn" onclick="geocodeClientAddress()" title="Buscar endereço no Google Maps">⌖</button>
+            <div class="client-grid">
+              <div class="client-field small">
+                <label class="client-label">CEP</label>
+                <div class="client-inline">
+                  <input id="cli-form-cep" type="text" class="finput" placeholder="00000-000" maxlength="9" onblur="buscarCepCliente()">
+                  <button class="client-btn secondary" id="cli-cep-btn" onclick="buscarCepCliente()" title="Buscar endereço pelo CEP" style="min-height:42px;padding:0 12px">Buscar</button>
+                </div>
               </div>
-              <div id="cli-geocode-suggestions" style="margin-top:8px;display:none"></div>
+              <div class="client-field">
+                <label class="client-label">Número</label>
+                <input id="cli-form-numero" type="text" class="finput" placeholder="Ex: 42" oninput="syncClientFullAddress()">
+              </div>
+              <div class="client-field full">
+                <label class="client-label">Rua</label>
+                <input id="cli-form-rua" type="text" class="finput" placeholder="Nome da rua, avenida ou condomínio" oninput="syncClientFullAddress()">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Bairro</label>
+                <input id="cli-form-bairro" type="text" class="finput" placeholder="Bairro" oninput="syncClientFullAddress()">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Cidade</label>
+                <input id="cli-form-cidade" type="text" class="finput" placeholder="Cidade" oninput="syncClientFullAddress()">
+              </div>
+              <div class="client-field small">
+                <label class="client-label">UF</label>
+                <input id="cli-form-uf" type="text" class="finput" placeholder="SP" maxlength="2" oninput="this.value=this.value.toUpperCase();syncClientFullAddress()">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Zona / Região</label>
+                <input id="cli-form-zona" type="text" class="finput" placeholder="Zona operacional">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Complemento</label>
+                <input id="cli-form-complemento" type="text" class="finput" placeholder="Apto, bloco, sala..." oninput="syncClientFullAddress()">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Referência</label>
+                <input id="cli-form-referencia" type="text" class="finput" placeholder="Ponto de referência" oninput="syncClientFullAddress()">
+              </div>
+              <div class="client-field full">
+                <label class="client-label">Endereço completo</label>
+                <div class="client-inline">
+                  <input id="cli-form-end" type="text" class="finput" placeholder="Rua, número, bairro, cidade e UF">
+                  <button class="client-btn secondary" onclick="geocodeClientAddress()" title="Validar endereço" style="min-height:42px;padding:0 12px">Validar</button>
+                  <button class="client-btn secondary" onclick="openClientAddressMap()" title="Abrir no mapa" style="min-height:42px;padding:0 12px">Mapa</button>
+                </div>
+                <div id="cli-geocode-suggestions" style="margin-top:8px;display:none"></div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <section class="client-section">
-          <div class="client-section-head">
-            <div class="client-section-title">Operacional</div>
-            <div class="client-section-desc">Informações que ajudam a equipe técnica no atendimento.</div>
-          </div>
-          <div class="client-grid">
-            <div class="client-field">
-              <label class="client-label">Restrição operacional</label>
-              <textarea id="cli-form-restricoes" class="finput" placeholder="Restrições de acesso, horários, animais ou portaria"></textarea>
+        <div class="client-tab-panel" id="client-panel-operacional" role="tabpanel" aria-labelledby="client-tab-operacional">
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Operacional</div>
+              <div class="client-section-desc">Informações úteis para planejamento e execução do atendimento.</div>
             </div>
-            <div class="client-field">
-              <label class="client-label">Observações operacionais</label>
-              <textarea id="cli-form-obs-operacionais" class="finput" placeholder="Notas importantes para a equipe técnica"></textarea>
+            <div class="client-grid-3">
+              <div class="client-field">
+                <label class="client-label">Tipo de local</label>
+                <select id="cli-form-tipo-local" class="fsel">
+                  <option value="">Selecione...</option>
+                  <option value="residencial">Residencial</option>
+                  <option value="condominio">Condomínio</option>
+                  <option value="restaurante">Restaurante</option>
+                  <option value="comercial">Comercial</option>
+                  <option value="industrial">Industrial</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Nível de urgência</label>
+                <select id="cli-form-urgencia" class="fsel">
+                  <option value="normal">Normal</option>
+                  <option value="urgente">Urgente</option>
+                  <option value="crítico">Crítico</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Último serviço</label>
+                <input id="cli-form-ultimo-servico" type="date" class="finput">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Recorrência</label>
+                <label class="client-checkbox-row" for="cli-form-recorrente">
+                  <input type="checkbox" id="cli-form-recorrente" onchange="togglePeriodicidade()">
+                  <span>Cliente recorrente</span>
+                </label>
+              </div>
+              <div class="client-field" id="cli-form-periodicidade-container" style="display:none">
+                <label class="client-label">Periodicidade <span class="req">*</span></label>
+                <select id="cli-form-periodicidade" class="fsel">
+                  <option value="">Selecione...</option>
+                  <option value="semanal">Semanal</option>
+                  <option value="quinzenal">Quinzenal</option>
+                  <option value="mensal">Mensal</option>
+                  <option value="bimestral">Bimestral</option>
+                  <option value="trimestral">Trimestral</option>
+                  <option value="semestral">Semestral</option>
+                  <option value="anual">Anual</option>
+                </select>
+                <div class="client-field-error" id="cli-error-periodicidade">Periodicidade é obrigatória.</div>
+              </div>
+              <div class="client-field full">
+                <label class="client-label">Restrição operacional</label>
+                <textarea id="cli-form-restricoes" class="finput" placeholder="Acesso, portaria, horários ou outras restrições relevantes"></textarea>
+              </div>
+              <div class="client-field full">
+                <label class="client-label">Observações operacionais</label>
+                <textarea id="cli-form-obs-operacionais" class="finput" placeholder="Notas importantes para a equipe técnica"></textarea>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <section class="client-section">
-          <div class="client-section-head">
-            <div class="client-section-title">Observações</div>
-            <div class="client-section-desc">Dados complementares para cadastro e consulta administrativa.</div>
-          </div>
-          <div class="client-grid">
-            <div class="client-field">
-              <label class="client-label">CPF/CNPJ</label>
-              <input id="cli-form-cpf" type="text" class="finput" placeholder="000.000.000-00 ou 00.000.000/0000-00">
+        <div class="client-tab-panel" id="client-panel-historico" role="tabpanel" aria-labelledby="client-tab-historico">
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Histórico</div>
+              <div class="client-section-desc">Observações administrativas, serviços recentes e rastreabilidade do cadastro.</div>
             </div>
-            <div class="client-field">
-              <label class="client-label">Observações</label>
-              <textarea id="cli-form-obs" class="finput" placeholder="Notas adicionais do cliente"></textarea>
+            <div class="client-grid">
+              <div class="client-field full">
+                <label class="client-label">Observações administrativas</label>
+                <textarea id="cli-form-obs" class="finput" placeholder="Notas adicionais do cliente"></textarea>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <div class="client-history" id="cli-historico-section">
-          <div class="client-history-head">
-            <span class="client-history-title">Histórico Operacional</span>
-            <button class="client-btn secondary" onclick="loadClientHistory()" title="Atualizar histórico" style="min-height:32px;padding:0 10px;font-size:12px">Atualizar</button>
-          </div>
-          <div class="client-history-box" id="cli-historico-content">
-            <div style="text-align:center;color:#64748b;font-size:12px">Carregando histórico...</div>
-          </div>
+          <section class="client-section" id="cli-historico-section">
+            <div class="client-history-head">
+              <span class="client-history-title">Histórico operacional</span>
+              <button class="client-btn secondary" onclick="loadClientHistory()" title="Atualizar histórico" style="min-height:32px;padding:0 10px;font-size:12px">Atualizar</button>
+            </div>
+            <div class="client-history-box" id="cli-historico-content">
+              <div style="text-align:center;color:#64748b;font-size:12px">Carregando histórico...</div>
+            </div>
+          </section>
+
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Informações do sistema</div>
+              <div class="client-section-desc">Dados discretos para rastreabilidade, sem uso no preenchimento diário.</div>
+            </div>
+            <div class="client-system-info">
+              <div class="client-system-item">
+                <div class="client-system-label">Origem da importação</div>
+                <input id="cli-form-origem" type="text" class="finput" placeholder="Contratos, Access, agenda...">
+              </div>
+              <div class="client-system-item">
+                <div class="client-system-label">Confiança do cruzamento</div>
+                <div class="client-system-value" id="cli-form-confianca-info">Não informado</div>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div id="cli-form-error" class="client-form-error"></div>
@@ -8907,12 +8977,15 @@ function openClientModal(clientId = null) {
     document.getElementById('client-modal-subtitle').textContent = 'Atualize os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = clienteEditando.nome || '';
     document.getElementById('cli-form-tel').value = clienteEditando.telefone || '';
+    document.getElementById('cli-form-whatsapp').value = clienteEditando.whatsapp || '';
+    document.getElementById('cli-form-email').value = clienteEditando.email || '';
     document.getElementById('cli-form-contato').value = clienteEditando.contato || '';
     document.getElementById('cli-form-cep').value = clienteEditando.cep || '';
     document.getElementById('cli-form-rua').value = clienteEditando.rua || '';
     document.getElementById('cli-form-numero').value = clienteEditando.numero || '';
     document.getElementById('cli-form-bairro').value = clienteEditando.bairro || '';
     document.getElementById('cli-form-cidade').value = clienteEditando.cidade || '';
+    document.getElementById('cli-form-uf').value = clienteEditando.uf || '';
     document.getElementById('cli-form-complemento').value = clienteEditando.complemento || '';
     document.getElementById('cli-form-referencia').value = clienteEditando.referencia || '';
     document.getElementById('cli-form-end').value = clienteEditando.endereco_completo || clienteEditando.endereco || buildClientAddress({
@@ -8920,6 +8993,7 @@ function openClientModal(clientId = null) {
       numero: clienteEditando.numero,
       bairro: clienteEditando.bairro,
       cidade: clienteEditando.cidade,
+      uf: clienteEditando.uf,
       complemento: clienteEditando.complemento,
       referencia: clienteEditando.referencia
     }) || '';
@@ -8945,6 +9019,7 @@ function openClientModal(clientId = null) {
     }
     document.getElementById('cli-form-cpf').value = clienteEditando.cpf_cnpj || '';
     document.getElementById('cli-form-obs').value = clienteEditando.observacoes || '';
+    updateClientSystemInfo(clienteEditando);
     document.getElementById('cli-form-del').style.display = 'inline-flex';
     
     togglePeriodicidade();
@@ -8959,12 +9034,15 @@ function openClientModal(clientId = null) {
     document.getElementById('client-modal-subtitle').textContent = 'Cadastre os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = '';
     document.getElementById('cli-form-tel').value = '';
+    document.getElementById('cli-form-whatsapp').value = '';
+    document.getElementById('cli-form-email').value = '';
     document.getElementById('cli-form-contato').value = '';
     document.getElementById('cli-form-cep').value = '';
     document.getElementById('cli-form-rua').value = '';
     document.getElementById('cli-form-numero').value = '';
     document.getElementById('cli-form-bairro').value = '';
     document.getElementById('cli-form-cidade').value = '';
+    document.getElementById('cli-form-uf').value = '';
     document.getElementById('cli-form-complemento').value = '';
     document.getElementById('cli-form-referencia').value = '';
     document.getElementById('cli-form-end').value = '';
@@ -8983,6 +9061,7 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-form-tipo').value = 'PF';
     document.getElementById('cli-form-cpf').value = '';
     document.getElementById('cli-form-obs').value = '';
+    updateClientSystemInfo(null);
     document.getElementById('cli-form-del').style.display = 'none';
     
     document.getElementById('cli-form-periodicidade-container').style.display = 'none';
@@ -8997,7 +9076,27 @@ function openClientModal(clientId = null) {
   setCepLookupLoading(false);
   clearClientFormErrors();
   document.getElementById('cli-geocode-suggestions').style.display = 'none';
+  switchClientTab('identificacao');
   document.getElementById('client-modal').classList.add('open');
+}
+
+function switchClientTab(tab) {
+  document.querySelectorAll('#client-modal .client-tab-btn').forEach(btn => {
+    const active = btn.id === `client-tab-${tab}`;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('#client-modal .client-tab-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === `client-panel-${tab}`);
+  });
+}
+
+function updateClientSystemInfo(cliente) {
+  const confidenceEl = document.getElementById('cli-form-confianca-info');
+  if (!confidenceEl) return;
+  const observacoes = String(cliente?.observacoes || '');
+  const match = observacoes.match(/Confianca do cruzamento:\s*([^\n]+)/i);
+  confidenceEl.textContent = match?.[1]?.trim() || 'Não informado';
 }
 
 function closeClientModal() {
@@ -9039,7 +9138,7 @@ function setCepLookupLoading(loading) {
   const btn = document.getElementById('cli-cep-btn');
   if (!btn) return;
   btn.disabled = !!loading;
-  btn.textContent = loading ? '...' : '⌕';
+  btn.textContent = loading ? '...' : 'Buscar';
 }
 
 // Buscar endereço por CEP
@@ -9069,6 +9168,7 @@ async function buscarCepCliente() {
     document.getElementById('cli-form-rua').value = data.logradouro || '';
     document.getElementById('cli-form-bairro').value = data.bairro || '';
     document.getElementById('cli-form-cidade').value = data.localidade || '';
+    document.getElementById('cli-form-uf').value = (data.uf || '').toUpperCase();
     document.getElementById('cli-form-complemento').value = data.complemento || '';
     
     // Formatar CEP
@@ -9080,6 +9180,7 @@ async function buscarCepCliente() {
       numero: document.getElementById('cli-form-numero').value,
       bairro: data.bairro,
       cidade: data.localidade,
+      uf: data.uf,
       complemento: data.complemento,
       referencia: document.getElementById('cli-form-referencia').value
     });
@@ -9100,6 +9201,7 @@ async function buscarCepCliente() {
 async function verificarDuplicatasCliente() {
   const nome = document.getElementById('cli-form-nome').value.trim();
   const telefone = document.getElementById('cli-form-tel').value.trim();
+  const whatsapp = document.getElementById('cli-form-whatsapp').value.trim();
   const cep = document.getElementById('cli-form-cep').value.trim().replace(/\D/g, '');
   const enderecoCompleto = document.getElementById('cli-form-end').value.trim().toLowerCase();
   
@@ -9113,6 +9215,7 @@ async function verificarDuplicatasCliente() {
     const customers = await response.json();
     const nomeNorm = nome.toLowerCase();
     const telefoneNorm = telefone.replace(/\D/g, '');
+    const whatsappNorm = whatsapp.replace(/\D/g, '');
     
     // Filtrar duplicatas (mesmo nome, telefone, CEP ou endereço, excluindo o cliente sendo editado)
     const duplicates = customers.filter(c => 
@@ -9120,6 +9223,7 @@ async function verificarDuplicatasCliente() {
       (
         c.nome.toLowerCase().includes(nomeNorm) ||
         (telefoneNorm && (c.telefone || '').replace(/\D/g, '') === telefoneNorm) ||
+        (whatsappNorm && (c.whatsapp || '').replace(/\D/g, '') === whatsappNorm) ||
         (cep && String(c.cep || '').replace(/\D/g, '') === cep) ||
         (enderecoCompleto && String(c.endereco_completo || c.endereco || '').trim().toLowerCase() === enderecoCompleto)
       )
@@ -9224,6 +9328,8 @@ async function saveClient() {
     const isNewClient = !clienteEditando;
     const nome = document.getElementById('cli-form-nome').value.trim();
     const telefone = document.getElementById('cli-form-tel').value.trim();
+    const whatsapp = document.getElementById('cli-form-whatsapp').value.trim();
+    const email = document.getElementById('cli-form-email').value.trim();
     const contato = document.getElementById('cli-form-contato').value.trim();
     const cep = document.getElementById('cli-form-cep').value.trim();
     const enderecoCompleto = document.getElementById('cli-form-end').value.trim();
@@ -9236,6 +9342,7 @@ async function saveClient() {
     const numero = document.getElementById('cli-form-numero').value.trim();
     const bairro = document.getElementById('cli-form-bairro').value.trim();
     const cidade = document.getElementById('cli-form-cidade').value.trim();
+    const uf = document.getElementById('cli-form-uf').value.trim().toUpperCase();
     const complemento = document.getElementById('cli-form-complemento').value.trim();
     const referencia = document.getElementById('cli-form-referencia').value.trim();
     const nivel_urgencia_padrao = document.getElementById('cli-form-urgencia').value;
@@ -9255,12 +9362,14 @@ async function saveClient() {
     if (!nome) {
       errorEl.textContent = 'Nome é obrigatório';
       errorEl.style.display = 'block';
+      switchClientTab('identificacao');
       markClientFieldInvalid('cli-form-nome', 'cli-error-nome');
       return;
     }
     if ((categoria === 'contrato' || recorrente) && !periodicidade) {
       errorEl.textContent = 'Periodicidade é obrigatória para clientes recorrentes ou de contrato';
       errorEl.style.display = 'block';
+      switchClientTab('operacional');
       markClientFieldInvalid('cli-form-periodicidade', 'cli-error-periodicidade');
       return;
     }
@@ -9274,6 +9383,8 @@ async function saveClient() {
     const payload = {
       nome,
       telefone,
+      whatsapp,
+      email,
       contato,
       cep,
       endereco: enderecoCompleto,
@@ -9290,6 +9401,7 @@ async function saveClient() {
       numero,
       bairro,
       cidade,
+      uf,
       complemento,
       referencia,
       endereco_completo: enderecoCompleto,
@@ -9369,15 +9481,30 @@ function togglePeriodicidade() {
   }
 }
 
-function buildClientAddress({ rua, numero, bairro, cidade, complemento, referencia }) {
+function buildClientAddress({ rua, numero, bairro, cidade, uf, complemento, referencia }) {
   const parts = [];
   if (rua) parts.push(rua);
   if (numero) parts.push(numero);
   if (bairro) parts.push(bairro);
-  if (cidade) parts.push(cidade);
+  if (cidade || uf) parts.push([cidade, uf].filter(Boolean).join(' / '));
   if (complemento) parts.push(complemento);
   if (referencia) parts.push(`Ref: ${referencia}`);
   return parts.join(', ');
+}
+
+function syncClientFullAddress() {
+  const enderecoInput = document.getElementById('cli-form-end');
+  if (!enderecoInput) return;
+  enderecoInput.value = buildClientAddress({
+    rua: document.getElementById('cli-form-rua')?.value.trim(),
+    numero: document.getElementById('cli-form-numero')?.value.trim(),
+    bairro: document.getElementById('cli-form-bairro')?.value.trim(),
+    cidade: document.getElementById('cli-form-cidade')?.value.trim(),
+    uf: document.getElementById('cli-form-uf')?.value.trim().toUpperCase(),
+    complemento: document.getElementById('cli-form-complemento')?.value.trim(),
+    referencia: document.getElementById('cli-form-referencia')?.value.trim()
+  });
+  enderecoInput.dataset.geocodeData = '';
 }
 
 function buildServiceAddressFromClient(cliente = {}) {
@@ -9564,6 +9691,15 @@ async function geocodeClientAddress() {
     console.error('Erro geocodeClientAddress:', error);
     suggestionsDiv.innerHTML = '<div style="font-size:12px;color:var(--red)">❌ Erro ao buscar endereço</div>';
   }
+}
+
+function openClientAddressMap() {
+  const endereco = document.getElementById('cli-form-end')?.value.trim();
+  if (!endereco) {
+    toast('Digite um endereço primeiro', 'warn');
+    return;
+  }
+  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`, '_blank', 'noopener,noreferrer');
 }
 
 function selectGeocodeSuggestion(suggestion) {

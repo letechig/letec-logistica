@@ -360,12 +360,16 @@ CREATE TABLE IF NOT EXISTS customers (
   nome             TEXT NOT NULL,
   nome_normalizado TEXT,
   telefone         TEXT,
+  whatsapp         TEXT,
+  email            TEXT,
+  cep              TEXT,
   endereco         TEXT,
   endereco_completo TEXT,
   rua              TEXT,
   numero           TEXT,
   bairro           TEXT,
   cidade           TEXT,
+  uf               TEXT,
   complemento      TEXT,
   referencia       TEXT,
   latitude         DECIMAL(10,8),
@@ -397,13 +401,20 @@ CREATE INDEX IF NOT EXISTS idx_customers_nome_norm ON customers(nome_normalizado
 CREATE INDEX IF NOT EXISTS idx_customers_categoria ON customers(categoria);
 CREATE INDEX IF NOT EXISTS idx_customers_tipo_local ON customers(tipo_local);
 CREATE INDEX IF NOT EXISTS idx_customers_bairro    ON customers(bairro);
+CREATE INDEX IF NOT EXISTS idx_customers_cep       ON customers(cep);
 CREATE INDEX IF NOT EXISTS idx_customers_urgencia  ON customers(nivel_urgencia_padrao);
 CREATE INDEX IF NOT EXISTS idx_customers_ativo     ON customers(ativo);
 CREATE INDEX IF NOT EXISTS idx_customers_tipo_cliente ON customers(tipo_cliente);
 CREATE INDEX IF NOT EXISTS idx_customers_status_operacional ON customers(status_operacional);
 CREATE INDEX IF NOT EXISTS idx_customers_prioridade ON customers(prioridade);
 CREATE INDEX IF NOT EXISTS idx_customers_cpf_cnpj ON customers(cpf_cnpj);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_whatsapp ON customers(whatsapp);
 
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS uf TEXT;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS cep TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS contato TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS zona TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS tipo_cliente TEXT;

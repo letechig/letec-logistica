@@ -70,6 +70,16 @@ function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function normalizeEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  return email || null;
+}
+
+function normalizeUf(value) {
+  const uf = String(value || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+  return uf || null;
+}
+
 function normalizeDocument(value) {
   return String(value || '').replace(/\D/g, '');
 }
@@ -158,7 +168,7 @@ function normalizeAddress(value) {
 
 function buildCustomerAddressFingerprint(customer = {}) {
   const cep = String(customer.cep || '').replace(/\D/g, '');
-  const structured = [customer.rua, customer.numero, customer.bairro, customer.cidade]
+  const structured = [customer.rua, customer.numero, customer.bairro, customer.cidade, customer.uf]
     .filter(Boolean)
     .map(part => String(part).trim())
     .join(' ');
@@ -183,6 +193,10 @@ function areDuplicateCustomers(left, right) {
   const rightPhone = normalizePhone(right.telefone);
   if (leftPhone && rightPhone && leftPhone === rightPhone) return true;
 
+  const leftWhatsapp = normalizePhone(left.whatsapp);
+  const rightWhatsapp = normalizePhone(right.whatsapp);
+  if (leftWhatsapp && rightWhatsapp && leftWhatsapp === rightWhatsapp) return true;
+
   const leftName = left.nome_normalizado || normalizeCustomerName(left.nome);
   const rightName = right.nome_normalizado || normalizeCustomerName(right.nome);
   if (leftName && rightName && leftName === rightName) return true;
@@ -205,14 +219,14 @@ function areDuplicateCustomers(left, right) {
   return false;
 }
 
-function buildCustomerAddress({ rua, numero, bairro, cidade, complemento, referencia }) {
+function buildCustomerAddress({ rua, numero, bairro, cidade, uf, complemento, referencia }) {
   const parts = [];
   if (rua) parts.push(String(rua).trim());
   if (numero) parts.push(String(numero).trim());
   const main = parts.filter(Boolean).join(', ');
   const secondary = [];
   if (bairro) secondary.push(String(bairro).trim());
-  if (cidade) secondary.push(String(cidade).trim());
+  if (cidade || uf) secondary.push([cidade, uf].filter(Boolean).map(part => String(part).trim()).join(' / '));
   let address = main;
   if (secondary.length) {
     address += (address ? ' - ' : '') + secondary.join(' - ');
@@ -222,19 +236,20 @@ function buildCustomerAddress({ rua, numero, bairro, cidade, complemento, refere
   return address.trim() || null;
 }
 
-async function findDuplicateCustomer({ id, nome, telefone, cpf_cnpj, endereco, endereco_completo, rua, numero, bairro, cidade }) {
+async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
+  const whatsappNormalizado = normalizePhone(whatsapp);
   const documentoNormalizado = normalizeDocument(cpf_cnpj);
   const enderecoNormalizado = normalizeAddress(
     endereco_completo ||
     endereco ||
-    buildCustomerAddress({ rua, numero, bairro, cidade })
+    buildCustomerAddress({ rua, numero, bairro, cidade, uf })
   );
 
   const { data, error } = await supabase
     .from('customers')
-    .select('id,nome,telefone,nome_normalizado,cpf_cnpj,endereco,endereco_completo,rua,numero,bairro,cidade')
+    .select('id,nome,telefone,whatsapp,nome_normalizado,cpf_cnpj,cep,endereco,endereco_completo,rua,numero,bairro,cidade,uf')
     .eq('ativo', true);
 
   if (error) throw error;
@@ -245,10 +260,12 @@ async function findDuplicateCustomer({ id, nome, telefone, cpf_cnpj, endereco, e
 
     const itemNomeNorm = item.nome_normalizado || normalizeCustomerName(item.nome);
     const itemTelNorm = normalizePhone(item.telefone);
+    const itemWhatsappNorm = normalizePhone(item.whatsapp);
     const itemDocumentoNorm = normalizeDocument(item.cpf_cnpj);
     const itemEnderecoNorm = buildCustomerAddressFingerprint(item);
 
     if (telefoneNormalizado && itemTelNorm && itemTelNorm === telefoneNormalizado) return true;
+    if (whatsappNormalizado && itemWhatsappNorm && itemWhatsappNorm === whatsappNormalizado) return true;
     if (documentoNormalizado && itemDocumentoNorm === documentoNormalizado && enderecoNormalizado && itemEnderecoNorm === enderecoNormalizado) return true;
     if (nomeNormalizado && itemNomeNorm === nomeNormalizado && enderecoNormalizado && itemEnderecoNorm === enderecoNormalizado) return true;
     return false;
@@ -604,7 +621,7 @@ app.get('/api/customers', async (req, res) => {
     if (search && typeof search === 'string') {
       const safeSearch = search.trim().substring(0, 100);
       query = query.or(
-        `nome.ilike.%${safeSearch}%,telefone.ilike.%${safeSearch}%,endereco.ilike.%${safeSearch}%,bairro.ilike.%${safeSearch}%,tipo_local.ilike.%${safeSearch}%`
+        `nome.ilike.%${safeSearch}%,telefone.ilike.%${safeSearch}%,whatsapp.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%,endereco.ilike.%${safeSearch}%,bairro.ilike.%${safeSearch}%,tipo_local.ilike.%${safeSearch}%`
       );
     }
     if (tipo_local) query = query.eq('tipo_local', tipo_local);
@@ -631,6 +648,9 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     const {
       nome,
       telefone,
+      whatsapp,
+      email,
+      cep,
       endereco,
       endereco_completo,
       latitude,
@@ -648,6 +668,7 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       numero,
       bairro,
       cidade,
+      uf,
       complemento,
       referencia,
       cliente_recorrente,
@@ -661,8 +682,12 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     } = req.body;
 
     const telefoneNormalizado = normalizePhone(telefone);
+    const whatsappNormalizado = normalizePhone(whatsapp);
+    const emailNormalizado = normalizeEmail(email);
+    const ufNormalizada = normalizeUf(uf);
     const nomeNormalizado = normalizeCustomerName(nome);
-    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, complemento, referencia });
+    const cepNormalizado = String(cep || '').replace(/\D/g, '') || null;
+    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, uf: ufNormalizada, complemento, referencia });
     const enderecoFinal = endereco ? endereco.trim() : enderecoEstruturado;
     const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
     const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
@@ -683,13 +708,16 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     const duplicate = await findDuplicateCustomer({
       nome,
       telefone: telefoneNormalizado,
+      whatsapp: whatsappNormalizado,
       cpf_cnpj,
       endereco: enderecoFinal,
       endereco_completo: enderecoCompletoFinal,
+      cep: cepNormalizado,
       rua,
       numero,
       bairro,
-      cidade
+      cidade,
+      uf: ufNormalizada
     });
     if (duplicate) {
       return res.status(409).json({
@@ -704,12 +732,16 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
         nome: nome.trim(),
         nome_normalizado: nomeNormalizado,
         telefone: telefoneNormalizado,
+        whatsapp: whatsappNormalizado || null,
+        email: emailNormalizado,
+        cep: cepNormalizado,
         endereco: enderecoFinal,
         endereco_completo: enderecoCompletoFinal,
         rua: rua ? rua.trim() : null,
         numero: numero ? String(numero).trim() : null,
         bairro: bairro ? bairro.trim() : null,
         cidade: cidade ? cidade.trim() : null,
+        uf: ufNormalizada,
         complemento: complemento ? complemento.trim() : null,
         referencia: referencia ? referencia.trim() : null,
         latitude: latitude ? parseFloat(latitude) : null,
@@ -754,6 +786,9 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
     const {
       nome,
       telefone,
+      whatsapp,
+      email,
+      cep,
       endereco,
       endereco_completo,
       latitude,
@@ -771,6 +806,7 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       numero,
       bairro,
       cidade,
+      uf,
       complemento,
       referencia,
       cliente_recorrente,
@@ -784,8 +820,12 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
     } = req.body;
 
     const telefoneNormalizado = normalizePhone(telefone);
+    const whatsappNormalizado = normalizePhone(whatsapp);
+    const emailNormalizado = normalizeEmail(email);
+    const ufNormalizada = normalizeUf(uf);
     const nomeNormalizado = normalizeCustomerName(nome);
-    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, complemento, referencia });
+    const cepNormalizado = String(cep || '').replace(/\D/g, '') || null;
+    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, uf: ufNormalizada, complemento, referencia });
     const enderecoFinal = endereco ? endereco.trim() : enderecoEstruturado;
     const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
     const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
@@ -807,13 +847,16 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       id,
       nome,
       telefone: telefoneNormalizado,
+      whatsapp: whatsappNormalizado,
       cpf_cnpj,
       endereco: enderecoFinal,
       endereco_completo: enderecoCompletoFinal,
+      cep: cepNormalizado,
       rua,
       numero,
       bairro,
-      cidade
+      cidade,
+      uf: ufNormalizada
     });
     if (duplicate) {
       return res.status(409).json({
@@ -828,12 +871,16 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
         nome: nome.trim(),
         nome_normalizado: nomeNormalizado,
         telefone: telefoneNormalizado,
+        whatsapp: whatsappNormalizado || null,
+        email: emailNormalizado,
+        cep: cepNormalizado,
         endereco: enderecoFinal,
         endereco_completo: enderecoCompletoFinal,
         rua: rua ? rua.trim() : null,
         numero: numero ? String(numero).trim() : null,
         bairro: bairro ? bairro.trim() : null,
         cidade: cidade ? cidade.trim() : null,
+        uf: ufNormalizada,
         complemento: complemento ? complemento.trim() : null,
         referencia: referencia ? referencia.trim() : null,
         latitude: latitude ? parseFloat(latitude) : null,
@@ -1022,6 +1069,9 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
       if (!merged.latitude && dup.latitude) merged.latitude = dup.latitude;
       if (!merged.longitude && dup.longitude) merged.longitude = dup.longitude;
       if (!merged.cpf_cnpj && dup.cpf_cnpj) merged.cpf_cnpj = dup.cpf_cnpj;
+      if (!merged.whatsapp && dup.whatsapp) merged.whatsapp = dup.whatsapp;
+      if (!merged.email && dup.email) merged.email = dup.email;
+      if (!merged.uf && dup.uf) merged.uf = dup.uf;
       if (!merged.observacoes && dup.observacoes) merged.observacoes = dup.observacoes;
       
       // Append observations
@@ -1039,6 +1089,9 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
         latitude: merged.latitude,
         longitude: merged.longitude,
         cpf_cnpj: merged.cpf_cnpj,
+        whatsapp: merged.whatsapp,
+        email: merged.email,
+        uf: merged.uf,
         observacoes: merged.observacoes,
         updated_at: new Date().toISOString()
       })
@@ -1135,7 +1188,7 @@ app.get('/api/data-reviews', async (req, res) => {
     if (customerIds.length) {
       const { data: customers, error: customersError } = await supabase
         .from('customers')
-        .select('id,nome,telefone,endereco,cidade,bairro,tipo_cliente,status_operacional,prioridade')
+        .select('id,nome,telefone,whatsapp,email,endereco,cidade,bairro,uf,tipo_cliente,status_operacional,prioridade')
         .in('id', customerIds);
       if (customersError) throw customersError;
       customersById = new Map((customers || []).map(customer => [customer.id, customer]));
