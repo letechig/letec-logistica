@@ -380,6 +380,7 @@ textarea:focus-visible,
 .cv-orange { color: var(--orange); }
 .cv-red    { color: var(--red); }
 .cv-yellow { color: var(--yellow); }
+.cv-purple { color: var(--purple); }
 .card-trend {
   font-size: 11px;
   color: var(--text3);
@@ -390,6 +391,111 @@ textarea:focus-visible,
 }
 .card-trend.up   { color: var(--green); }
 .card-trend.down { color: var(--red); }
+
+/* ─── INDICADORES OPERACIONAIS ───────────────── */
+.ops-shell { display:flex; flex-direction:column; gap:16px; }
+.ops-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:4px;
+}
+.ops-tabs {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  border-bottom:1px solid var(--border);
+  padding-bottom:8px;
+}
+.ops-tab {
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--text2);
+  min-height:34px;
+  padding:0 12px;
+  border-radius:var(--radius-md);
+  font-size:12px;
+  font-weight:800;
+  cursor:pointer;
+}
+.ops-tab.active {
+  border-color:rgba(37,99,235,.28);
+  background:var(--blue-bg);
+  color:var(--blue2);
+}
+.ops-filter-bar {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;
+  align-items:end;
+}
+.ops-panel-title {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.ops-panel-title h3 {
+  margin:0;
+  font-family:var(--display);
+  font-size:16px;
+  font-weight:900;
+  letter-spacing:0;
+}
+.ops-note {
+  border:1px solid var(--border);
+  background:var(--card2);
+  color:var(--text2);
+  border-radius:var(--radius-md);
+  padding:10px 12px;
+  font-size:12px;
+  line-height:1.5;
+}
+.ops-empty {
+  border:1px dashed var(--border2);
+  background:var(--card2);
+  color:var(--text2);
+  border-radius:var(--radius-lg);
+  padding:24px;
+  text-align:center;
+  font-size:13px;
+}
+.ops-progress {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:110px;
+}
+.ops-progress .prog { flex:1; min-width:56px; margin-top:0; }
+.ops-mini-cards {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+  gap:12px;
+}
+.ops-mini-card-title {
+  font-family:var(--display);
+  font-size:14px;
+  font-weight:900;
+  color:var(--text);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.ops-detail-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:420px;
+  overflow:auto;
+}
+.ops-detail-row {
+  border:1px solid var(--border);
+  border-radius:var(--radius-md);
+  background:var(--card2);
+  padding:10px;
+}
 
 /* ─── CHIP / BADGE ────────────────────────────── */
 .chip {
@@ -1738,7 +1844,7 @@ td.bold { color: var(--text); font-weight: 600; }
   #page-sub { display: none; }
   #global-mes { max-width: 132px; min-width:0; font-size: 11px; }
   .topbar-btn.primary { font-size: 0; padding: 0 10px; min-width:38px; }
-  .topbar-btn.primary::before { content: "+ CL"; font-size:11px; }
+  .topbar-btn.primary::before { content: "+ Checklist"; font-size:11px; }
   .topbar-title { font-size: 15px; line-height:1; }
   /* Bottom nav */
   .mob-bottom-nav { display: flex; }
@@ -2454,7 +2560,7 @@ async function carregarVeiculos(){
   <button class="nav-item" onclick="nav('estoque',this)"><span class="ico">📦</span><span>Estoque</span></button>
 
   <div class="nav-section-label">Análise</div>
-  <button class="nav-item" onclick="nav('equipes',this)"><span class="ico">👷</span><span>Equipes</span></button>
+  <button class="nav-item" onclick="nav('equipes',this)"><span class="ico">📈</span><span>Indicadores</span></button>
   <button class="nav-item" onclick="nav('clientes',this)"><span class="ico">🏢</span><span>Clientes</span></button>
   <button class="nav-item" onclick="nav('revisao',this)"><span class="ico">🔎</span><span>Revisão de Dados</span></button>
   <button class="nav-item" onclick="nav('historico',this)"><span class="ico">🗂</span><span>Histórico</span></button>
@@ -2501,8 +2607,8 @@ async function carregarVeiculos(){
     <span id="sync-indicator" style="font-size:12px;color:var(--text3);margin-left:8px">🟢 Online</span>
     <span id="auth-user-info" style="font-size:12px;color:var(--text2);margin-left:8px;display:none">👤 Logado como —</span>
     <button class="topbar-btn" id="auth-logout-btn" style="display:none" type="button">Sair</button>
-    <button class="topbar-btn primary" onclick="nav('checklist',null)">+ Check List</button>
-    <button class="topbar-btn" onclick="exportCSV()">📤 CSV</button>
+    <button class="topbar-btn primary" onclick="nav('checklist',null)">Novo checklist</button>
+    <button class="topbar-btn" onclick="exportCSV()">📤 Exportar relatório</button>
   </div>
 
   <div class="content">
@@ -3108,8 +3214,8 @@ async function carregarVeiculos(){
 
     <!-- ═══ EQUIPES ═══ -->
     <div id="page-equipes" class="page">
-      <div class="section-title">Análise por Equipes</div>
-      <div class="section-sub">Produtividade e distribuição por equipe</div>
+      <div class="section-title">Indicadores Operacionais</div>
+      <div class="section-sub">Visualize a produtividade por técnico, volume por tipo de serviço e taxa de execução no período selecionado.</div>
       <div id="equipes-content"></div>
     </div>
 
@@ -3215,7 +3321,7 @@ async function carregarVeiculos(){
       <div class="filter-bar">
         <select class="fsel" id="hist-mot" onchange="renderHist()"><option value="">Todos motoristas</option></select>
         <select class="fsel" id="hist-vei" onchange="renderHist()"><option value="">Todos veículos</option><option>Palio</option><option>Gol</option><option>Uno</option><option>Saveiro</option><option>Fox</option><option>Moto</option></select>
-        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">📤 Exportar CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">📤 Exportar relatório</button>
         <div class="text-muted" id="hist-count"></div>
       </div>
       <div class="tbl-wrap"><table>
@@ -5388,7 +5494,7 @@ const PAGE_META = {
   checklist:  { title:'Check List Diário',  sub:'Registro de saída e retorno' },
   frota:      { title:'Controle de Frota',  sub:'KPIs de veículos e motoristas' },
   estoque:    { title:'Estoque',            sub:'Produtos, entradas e saídas por veículo' },
-  equipes:    { title:'Análise por Equipes',sub:'Produtividade e distribuição' },
+  equipes:    { title:'Indicadores Operacionais',sub:'Visualize a produtividade por técnico, volume por tipo de serviço e taxa de execução no período selecionado.' },
   clientes:   { title:'Clientes',           sub:'Base extraída da agenda 2026' },
   revisao:    { title:'Revisão de Dados',    sub:'Pendências da importação e saneamento da base' },
   historico:  { title:'Histórico',          sub:'Check lists e registros salvos' },
@@ -8186,94 +8292,395 @@ function renderFrota(){
 }
 
 // ════════════════════════════════════════════════
-// EQUIPES
+// INDICADORES OPERACIONAIS
 // ════════════════════════════════════════════════
-function renderEquipes(){
-  const svcs = filteredSvcs();
+let opsIndicadoresTab = 'tecnicos';
 
-  // Agrupar por tipoServico (campo novo) — não mais por CAIXA/DST/PRAGAS
-  const tiposSet = new Set();
-  svcs.forEach(s => {
-    const t = (s.tipoServico||s.sc||'Outro').toUpperCase().split(/[\s/,]/)[0]||'OUTRO';
-    tiposSet.add(t);
+function opsIsExecuted(s) {
+  const status = String(s?.status || s?.st || '').toLowerCase();
+  const execStatus = String(s?.exec_status || '').toLowerCase();
+  return status === 'executado' || execStatus === 'finalizado';
+}
+
+function opsIsPending(s) {
+  const status = String(s?.status || s?.st || '').toLowerCase();
+  const execStatus = String(s?.exec_status || '').toLowerCase();
+  return !['cancelado','executado'].includes(status) && !['finalizado','problema'].includes(execStatus);
+}
+
+function opsIsNight(s) {
+  return (parseInt(String(s?.horario || s?.hr || '').substring(0,2), 10) || 0) >= 20;
+}
+
+function opsRegion(s) {
+  return String(s?.regiao || s?.região || s?.bairro || extrairBairroProxy(s?.endereco || '') || '').trim();
+}
+
+function opsServiceTypeKey(s) {
+  return extrairTiposServico(s)[0] || 'OUTRO';
+}
+
+function opsServiceTypeLabel(key) {
+  return TIPO_SERVICO[key]?.label || key || 'Outro';
+}
+
+function opsPerformance(tx) {
+  if (tx >= 90) return { label:'Alto desempenho', chip:'chip-green', color:'var(--green)' };
+  if (tx >= 75) return { label:'Atenção', chip:'chip-orange', color:'var(--orange)' };
+  return { label:'Crítico', chip:'chip-red', color:'var(--red)' };
+}
+
+function opsRate(exec, total) {
+  return total ? Math.round((exec / total) * 100) : 0;
+}
+
+function opsAvgPerDay(total, svcs) {
+  const dias = new Set((svcs || []).map(getServiceDateValue).filter(Boolean));
+  return dias.size ? +(total / dias.size).toFixed(1) : 0;
+}
+
+function opsPercentBar(value, color = 'var(--blue)') {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  return `<div class="ops-progress"><div class="prog"><div class="prog-fill" style="width:${pct}%;background:${color}"></div></div><span class="mono">${pct}%</span></div>`;
+}
+
+function opsCurrentFilters() {
+  return {
+    tecnico: document.getElementById('ops-filter-tecnico')?.value || '',
+    tipo: document.getElementById('ops-filter-tipo')?.value || '',
+    status: document.getElementById('ops-filter-status')?.value || '',
+    regiao: document.getElementById('ops-filter-regiao')?.value || '',
+    equipe: document.getElementById('ops-filter-equipe')?.value || ''
+  };
+}
+
+function opsEquipeKey(s) {
+  const tecnicos = getServiceTecnicos(s).filter(t => !String(t.id).startsWith('legacy:'));
+  if (tecnicos.length > 1) return tecnicos.map(t => t.id).sort().join('|');
+  return '';
+}
+
+function opsEquipeLabel(s) {
+  const nomes = getServiceTecnicos(s).map(t => t.nome).filter(Boolean);
+  return nomes.length > 1 ? nomes.join(' / ') : '';
+}
+
+function opsFilteredServices() {
+  const filters = opsCurrentFilters();
+  return filteredSvcs().filter(s => {
+    if (filters.tecnico && !getServiceTecnicosIds(s).includes(filters.tecnico)) return false;
+    if (filters.tipo && !extrairTiposServico(s).includes(filters.tipo)) return false;
+    if (filters.status === 'executado' && !opsIsExecuted(s)) return false;
+    if (filters.status === 'pendente' && !opsIsPending(s)) return false;
+    if (filters.status === 'noturno' && !opsIsNight(s)) return false;
+    if (filters.regiao && opsRegion(s) !== filters.regiao) return false;
+    if (filters.equipe && opsEquipeKey(s) !== filters.equipe) return false;
+    return true;
   });
-  const tipos = [...tiposSet].sort();
-  const paleta = ['#2563eb','#16a34a','#0891b2','#ea580c','#7c3aed','#b45309','#dc2626','#94a3b8'];
+}
 
-  // Análise de capacidade individual por técnico
-  const capAnalise  = analisarCapacidade(svcs);
-  const conflitosEq = detectarConflitosJornada(svcs);
+function opsBaseOptions(svcs) {
+  const tecnicos = new Map();
+  const tipos = new Map();
+  const regioes = new Set();
+  const equipes = new Map();
+  (svcs || []).forEach(s => {
+    getServiceTecnicos(s).forEach(t => {
+      if (t.id && !String(t.id).startsWith('legacy:')) tecnicos.set(String(t.id), t.nome);
+    });
+    extrairTiposServico(s).forEach(tipo => tipos.set(tipo, opsServiceTypeLabel(tipo)));
+    const regiao = opsRegion(s);
+    if (regiao) regioes.add(regiao);
+    const eqKey = opsEquipeKey(s);
+    if (eqKey) equipes.set(eqKey, opsEquipeLabel(s));
+  });
+  return { tecnicos, tipos, regioes, equipes };
+}
 
-  document.getElementById('equipes-content').innerHTML=`
-    <div style="margin-bottom:14px">
-      ${conflitosEq.length ? `<div style="background:var(--red-bg);border:1px solid rgba(220,38,38,.3);border-radius:var(--r2);padding:10px 14px;margin-bottom:12px">
-        <span style="font-family:var(--display);font-size:12px;font-weight:800;color:var(--red)">⚡ ${conflitosEq.length} conflito(s) de jornada noite→manhã detectado(s) no período</span>
-      </div>` : ''}
-      <div style="font-size:11px;color:var(--text3)">Produtividade individual por técnico · agrupamento por equipe no Roteiro do Dia.</div>
+function opsGeneralMetrics(svcs) {
+  const total = svcs.length;
+  const exec = svcs.filter(opsIsExecuted).length;
+  const pend = svcs.filter(opsIsPending).length;
+  const noturno = svcs.filter(opsIsNight).length;
+  const tecnicos = new Set();
+  svcs.forEach(s => getServiceTecnicosIds(s).forEach(id => tecnicos.add(id)));
+  const tecnicoRows = opsAggregateTecnicos(svcs);
+  const servRows = opsAggregateServicos(svcs);
+  const melhor = tecnicoRows.filter(r => r.total > 0).sort((a,b) => b.tx - a.tx || b.exec - a.exec)[0];
+  const maisRealizado = servRows.sort((a,b) => b.exec - a.exec || b.total - a.total)[0];
+  return { total, exec, pend, noturno, tecnicos: tecnicos.size, taxa: opsRate(exec, total), melhor, maisRealizado };
+}
+
+function opsAggregateTecnicos(svcs) {
+  const map = new Map();
+  (svcs || []).forEach(s => {
+    const tecnicos = getServiceTecnicos(s);
+    tecnicos.forEach(t => {
+      const id = String(t.id || t.nome || 'sem-id');
+      if (!map.has(id)) map.set(id, { id, nome:t.nome || 'Técnico', total:0, exec:0, pend:0, noturno:0, dias:new Set(), svcs:[] });
+      const row = map.get(id);
+      row.total++;
+      if (opsIsExecuted(s)) row.exec++;
+      if (opsIsPending(s)) row.pend++;
+      if (opsIsNight(s)) row.noturno++;
+      const dt = getServiceDateValue(s);
+      if (dt) row.dias.add(dt);
+      row.svcs.push(s);
+    });
+  });
+  return [...map.values()].map(row => ({
+    ...row,
+    tx: opsRate(row.exec, row.total),
+    media: row.dias.size ? +(row.total / row.dias.size).toFixed(1) : 0
+  })).sort((a,b) => b.total - a.total || b.tx - a.tx || a.nome.localeCompare(b.nome));
+}
+
+function opsAggregateServicos(svcs) {
+  const map = new Map();
+  (svcs || []).forEach(s => {
+    extrairTiposServico(s).forEach(tipo => {
+      if (!map.has(tipo)) map.set(tipo, { id:tipo, nome:opsServiceTypeLabel(tipo), total:0, exec:0, pend:0, dias:new Set(), svcs:[] });
+      const row = map.get(tipo);
+      row.total++;
+      if (opsIsExecuted(s)) row.exec++;
+      if (opsIsPending(s)) row.pend++;
+      const dt = getServiceDateValue(s);
+      if (dt) row.dias.add(dt);
+      row.svcs.push(s);
+    });
+  });
+  const totalVolume = [...map.values()].reduce((acc, row) => acc + row.total, 0);
+  return [...map.values()].map(row => ({
+    ...row,
+    tx: opsRate(row.exec, row.total),
+    media: row.dias.size ? +(row.total / row.dias.size).toFixed(1) : 0,
+    participacao: totalVolume ? Math.round((row.total / totalVolume) * 100) : 0
+  })).sort((a,b) => b.total - a.total || a.nome.localeCompare(b.nome));
+}
+
+function opsAggregateEquipes(svcs) {
+  const map = new Map();
+  (svcs || []).forEach(s => {
+    const key = opsEquipeKey(s);
+    if (!key) return;
+    if (!map.has(key)) {
+      const tecnicos = getServiceTecnicos(s).map(t => t.nome).filter(Boolean);
+      map.set(key, { id:key, nome:tecnicos.join(' / '), tecnicos, total:0, exec:0, pend:0, noturno:0, regioes:new Set(), svcs:[] });
+    }
+    const row = map.get(key);
+    row.total++;
+    if (opsIsExecuted(s)) row.exec++;
+    if (opsIsPending(s)) row.pend++;
+    if (opsIsNight(s)) row.noturno++;
+    const regiao = opsRegion(s);
+    if (regiao) row.regioes.add(regiao);
+    row.svcs.push(s);
+  });
+  return [...map.values()].map(row => ({
+    ...row,
+    tx: opsRate(row.exec, row.total),
+    regioesTexto: [...row.regioes].slice(0,3).join(', ') || '—'
+  })).sort((a,b) => b.total - a.total || a.nome.localeCompare(b.nome));
+}
+
+function opsBonusRows(svcs) {
+  const techs = opsAggregateTecnicos(svcs);
+  const maxExec = Math.max(...techs.map(t => t.exec), 1);
+  const maxNight = Math.max(...techs.map(t => t.noturno), 1);
+  const maxMedia = Math.max(...techs.map(t => t.media), 1);
+  return techs.map(t => {
+    const indice = Math.round(
+      ((t.exec / maxExec) * 50) +
+      ((t.tx / 100) * 35) +
+      ((t.noturno / maxNight) * 10) +
+      ((t.media / maxMedia) * 5)
+    );
+    return {
+      ...t,
+      indice,
+      elegibilidade: indice >= 80 && t.tx >= 85 ? 'Elegível parcial' : (indice >= 60 ? 'Em observação' : 'Não elegível parcial'),
+      chip: indice >= 80 && t.tx >= 85 ? 'chip-green' : (indice >= 60 ? 'chip-orange' : 'chip-red')
+    };
+  }).sort((a,b) => b.indice - a.indice || b.exec - a.exec);
+}
+
+function opsStatusChip(tx) {
+  const perf = opsPerformance(tx);
+  return `<span class="chip ${perf.chip}">${perf.label}</span>`;
+}
+
+function opsDetailButton(kind, id) {
+  return `<button class="btn btn-ghost btn-xs" onclick="opsShowDetails(${jsArg(kind)}, ${jsArg(id)})">Ver detalhes</button>`;
+}
+
+function opsRowsStore() {
+  const svcs = opsFilteredServices();
+  return {
+    tecnicos: opsAggregateTecnicos(svcs),
+    servicos: opsAggregateServicos(svcs),
+    equipes: opsAggregateEquipes(svcs),
+    bonus: opsBonusRows(svcs)
+  };
+}
+
+function opsShowDetails(kind, id) {
+  const rows = opsRowsStore()[kind] || [];
+  const row = rows.find(item => String(item.id) === String(id));
+  if (!row) return;
+  const modal = document.getElementById('modal');
+  modal.classList.remove('svc-edit-modal','day-detail-modal','changelog-modal');
+  currentDelId = null;
+  const titleMap = { tecnicos:'Detalhes do técnico', servicos:'Detalhes do serviço', equipes:'Detalhes da equipe', bonus:'Detalhes da prévia' };
+  document.getElementById('modal-title').textContent = `${titleMap[kind] || 'Detalhes'} — ${row.nome}`;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="grid-3 mb3">
+      <div class="card"><div class="card-label">Programado</div><div class="card-value">${row.total}</div></div>
+      <div class="card card-green"><div class="card-label">Executado</div><div class="card-value cv-green">${row.exec}</div></div>
+      <div class="card ${row.pend ? 'card-orange' : ''}"><div class="card-label">Pendentes</div><div class="card-value ${row.pend ? 'cv-orange' : ''}">${row.pend || 0}</div></div>
     </div>
-    <div class="grid-3 mb4">${capAnalise.slice(0,9).map(d=>{
-      const cor = d.tx>=80?'var(--green)':d.tx>=50?'var(--orange)':'var(--red)';
-      return `<div class="card" style="border-top:2px solid ${cor}">
-        <div style="font-family:var(--display);font-size:14px;font-weight:800;color:${cor};margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.nome}">${d.nome}</div>
-        <div class="grid-2">
-          <div><div class="card-label">Total</div><div style="font-family:var(--mono);font-size:20px;color:${cor}">${d.total}</div></div>
-          <div><div class="card-label">Exec.</div><div style="font-family:var(--mono);font-size:20px;color:var(--green)">${d.exec}</div></div>
-          <div><div class="card-label">Taxa</div><div style="font-family:var(--mono);font-size:20px">${d.tx}%</div></div>
-          <div><div class="card-label">Média/dia</div><div style="font-family:var(--mono);font-size:20px">${d.media}</div></div>
+    <div class="ops-detail-list">${(row.svcs || []).slice(0,60).map(s => `
+      <div class="ops-detail-row">
+        <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px">
+          <strong>${sanitize(s.cliente || s.cl || 'Cliente')}</strong>
+          <span class="mono">${sanitize(s.horario || s.hr || '--:--')}</span>
         </div>
-        <div class="prog mt3"><div class="prog-fill" style="width:${d.tx}%;background:${cor}"></div></div>
-        ${d.noturno>0 ? `<div style="margin-top:8px;font-size:10px;color:var(--purple);font-family:var(--mono)">🌙 ${d.noturno} serviço(s) noturno(s)</div>` : ''}
-      </div>`;
-    }).join('')}</div>
-    <div class="grid-3 mb4">${tipos.map((tipo,i)=>{
-      const meta = TIPO_SERVICO[tipo];
-      const cor  = meta ? meta.cor : paleta[i % paleta.length];
-      const lbl  = meta ? meta.label : tipo;
-      const esvc = svcs.filter(s=>{
-        const t=(s.tipoServico||s.sc||'').toUpperCase().split(/[\s/,]/)[0]||'OUTRO';
-        return t===tipo;
-      });
-      const exec = esvc.filter(s=>(s.status||s.st)==='executado').length;
-      const tx   = esvc.length ? Math.round(exec/esvc.length*100) : 0;
-      const byDay={};
-      esvc.forEach(s => {
-        const dt = getServiceDateValue(s);
-        if (!dt) return;
-        byDay[dt] = (byDay[dt] || 0) + 1;
-      });
-      const avgPD= Object.keys(byDay).length ? (esvc.length/Object.keys(byDay).length).toFixed(1) : 0;
-      return`<div class="card" style="border-top:2px solid ${cor}">
-        <div style="color:${cor};font-family:var(--display);font-size:15px;font-weight:800;margin-bottom:12px">${lbl}</div>
-        <div class="grid-2">
-          <div><div class="card-label">Total</div><div style="font-family:var(--mono);font-size:22px;color:${cor}">${esvc.length}</div></div>
-          <div><div class="card-label">Exec.</div><div style="font-family:var(--mono);font-size:22px;color:var(--green)">${exec}</div></div>
-          <div><div class="card-label">Taxa</div><div style="font-family:var(--mono);font-size:22px">${tx}%</div></div>
-          <div><div class="card-label">Avg/dia</div><div style="font-family:var(--mono);font-size:22px">${avgPD}</div></div>
-        </div>
-        <div class="prog mt3"><div class="prog-fill" style="width:${tx}%;background:${cor}"></div></div>
-      </div>`;
-    }).join('')}</div>
+        <div style="font-size:12px;color:var(--text2)">${sanitize(getServiceDateValue(s) || 'Sem data')} · ${sanitize(opsServiceTypeLabel(opsServiceTypeKey(s)))} · ${sanitize(s.status || s.st || 'agendado')}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:3px">${sanitize(s.endereco || 'Endereço não informado')}</div>
+      </div>
+    `).join('') || '<div class="text-muted">Sem serviços para detalhar.</div>'}</div>
+  `;
+  document.getElementById('modal-del').style.display = 'none';
+  modal.classList.add('open');
+}
+
+function opsSetTab(tab) {
+  opsIndicadoresTab = tab;
+  renderEquipes();
+}
+
+function opsResetFilters() {
+  ['ops-filter-tecnico','ops-filter-tipo','ops-filter-status','ops-filter-regiao','ops-filter-equipe'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderEquipes();
+}
+
+function opsRenderKpis(metrics) {
+  return `
+    <div class="grid-kpi">
+      <div class="card"><div class="card-label">Total programado</div><div class="card-value cv-blue">${metrics.total}</div></div>
+      <div class="card card-green"><div class="card-label">Total executado</div><div class="card-value cv-green">${metrics.exec}</div></div>
+      <div class="card ${metrics.pend ? 'card-orange' : ''}"><div class="card-label">Pendentes</div><div class="card-value ${metrics.pend ? 'cv-orange' : ''}">${metrics.pend}</div></div>
+      <div class="card"><div class="card-label">Taxa geral</div><div class="card-value">${metrics.taxa}%</div><div class="card-trend">${opsPercentBar(metrics.taxa, 'var(--green)')}</div></div>
+      <div class="card"><div class="card-label">Técnicos ativos</div><div class="card-value">${metrics.tecnicos}</div></div>
+      <div class="card"><div class="card-label">Serviços noturnos</div><div class="card-value cv-purple">${metrics.noturno}</div></div>
+      <div class="card"><div class="card-label">Melhor taxa</div><div class="card-value">${metrics.melhor ? metrics.melhor.tx + '%' : '—'}</div><div class="card-trend">${sanitize(metrics.melhor?.nome || 'Sem dados')}</div></div>
+      <div class="card"><div class="card-label">Serviço mais realizado</div><div class="card-value">${metrics.maisRealizado ? metrics.maisRealizado.exec : '—'}</div><div class="card-trend">${sanitize(metrics.maisRealizado?.nome || 'Sem dados')}</div></div>
+    </div>`;
+}
+
+function opsRenderFilters(options) {
+  const filters = opsCurrentFilters();
+  const opt = (value, label, selected) => `<option value="${escapeHtmlAttr(value)}" ${selected === value ? 'selected' : ''}>${sanitize(label)}</option>`;
+  return `
     <div class="card">
-      <div class="card-label mb3">Distribuição por Mês e Tipo de Serviço</div>
+      <div class="ops-filter-bar">
+        <div><div class="card-label">Período</div><input class="fsel" value="${sanitize(mesLabel(mesFilter || 'all'))}" disabled></div>
+        <div><div class="card-label">Técnico</div><select class="fsel" id="ops-filter-tecnico" onchange="renderEquipes()"><option value="">Todos</option>${[...options.tecnicos.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,nome]) => opt(id,nome,filters.tecnico)).join('')}</select></div>
+        <div><div class="card-label">Tipo de serviço</div><select class="fsel" id="ops-filter-tipo" onchange="renderEquipes()"><option value="">Todos</option>${[...options.tipos.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,nome]) => opt(id,nome,filters.tipo)).join('')}</select></div>
+        <div><div class="card-label">Status</div><select class="fsel" id="ops-filter-status" onchange="renderEquipes()">${opt('','Todos',filters.status)}${opt('executado','Executados',filters.status)}${opt('pendente','Pendentes',filters.status)}${opt('noturno','Noturnos',filters.status)}</select></div>
+        <div><div class="card-label">Região</div><select class="fsel" id="ops-filter-regiao" onchange="renderEquipes()" ${options.regioes.size ? '' : 'disabled'}><option value="">Todas</option>${[...options.regioes].sort().map(r => opt(r,r,filters.regiao)).join('')}</select></div>
+        <div><div class="card-label">Equipe</div><select class="fsel" id="ops-filter-equipe" onchange="renderEquipes()" ${options.equipes.size ? '' : 'disabled'}><option value="">Todas</option>${[...options.equipes.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,nome]) => opt(id,nome,filters.equipe)).join('')}</select></div>
+        <button class="btn btn-ghost btn-sm" onclick="opsResetFilters()">Limpar filtros</button>
+      </div>
+    </div>`;
+}
+
+function opsRenderTecnicos(rows) {
+  const mini = rows.slice(0,6).map(r => {
+    const perf = opsPerformance(r.tx);
+    return `<div class="card" style="border-top:2px solid ${perf.color}">
+      <div class="ops-mini-card-title" title="${sanitize(r.nome)}">${sanitize(r.nome)}</div>
+      <div class="grid-2 mt3"><div><div class="card-label">Programado</div><div class="mono">${r.total}</div></div><div><div class="card-label">Taxa</div><div class="mono">${r.tx}%</div></div></div>
+      <div class="mt3">${opsPercentBar(r.tx, perf.color)}</div>
+    </div>`;
+  }).join('');
+  return `
+    <div class="card">
+      <div class="ops-panel-title"><h3>Indicador de Produtividade por Técnico</h3><span class="chip chip-blue">${rows.length} técnico(s)</span></div>
+      <div class="ops-note mb3">Indicador baseado nos dados disponíveis no sistema. Use como apoio à análise gerencial. Para bônus ou premiações, recomenda-se validação manual.</div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Tipo</th>${MESES_META.map(m=>`<th>${m.nome}</th>`).join('')}<th>Total</th><th>Taxa Exec.</th></tr></thead>
-        <tbody>${tipos.map((tipo,i)=>{
-          const meta = TIPO_SERVICO[tipo];
-          const cor  = meta ? meta.cor : paleta[i % paleta.length];
-          const lbl  = meta ? meta.label : tipo;
-          const filtro = s => {
-            const t=(s.tipoServico||s.sc||'').toUpperCase().split(/[\s/,]/)[0]||'OUTRO';
-            return t===tipo;
-          };
-          const counts = MESES_META.map(m => svcs.filter(s => svcMesMatches(s, m.code) && filtro(s)).length);
-          const tot = counts.reduce((a,b)=>a+b,0);
-          const exec = svcs.filter(s => filtro(s) && (s.status||s.st)==='executado').length;
-          const tx = tot ? Math.round(exec/tot*100) : 0;
-          return`<tr><td style="color:${cor};font-weight:700">${lbl}</td>${counts.map(n=>`<td class="mono">${n}</td>`).join('')}<td class="mono text-blue">${tot}</td><td><span class="chip ${tx>=70?'chip-green':'chip-orange'}">${tx}%</span></td></tr>`;
-        }).join('')}</tbody>
+        <thead><tr><th>Técnico</th><th>Programado</th><th>Executado</th><th>Pendentes</th><th>Taxa</th><th>Média/dia</th><th>Noturnos</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows.map(r => `<tr><td class="bold">${sanitize(r.nome)}</td><td class="mono">${r.total}</td><td class="mono text-green">${r.exec}</td><td class="mono">${r.pend}</td><td>${opsPercentBar(r.tx, opsPerformance(r.tx).color)}</td><td class="mono">${r.media}</td><td class="mono">${r.noturno}</td><td>${opsStatusChip(r.tx)}</td><td>${opsDetailButton('tecnicos', r.id)}</td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:18px">Sem técnicos no período.</td></tr>'}</tbody>
       </table></div>
     </div>
-  `;
+    ${mini ? `<div class="ops-mini-cards">${mini}</div>` : ''}`;
+}
+
+function opsRenderServicos(rows) {
+  return `<div class="card">
+    <div class="ops-panel-title"><h3>Análise por Tipo de Serviço</h3><span class="chip chip-blue">${rows.length} tipo(s)</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Serviço</th><th>Programado</th><th>Executado</th><th>Pendentes</th><th>Taxa</th><th>Média/dia</th><th>Participação</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td class="bold">${sanitize(r.nome)}</td><td class="mono">${r.total}</td><td class="mono text-green">${r.exec}</td><td class="mono">${r.pend}</td><td>${opsPercentBar(r.tx, opsPerformance(r.tx).color)}</td><td class="mono">${r.media}</td><td>${opsPercentBar(r.participacao, 'var(--blue)')}</td><td>${opsStatusChip(r.tx)}</td><td>${opsDetailButton('servicos', r.id)}</td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:18px">Sem serviços no período.</td></tr>'}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function opsRenderEquipes(rows) {
+  if (!rows.length) return `<div class="ops-empty">Ainda não há agrupamento por equipe disponível. Esta área será preenchida quando os roteiros possuírem equipes vinculadas.</div>`;
+  return `<div class="card">
+    <div class="ops-panel-title"><h3>Indicador por Equipe/Roteiro</h3><span class="chip chip-blue">${rows.length} equipe(s)</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Equipe/composição</th><th>Técnicos envolvidos</th><th>Programado</th><th>Executado</th><th>Pendentes</th><th>Taxa</th><th>Regiões/rotas</th><th>Noturnos</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td class="bold">${sanitize(r.nome)}</td><td>${sanitize(r.tecnicos.join(', '))}</td><td class="mono">${r.total}</td><td class="mono text-green">${r.exec}</td><td class="mono">${r.pend}</td><td>${opsPercentBar(r.tx, opsPerformance(r.tx).color)}</td><td>${sanitize(r.regioesTexto)}</td><td class="mono">${r.noturno}</td><td>${opsStatusChip(r.tx)}</td><td>${opsDetailButton('equipes', r.id)}</td></tr>`).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function opsRenderBonus(rows) {
+  return `<div class="card">
+    <div class="ops-panel-title"><h3>Prévia de Bonificação</h3><span class="chip chip-orange">Prévia parcial</span></div>
+    <div class="ops-note mb3">Prévia de bonificação baseada em dados parciais. A decisão final deve considerar validação manual, qualidade do serviço, reclamações, retrabalho, pontualidade e observações do gestor.</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Técnico</th><th>Executados</th><th>Taxa</th><th>Noturnos</th><th>Pendentes</th><th>Índice parcial</th><th>Elegibilidade parcial</th><th>Observação do gestor</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td class="bold">${sanitize(r.nome)}</td><td class="mono text-green">${r.exec}</td><td>${opsPercentBar(r.tx, opsPerformance(r.tx).color)}</td><td class="mono">${r.noturno}</td><td class="mono">${r.pend}</td><td>${opsPercentBar(r.indice, 'var(--blue)')}</td><td><span class="chip ${r.chip}">${r.elegibilidade}</span></td><td style="color:var(--text3)">Validação manual necessária</td><td>${opsDetailButton('bonus', r.id)}</td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:18px">Sem técnicos no período.</td></tr>'}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function renderEquipes(){
+  const baseSvcs = filteredSvcs();
+  const options = opsBaseOptions(baseSvcs);
+  const svcs = opsFilteredServices();
+  const metrics = opsGeneralMetrics(svcs);
+  const rows = {
+    tecnicos: opsAggregateTecnicos(svcs),
+    servicos: opsAggregateServicos(svcs),
+    equipes: opsAggregateEquipes(svcs),
+    bonus: opsBonusRows(svcs)
+  };
+  const contentByTab = {
+    tecnicos: opsRenderTecnicos(rows.tecnicos),
+    servicos: opsRenderServicos(rows.servicos),
+    equipes: opsRenderEquipes(rows.equipes),
+    bonus: opsRenderBonus(rows.bonus)
+  };
+  document.getElementById('equipes-content').innerHTML = `
+    <div class="ops-shell">
+      ${opsRenderKpis(metrics)}
+      ${opsRenderFilters(options)}
+      <div class="ops-tabs">
+        ${[
+          ['tecnicos','Técnicos'],
+          ['servicos','Serviços'],
+          ['equipes','Equipes'],
+          ['bonus','Bônus']
+        ].map(([key,label]) => `<button class="ops-tab ${opsIndicadoresTab === key ? 'active' : ''}" onclick="opsSetTab('${key}')">${label}</button>`).join('')}
+      </div>
+      ${contentByTab[opsIndicadoresTab] || contentByTab.tecnicos}
+    </div>`;
 }
 
 // ════════════════════════════════════════════════
@@ -9798,8 +10205,8 @@ function exportCSV(){
   const svcs=filteredSvcs();
   const h='ID,Data,Dia,Mes,Cliente,Endereco,Horario,TipoServico,Equipe,Veiculo,OS,Status\n';
   const rows=svcs.map(s=>[s.id,getServiceDateValue(s)||'',s.dw,s.ms,'"'+(s.cliente||s.cl||'')+'"','"'+(s.endereco||'')+'"',s.horario||s.hr,s.tipoServico||s.sc,getServiceEquipeLabel(s),s.veiculo||'',s.OS||s.os||'',s.status||s.st].join(',')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+h+rows],{type:'text/csv;charset=utf-8;'}));a.download='letec_servicos.csv';a.click();
-  toast('📤 CSV exportado!','ok');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+h+rows],{type:'text/csv;charset=utf-8;'}));a.download='letec_relatorio_operacional.csv';a.click();
+  toast('📤 Relatório exportado!','ok');
 }
 
 // ════════════════════════════════════════════════
