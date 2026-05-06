@@ -4802,6 +4802,7 @@ function construirMensagemDiagnostico(result, prefixoBloqueio) {
 
 const LOGISTICA_MARGEM_SEGURANCA_MIN = 15;
 const LOGISTICA_JORNADA_RISCO_ALTO_MULT = 1.25;
+const LOGISTICA_DEBUG = ['localhost', '127.0.0.1'].includes(window.location.hostname) || window.location.protocol === 'file:';
 
 function logisticaDetalhe(regra, resultado, severidade = 'info', extra = {}) {
   return { regra, resultado, severidade, ...extra };
@@ -5012,6 +5013,529 @@ function aplicarSeveridadeLogistica(resultado, severidade, motivo) {
     }
   }
 }
+
+function normalizarStatusTempoOperacional(servico) {
+  const status = normalizarNome(servico?.status || servico?.st || 'agendado').replace(/\s+/g, '_');
+  const execStatus = normalizarNome(servico?.exec_status || '').replace(/\s+/g, '_');
+  const cancelado = status === 'cancelado';
+  const reagendado = status === 'reagendado';
+  const executado = status === 'executado';
+  const finalizado = execStatus === 'finalizado';
+  const problema = status === 'problema' || execStatus === 'problema';
+  const naoExecutado = ['nao_executado', 'não_executado', 'nao-executado', 'não-executado'].includes(status);
+  const ativosStatus = new Set(['agendado', 'confirmado', 'pendente', 'em_deslocamento', 'em_atendimento']);
+  const ativosExec = new Set(['agendado', 'cheguei', 'em_execucao']);
+  const finalizadoComFim = (executado || finalizado) && !!servico?.fim_hora;
+  const finalizadoSemFim = (executado || finalizado) && !servico?.fim_hora;
+  const problemaSemEncerramento = (problema || naoExecutado) && !servico?.fim_hora;
+  const ignorarConflito = cancelado || reagendado || finalizadoComFim;
+  const ativo = !ignorarConflito && (ativosStatus.has(status) || ativosExec.has(execStatus));
+
+  return {
+    status,
+    execStatus,
+    cancelado,
+    reagendado,
+    executado,
+    finalizado,
+    problema,
+    naoExecutado,
+    finalizadoComFim,
+    finalizadoSemFim,
+    problemaSemEncerramento,
+    ignorarConflito,
+    ativo
+  };
+}
+
+function servicoEntraNoTempoOperacional(servico) {
+  const statusInfo = normalizarStatusTempoOperacional(servico);
+  return {
+    statusInfo,
+    comparavel: statusInfo.ativo || statusInfo.problemaSemEncerramento,
+    referenciaHistorica: statusInfo.finalizadoComFim || statusInfo.finalizadoSemFim
+  };
+}
+
+function extrairTecnicosOperacionais(servico) {
+  return getServiceTecnicos(servico)
+    .map(t => ({ id: String(t.id || '').trim(), nome: String(t.nome || '').trim() }))
+    .filter(t => t.id || t.nome);
+}
+
+function resolverDuracaoOperacional(servico) {
+  const mensagens = [];
+  const tempoExecucao = Number(servico?.tempo_execucao);
+  if (Number.isFinite(tempoExecucao) && tempoExecucao > 0) {
+    return { minutos: Math.round(tempoExecucao), origemDuracao: 'tempo_real', mensagens };
+  }
+
+  const intervaloReal = minutesBetweenTimestamps(servico?.inicio_hora, servico?.fim_hora);
+  if (intervaloReal !== null) {
+    return { minutos: intervaloReal, origemDuracao: 'inicio_fim', mensagens };
+  }
+
+  const tipos = extrairTiposServico(servico);
+  const catalogo = tipos.map(getCatalogDurationForTipo).filter(n => Number.isFinite(n) && n > 0);
+  if (catalogo.length) {
+    return { minutos: catalogo.reduce((acc, n) => acc + n, 0), origemDuracao: 'service_types', mensagens };
+  }
+
+  const tabela = calcularTempoServicoBase(servico);
+  if (Number.isFinite(tabela) && tabela > 0 && !tipos.includes('OUTRO')) {
+    return { minutos: Math.round(tabela), origemDuracao: 'tabela_padrao', mensagens };
+  }
+
+  const fallbackTipo = ehCondominio(servico) ? 120 : null;
+  if (Number.isFinite(fallbackTipo) && fallbackTipo > 0) {
+    mensagens.push('Duração estimada por fallback. Revise o tipo de serviço.');
+    return { minutos: fallbackTipo, origemDuracao: 'fallback', mensagens };
+  }
+
+  mensagens.push('Duração estimada por fallback. Revise o tipo de serviço.');
+  return { minutos: 90, origemDuracao: 'fallback', mensagens };
+}
+
+function montarJanelaTempoOperacional(servico, opts = {}) {
+  const dt = getServiceDateValue(servico);
+  const duracao = resolverDuracaoOperacional(servico);
+  const horarioMin = getHorarioServicoMin(servico);
+  const inicioRealMin = getTimestampMinNoDia(servico?.inicio_hora || servico?.chegada_hora, dt);
+  const fimRealMin = getTimestampMinNoDia(servico?.fim_hora, dt);
+  const inicioBaseMin = inicioRealMin !== null && opts.preferirReal !== false ? inicioRealMin : horarioMin;
+  const fimBaseMin = fimRealMin !== null
+    ? fimRealMin
+    : (inicioBaseMin !== null ? inicioBaseMin + duracao.minutos : null);
+
+  return {
+    inicioPrevisto: horarioMin !== null ? formatarHoraDoDia(horarioMin) : null,
+    fimPrevisto: horarioMin !== null ? formatarHoraDoDia(horarioMin + duracao.minutos) : null,
+    inicioBaseMin,
+    fimBaseMin,
+    inicioRealMin,
+    fimRealMin,
+    duracaoMin: duracao.minutos,
+    origemDuracao: duracao.origemDuracao,
+    mensagens: duracao.mensagens
+  };
+}
+
+function ordenarServicosTecnicoNoDia(servicosDia, tecnicoId) {
+  return [...(servicosDia || [])]
+    .filter(s => extrairTecnicosOperacionais(s).some(t => String(t.id) === String(tecnicoId)))
+    .sort((a, b) => {
+      const janelaA = montarJanelaTempoOperacional(a);
+      const janelaB = montarJanelaTempoOperacional(b);
+      const inicioA = janelaA.inicioBaseMin ?? Number.POSITIVE_INFINITY;
+      const inicioB = janelaB.inicioBaseMin ?? Number.POSITIVE_INFINITY;
+      if (inicioA !== inicioB) return inicioA - inicioB;
+      const fimA = janelaA.fimBaseMin ?? Number.POSITIVE_INFINITY;
+      const fimB = janelaB.fimBaseMin ?? Number.POSITIVE_INFINITY;
+      if (fimA !== fimB) return fimA - fimB;
+      return normId(a?.id).localeCompare(normId(b?.id));
+    });
+}
+
+function calcularIntervaloOperacional(servicoAtual, servicoRelacionado) {
+  if (!servicoAtual || !servicoRelacionado) {
+    return { intervaloDisponivelMin: null, diferencaMin: null, sobreposicao: false };
+  }
+  const sobreposicao = (
+    servicoAtual.inicioBaseMin !== null &&
+    servicoAtual.fimBaseMin !== null &&
+    servicoRelacionado.inicioBaseMin !== null &&
+    servicoRelacionado.fimBaseMin !== null &&
+    servicoAtual.inicioBaseMin < servicoRelacionado.fimBaseMin &&
+    servicoRelacionado.inicioBaseMin < servicoAtual.fimBaseMin
+  );
+  if (sobreposicao) {
+    const diferencaMin = Math.min(
+      servicoAtual.fimBaseMin - servicoRelacionado.inicioBaseMin,
+      servicoRelacionado.fimBaseMin - servicoAtual.inicioBaseMin
+    );
+    return { intervaloDisponivelMin: -Math.abs(diferencaMin), diferencaMin: -Math.abs(diferencaMin), sobreposicao: true };
+  }
+
+  const intervaloDisponivelMin = servicoAtual.fimBaseMin !== null && servicoRelacionado.inicioBaseMin !== null
+    ? servicoRelacionado.inicioBaseMin - servicoAtual.fimBaseMin
+    : (servicoRelacionado.fimBaseMin !== null && servicoAtual.inicioBaseMin !== null
+      ? servicoAtual.inicioBaseMin - servicoRelacionado.fimBaseMin
+      : null);
+
+  return {
+    intervaloDisponivelMin,
+    diferencaMin: intervaloDisponivelMin,
+    sobreposicao: false
+  };
+}
+
+async function calcularDeslocamentoOperacional(origem, destino, contexto = {}) {
+  if (!origem || !destino) {
+    return { deslocamentoEstimadoMin: null, km: null, origem: 'desconhecido', mensagem: 'Deslocamento não calculado. Validação parcial.' };
+  }
+  if (isSameOperationalAddress(origem, destino)) {
+    return { deslocamentoEstimadoMin: 0, km: 0, origem: 'mesmo_local', mensagem: '' };
+  }
+
+  const usarGoogleMaps = contexto.usarGoogleMaps !== false && rotGoogleConfigured();
+  if (usarGoogleMaps) {
+    try {
+      const [real] = await rotGoogleDistanceBatch(origem, [destino]);
+      if (real && Number.isFinite(Number(real.min))) {
+        return {
+          deslocamentoEstimadoMin: Number(real.min),
+          km: Number(real.km || 0),
+          origem: 'google',
+          mensagem: ''
+        };
+      }
+    } catch (e) {
+      logisticaDebug('[Motor Tempo Operacional] Google Maps indisponível', e?.message || e);
+    }
+  }
+
+  return {
+    deslocamentoEstimadoMin: calcularTempoDeslocamento(origem, destino),
+    km: Number((estimateDistance(origem, destino) || 0).toFixed(1)),
+    origem: 'estimado',
+    mensagem: 'Deslocamento não calculado. Validação parcial.'
+  };
+}
+
+function classificarTempoOperacional(analise) {
+  if (analise.preAgendamento) {
+    return {
+      status: 'pre_agendamento',
+      podeSalvar: true,
+      exigeJustificativa: false
+    };
+  }
+  if (analise.critico) {
+    return {
+      status: 'critico',
+      podeSalvar: true,
+      exigeJustificativa: true
+    };
+  }
+  if (analise.alerta) {
+    return {
+      status: 'alerta',
+      podeSalvar: true,
+      exigeJustificativa: false
+    };
+  }
+  return {
+    status: 'livre',
+    podeSalvar: true,
+    exigeJustificativa: false
+  };
+}
+
+function montarRespostaTempoOperacional(base) {
+  const classificacao = classificarTempoOperacional(base);
+  return {
+    status: classificacao.status,
+    podeSalvar: classificacao.podeSalvar,
+    exigeJustificativa: classificacao.exigeJustificativa,
+    motivo: base.motivo,
+    detalhes: {
+      tecnico: base.tecnico || '',
+      servicoAtualId: base.servicoAtualId ?? null,
+      servicoRelacionadoId: base.servicoRelacionadoId ?? null,
+      inicioPrevisto: base.inicioPrevisto ?? null,
+      fimPrevisto: base.fimPrevisto ?? null,
+      duracaoMin: base.duracaoMin ?? null,
+      origemDuracao: base.origemDuracao || 'fallback',
+      intervaloDisponivelMin: base.intervaloDisponivelMin ?? null,
+      deslocamentoEstimadoMin: base.deslocamentoEstimadoMin ?? null,
+      margemMin: base.margemMin ?? LOGISTICA_MARGEM_SEGURANCA_MIN,
+      tempoNecessarioMin: base.tempoNecessarioMin ?? null,
+      diferencaMin: base.diferencaMin ?? null,
+      regraAplicada: base.regraAplicada || ''
+    },
+    mensagens: uniqueReasons(base.mensagens || []),
+    sugestoes: uniqueReasons(base.sugestoes || [])
+  };
+}
+
+function resumirValidacaoLogisticaAtual(avaliacao = {}) {
+  const status = avaliacao?.status === 'conflito_critico'
+    ? 'critico'
+    : avaliacao?.status === 'alerta'
+      ? 'alerta'
+      : 'livre';
+  return {
+    status,
+    duracaoOrigem: avaliacao?.duracaoOrigem || null,
+    duracaoMin: avaliacao?.duracaoUsadaMin ?? null,
+    motivo: avaliacao?.motivoPrincipal || '',
+    servicoRelacionadoId: avaliacao?.servicoRelacionadoId ?? null
+  };
+}
+
+function encontrarDivergenciasTempoOperacional(atual, novo) {
+  const divergencias = [];
+  if ((atual?.status || '') !== (novo?.status || '')) {
+    divergencias.push(`status: atual=${atual?.status || 'n/d'} novo=${novo?.status || 'n/d'}`);
+  }
+  if ((atual?.duracaoMin ?? null) !== (novo?.detalhes?.duracaoMin ?? null)) {
+    divergencias.push(`duracao: atual=${atual?.duracaoMin ?? 'n/d'} novo=${novo?.detalhes?.duracaoMin ?? 'n/d'}`);
+  }
+  if ((atual?.duracaoOrigem || '') !== (novo?.detalhes?.origemDuracao || '')) {
+    divergencias.push(`origemDuracao: atual=${atual?.duracaoOrigem || 'n/d'} novo=${novo?.detalhes?.origemDuracao || 'n/d'}`);
+  }
+  if ((atual?.motivo || '') !== (novo?.motivo || '')) {
+    divergencias.push(`motivo: atual=${atual?.motivo || 'n/d'} novo=${novo?.motivo || 'n/d'}`);
+  }
+  return divergencias;
+}
+
+function registrarComparacaoTempoOperacional(servico, atual, novo) {
+  const resumoAtual = resumirValidacaoLogisticaAtual(atual);
+  const divergencias = encontrarDivergenciasTempoOperacional(resumoAtual, novo);
+  logisticaDebug('[Motor Tempo Operacional]', {
+    servico: {
+      id: servico?.id ?? null,
+      cliente: servico?.cliente || servico?.cl || '',
+      data: getServiceDateValue(servico),
+      horario: servico?.horario || servico?.hr || ''
+    },
+    atual: resumoAtual,
+    novo,
+    divergencias
+  });
+}
+
+async function validarTempoOperacional(servico, contexto = {}) {
+  const baseServico = servico || {};
+  const dt = getServiceDateValue(baseServico);
+  const margemMin = Number(contexto.margemMin || LOGISTICA_MARGEM_SEGURANCA_MIN);
+  const universo = Array.isArray(contexto.servicos) ? contexto.servicos : services;
+  const ignoreId = contexto.ignoreId ?? null;
+  const tecnicos = extrairTecnicosOperacionais(baseServico);
+  const janelaAtual = montarJanelaTempoOperacional(baseServico);
+  const mensagens = [...(janelaAtual.mensagens || [])];
+  const sugestoes = [];
+
+  if (!tecnicos.length) {
+    return montarRespostaTempoOperacional({
+      preAgendamento: true,
+      motivo: 'Serviço sem técnico definido. Validação logística será concluída depois.',
+      tecnico: 'Sem técnico definido',
+      servicoAtualId: baseServico?.id ?? null,
+      servicoRelacionadoId: null,
+      inicioPrevisto: janelaAtual.inicioPrevisto,
+      fimPrevisto: janelaAtual.fimPrevisto,
+      duracaoMin: janelaAtual.duracaoMin,
+      origemDuracao: janelaAtual.origemDuracao,
+      intervaloDisponivelMin: null,
+      deslocamentoEstimadoMin: null,
+      margemMin,
+      tempoNecessarioMin: null,
+      diferencaMin: null,
+      regraAplicada: 'sem_tecnico',
+      mensagens,
+      sugestoes: ['Definir técnico ou equipe antes de confirmar o roteiro']
+    });
+  }
+
+  if (!dt) {
+    mensagens.push('Não foi possível validar completamente a logística porque a data do serviço está ausente.');
+    return montarRespostaTempoOperacional({
+      alerta: true,
+      motivo: 'Dados insuficientes para validar o tempo operacional.',
+      tecnico: tecnicos.map(t => t.nome).join(' / '),
+      servicoAtualId: baseServico?.id ?? null,
+      servicoRelacionadoId: null,
+      inicioPrevisto: janelaAtual.inicioPrevisto,
+      fimPrevisto: janelaAtual.fimPrevisto,
+      duracaoMin: janelaAtual.duracaoMin,
+      origemDuracao: janelaAtual.origemDuracao,
+      intervaloDisponivelMin: null,
+      deslocamentoEstimadoMin: null,
+      margemMin,
+      tempoNecessarioMin: null,
+      diferencaMin: null,
+      regraAplicada: 'dados_insuficientes',
+      mensagens,
+      sugestoes: ['Preencher a data do serviço']
+    });
+  }
+
+  const candidatos = (universo || [])
+    .filter(s => getServiceDateValue(s) === dt)
+    .filter(s => ignoreId === null || !sameId(s.id, ignoreId))
+    .filter(s => !sameId(s.id, baseServico.id))
+    .filter(s => {
+      const entrada = servicoEntraNoTempoOperacional(s);
+      return entrada.comparavel || entrada.referenciaHistorica;
+    });
+
+  let piorAnalise = {
+    critico: false,
+    alerta: false,
+    preAgendamento: false,
+    motivo: 'Serviço livre para encaixe operacional.',
+    tecnico: tecnicos.map(t => t.nome).join(' / '),
+    servicoAtualId: baseServico?.id ?? null,
+    servicoRelacionadoId: null,
+    inicioPrevisto: janelaAtual.inicioPrevisto,
+    fimPrevisto: janelaAtual.fimPrevisto,
+    duracaoMin: janelaAtual.duracaoMin,
+    origemDuracao: janelaAtual.origemDuracao,
+    intervaloDisponivelMin: null,
+    deslocamentoEstimadoMin: null,
+    margemMin,
+    tempoNecessarioMin: null,
+    diferencaMin: null,
+    regraAplicada: 'livre',
+    mensagens,
+    sugestoes
+  };
+
+  if (janelaAtual.inicioPrevisto === null) {
+    piorAnalise.alerta = true;
+    piorAnalise.motivo = 'Dados insuficientes para validar o tempo operacional com precisão.';
+    piorAnalise.regraAplicada = 'horario_ausente';
+    piorAnalise.mensagens.push('Horário previsto ausente. A janela do serviço foi calculada parcialmente.');
+    piorAnalise.sugestoes.push('Definir horário previsto do atendimento');
+  }
+
+  const techIds = new Set(tecnicos.map(t => String(t.id)));
+
+  for (const tecnico of tecnicos) {
+    const doTecnico = ordenarServicosTecnicoNoDia(candidatos, tecnico.id);
+    for (const relacionado of doTecnico) {
+      const statusTempo = normalizarStatusTempoOperacional(relacionado);
+      const janelaRelacionada = montarJanelaTempoOperacional(relacionado);
+      const comparacao = calcularIntervaloOperacional(janelaAtual, janelaRelacionada);
+
+      const analiseBase = {
+        tecnico: tecnico.nome || `Técnico ${tecnico.id}`,
+        servicoAtualId: baseServico?.id ?? null,
+        servicoRelacionadoId: relacionado?.id ?? null,
+        inicioPrevisto: janelaAtual.inicioPrevisto,
+        fimPrevisto: janelaAtual.fimPrevisto,
+        duracaoMin: janelaAtual.duracaoMin,
+        origemDuracao: janelaAtual.origemDuracao,
+        intervaloDisponivelMin: comparacao.intervaloDisponivelMin,
+        deslocamentoEstimadoMin: null,
+        margemMin,
+        tempoNecessarioMin: null,
+        diferencaMin: comparacao.diferencaMin,
+        regraAplicada: '',
+        mensagens: [],
+        sugestoes: []
+      };
+
+      if (statusTempo.finalizadoSemFim) {
+        analiseBase.alerta = true;
+        analiseBase.motivo = 'Serviço finalizado/executado sem fim_hora. Histórico incompleto.';
+        analiseBase.regraAplicada = 'finalizado_sem_fim';
+        analiseBase.mensagens.push(`${logisticaServicoNome(relacionado)} está finalizado/executado sem fim_hora.`);
+      }
+
+      if (statusTempo.problemaSemEncerramento) {
+        analiseBase.alerta = true;
+        analiseBase.motivo = 'Serviço com problema ou não executado sem encerramento.';
+        analiseBase.regraAplicada = 'problema_sem_encerramento';
+        analiseBase.mensagens.push(`${logisticaServicoNome(relacionado)} está sem encerramento registrado.`);
+      }
+
+      if (comparacao.sobreposicao && (statusTempo.ativo || statusTempo.problemaSemEncerramento)) {
+        analiseBase.critico = true;
+        analiseBase.alerta = false;
+        analiseBase.motivo = 'Conflito crítico: técnico já possui serviço no mesmo horário.';
+        analiseBase.regraAplicada = 'sobreposicao_real';
+        analiseBase.sugestoes.push('Revisar o horário do atendimento');
+        analiseBase.sugestoes.push('Validar outro técnico para o mesmo horário');
+      } else if (comparacao.intervaloDisponivelMin !== null && comparacao.intervaloDisponivelMin < margemMin) {
+        analiseBase.alerta = true;
+        analiseBase.motivo = 'Intervalo apertado entre atendimentos.';
+        analiseBase.regraAplicada = 'intervalo_menor_que_margem';
+        analiseBase.sugestoes.push('Revisar o intervalo entre os serviços');
+      }
+
+      const atualAntes = janelaAtual.fimBaseMin !== null && janelaRelacionada.inicioBaseMin !== null
+        ? janelaAtual.fimBaseMin <= janelaRelacionada.inicioBaseMin
+        : true;
+      const origem = atualAntes ? (baseServico.endereco || '') : (relacionado.endereco || '');
+      const destino = atualAntes ? (relacionado.endereco || '') : (baseServico.endereco || '');
+      const deslocamento = await calcularDeslocamentoOperacional(origem, destino, contexto);
+      analiseBase.deslocamentoEstimadoMin = deslocamento.deslocamentoEstimadoMin;
+
+      if (deslocamento.mensagem) analiseBase.mensagens.push(deslocamento.mensagem);
+      if (!comparacao.sobreposicao && comparacao.intervaloDisponivelMin !== null && deslocamento.deslocamentoEstimadoMin !== null) {
+        analiseBase.tempoNecessarioMin = deslocamento.deslocamentoEstimadoMin + margemMin;
+        if (comparacao.intervaloDisponivelMin < analiseBase.tempoNecessarioMin) {
+          analiseBase.alerta = true;
+          analiseBase.motivo = 'Risco de atraso por deslocamento.';
+          analiseBase.regraAplicada = 'deslocamento_maior_que_intervalo';
+          analiseBase.sugestoes.push('Validar deslocamento real antes de confirmar');
+        }
+      }
+
+      const pesoAtual = piorAnalise.critico ? 3 : piorAnalise.alerta ? 2 : piorAnalise.preAgendamento ? 1 : 0;
+      const pesoNovo = analiseBase.critico ? 3 : analiseBase.alerta ? 2 : analiseBase.preAgendamento ? 1 : 0;
+      if (pesoNovo > pesoAtual) {
+        piorAnalise = { ...piorAnalise, ...analiseBase };
+      } else {
+        piorAnalise.mensagens.push(...(analiseBase.mensagens || []));
+        piorAnalise.sugestoes.push(...(analiseBase.sugestoes || []));
+      }
+    }
+  }
+
+  const servicosAtivosDia = candidatos.filter(s =>
+    extrairTecnicosOperacionais(s).some(t => techIds.has(String(t.id))) &&
+    servicoEntraNoTempoOperacional(s).comparavel
+  );
+  const jornadaTotalMin = [baseServico, ...servicosAtivosDia]
+    .reduce((acc, svc) => acc + resolverDuracaoOperacional(svc).minutos, 0);
+  if (jornadaTotalMin > JORNADA_MIN) {
+    piorAnalise.alerta = true;
+    piorAnalise.motivo = piorAnalise.critico ? piorAnalise.motivo : 'Jornada operacional acima do limite previsto.';
+    piorAnalise.regraAplicada = piorAnalise.critico ? piorAnalise.regraAplicada : 'jornada_estourada';
+    piorAnalise.mensagens.push(`Jornada estimada em ${formatarMinutosHM(jornadaTotalMin)} para o técnico analisado.`);
+    piorAnalise.sugestoes.push('Revisar distribuição dos serviços do dia');
+  }
+
+  const descansoReasons = avaliarDescansoMinimoRota([baseServico, ...servicosAtivosDia], janelaAtual.inicioBaseMin ?? null);
+  if (descansoReasons.length) {
+    piorAnalise.alerta = true;
+    if (!piorAnalise.critico) {
+      piorAnalise.motivo = 'Descanso mínimo comprometido para o técnico analisado.';
+      piorAnalise.regraAplicada = 'descanso_minimo';
+    }
+    piorAnalise.mensagens.push(...descansoReasons);
+    piorAnalise.sugestoes.push('Confirmar viabilidade da jornada com a operação');
+  }
+
+  if (!piorAnalise.critico && !piorAnalise.alerta && piorAnalise.origemDuracao === 'fallback') {
+    piorAnalise.alerta = true;
+    piorAnalise.motivo = 'Duração estimada por fallback. Revise o tipo de serviço.';
+    piorAnalise.regraAplicada = 'duracao_fallback';
+  }
+
+  piorAnalise.mensagens = uniqueReasons(piorAnalise.mensagens || []);
+  piorAnalise.sugestoes = uniqueReasons(piorAnalise.sugestoes || []);
+  return montarRespostaTempoOperacional(piorAnalise);
+}
+
+window.validarTempoOperacional = validarTempoOperacional;
+window.debugTempoOperacional = async function(servicoIdOuObjeto, contexto = {}) {
+  const servico = typeof servicoIdOuObjeto === 'object' && servicoIdOuObjeto
+    ? servicoIdOuObjeto
+    : (services || []).find(s => sameId(s.id, servicoIdOuObjeto));
+  if (!servico) {
+    const erro = { error: 'Serviço não encontrado para debugTempoOperacional.' };
+    logisticaDebug('[Motor Tempo Operacional]', erro);
+    return erro;
+  }
+  const resultado = await validarTempoOperacional(servico, contexto);
+  logisticaDebug('[Motor Tempo Operacional][debugTempoOperacional]', resultado);
+  return resultado;
+};
 
 async function validarLogisticaServico(servico, options = {}) {
   const ignoreId = options.ignoreId ?? null;
@@ -5297,9 +5821,9 @@ function resolverValidacaoLogistica(permitir, acao = '') {
   }
 }
 
-function confirmarOverrideCriticoLogistica() {
-  if (!confirmAction('Confirmar mesmo com conflito crítico? Essa decisão ficará como validação operacional manual.')) return;
-  resolverValidacaoLogistica(true, 'override_critico');
+function logisticaDebug(...args) {
+  if (!LOGISTICA_DEBUG) return;
+  console.debug(...args);
 }
 
 function renderCampoValidacaoLogistica(label, value) {
@@ -5349,12 +5873,10 @@ function abrirModalValidacaoLogistica(resultado, options = {}) {
   `;
 
   const allowProceed = status === 'alerta' && options.allowProceed !== false;
-  const allowCriticalOverride = status === 'conflito_critico' && options.allowCriticalOverride === true;
   actions.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="resolverValidacaoLogistica(false,'horario')">Ajustar horário</button>
     <button class="btn btn-ghost btn-sm" onclick="resolverValidacaoLogistica(false,'tecnico')">Trocar técnico</button>
     ${allowProceed ? '<button class="btn btn-primary btn-sm" onclick="resolverValidacaoLogistica(true)">Manter mesmo assim</button>' : ''}
-    ${allowCriticalOverride ? '<button class="btn btn-primary btn-sm" style="background:var(--red);border-color:var(--red)" onclick="confirmarOverrideCriticoLogistica()">Confirmar mesmo assim</button>' : ''}
     <button class="btn btn-danger btn-sm" onclick="resolverValidacaoLogistica(false,'cancelar')">Cancelar alteração</button>
   `;
 
@@ -7952,9 +8474,14 @@ async function salvarEdicaoSvc(id) {
     if(novaObs !== undefined) { candidato.observacoes = novaObs; candidato.obs = novaObs; }
 
     const avaliacao = await validarLogisticaServico(candidato, { ignoreId: id });
+    if (typeof validarTempoOperacional === 'function') {
+      validarTempoOperacional(candidato, { ignoreId: id, debug: LOGISTICA_DEBUG })
+        .then(novo => registrarComparacaoTempoOperacional(candidato, avaliacao, novo))
+        .catch(e => logisticaDebug('[Motor Tempo Operacional] Erro na comparação paralela', e?.message || e));
+    }
     if (avaliacao.status === 'conflito_critico') {
-      const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: false, allowCriticalOverride: true });
-      if (!decisao?.permitir) return;
+      await abrirModalValidacaoLogistica(avaliacao, { allowProceed: false });
+      return;
     }
     if (avaliacao.status === 'alerta') {
       const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: true });
@@ -7963,8 +8490,8 @@ async function salvarEdicaoSvc(id) {
 
     if (typeof simularAgendamentoOperacional === 'function') {
       simularAgendamentoOperacional(candidato, { ignoreId: id })
-        .then(legado => console.debug('[Validação logística legado/paralelo]', legado))
-        .catch(e => console.debug('[Validação logística legado indisponível]', e?.message || e));
+        .then(legado => logisticaDebug('[Validação logística legado/paralelo]', legado))
+        .catch(e => logisticaDebug('[Validação logística legado indisponível]', e?.message || e));
     }
 
     Object.assign(s, candidato);
@@ -7978,8 +8505,6 @@ async function salvarEdicaoSvc(id) {
     if(pageRenders[currentPage]) pageRenders[currentPage]();
     if (avaliacao.status === 'alerta') {
       toast(mensagemResumoValidacaoLogistica(avaliacao), 'warn');
-    } else if (avaliacao.status === 'conflito_critico') {
-      toast('Serviço atualizado com conflito crítico confirmado manualmente.', 'warn');
     } else {
       toast('✓ Serviço atualizado', 'ok');
     }
@@ -10693,9 +11218,14 @@ async function confirmNewSvc(){
   };
 
   const avaliacao = await validarLogisticaServico(newS);
+  if (typeof validarTempoOperacional === 'function') {
+    validarTempoOperacional(newS, { debug: LOGISTICA_DEBUG })
+      .then(novo => registrarComparacaoTempoOperacional(newS, avaliacao, novo))
+      .catch(e => logisticaDebug('[Motor Tempo Operacional] Erro na comparação paralela', e?.message || e));
+  }
   if (avaliacao.status === 'conflito_critico') {
-    const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: false, allowCriticalOverride: true });
-    if (!decisao?.permitir) return;
+    await abrirModalValidacaoLogistica(avaliacao, { allowProceed: false });
+    return;
   }
   if (avaliacao.status === 'alerta') {
     const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: true });
@@ -10703,8 +11233,8 @@ async function confirmNewSvc(){
   }
   if (typeof simularAgendamentoOperacional === 'function') {
     simularAgendamentoOperacional(newS)
-      .then(legado => console.debug('[Validação logística legado/paralelo]', legado))
-      .catch(e => console.debug('[Validação logística legado indisponível]', e?.message || e));
+      .then(legado => logisticaDebug('[Validação logística legado/paralelo]', legado))
+      .catch(e => logisticaDebug('[Validação logística legado indisponível]', e?.message || e));
   }
 
   // Adicionar ao array
@@ -10721,8 +11251,6 @@ async function confirmNewSvc(){
   // Feedback ao usuário
   if (avaliacao.status === 'alerta') {
     toast(mensagemResumoValidacaoLogistica(avaliacao),'warn');
-  } else if (avaliacao.status === 'conflito_critico') {
-    toast('Serviço criado com conflito crítico confirmado manualmente.','warn');
   } else {
     toast(`✅ Serviço criado! (${tipoServico})`,'ok');
   }
