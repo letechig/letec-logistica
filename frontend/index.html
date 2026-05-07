@@ -5306,6 +5306,77 @@ function registrarComparacaoTempoOperacional(servico, atual, novo) {
   });
 }
 
+function normalizarResultadoLogisticaApi(resultado = {}) {
+  const detalhes = resultado.detalhes || {};
+  const status = resultado.status === 'critico'
+    ? 'conflito_critico'
+    : resultado.status === 'alerta' || resultado.status === 'pre_agendamento'
+      ? 'alerta'
+      : 'sem_conflito';
+  return {
+    status,
+    podeAgendar: resultado.podeSalvar !== false,
+    exigeJustificativa: !!resultado.exigeJustificativa,
+    motivoPrincipal: resultado.motivo || '',
+    detalhes: (resultado.mensagens || []).map(msg => logisticaDetalhe('Motor backend', msg, status === 'conflito_critico' ? 'critico' : 'aviso', {
+      servicoRelacionadoId: detalhes.servicoRelacionadoId ?? null
+    })),
+    sugestoes: resultado.sugestoes || [],
+    tecnicoAnalisado: detalhes.tecnico || 'Sem técnico definido',
+    servicoAtual: logisticaServicoNome({ id: detalhes.servicoAtualId, ...resultado.servico }),
+    servicoRelacionado: detalhes.servicoRelacionadoId ? `Serviço ${detalhes.servicoRelacionadoId}` : '',
+    horarioAtual: detalhes.inicioPrevisto || '',
+    horarioRelacionado: '',
+    duracaoUsadaMin: detalhes.duracaoMin ?? null,
+    duracaoOrigem: detalhes.origemDuracao || '',
+    intervaloDisponivelMin: detalhes.intervaloDisponivelMin ?? null,
+    margemSegurancaMin: detalhes.margemMin || LOGISTICA_MARGEM_SEGURANCA_MIN,
+    deslocamentoConsideradoMin: detalhes.deslocamentoEstimadoMin ?? null,
+    deslocamentoOrigem: detalhes.regraAplicada || 'backend',
+    contexto: [],
+    backendPayload: resultado
+  };
+}
+
+async function validarLogisticaServicoBackend(servico, options = {}) {
+  const payload = {
+    service: typeof window.prepararParaSupabase === 'function' ? { ...servico, ...window.prepararParaSupabase(servico) } : servico,
+    services,
+    serviceTypes: window._tiposServico || [],
+    technicians: window._tecnicos || [],
+    ignoreId: options.ignoreId ?? null
+  };
+  const response = await fetch(`${API_BASE_URL}/api/logistics/validate-service`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return normalizarResultadoLogisticaApi(await response.json());
+}
+
+async function simularAgendamentoBackend(servicos, data = '') {
+  const response = await fetch(`${API_BASE_URL}/api/logistics/simulate-route`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      services: servicos,
+      serviceTypes: window._tiposServico || [],
+      technicians: window._tecnicos || [],
+      date: data
+    })
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return await response.json();
+}
+
+function aplicarJustificativaLogistica(servico, avaliacao, justificativa = '') {
+  if (!servico || !avaliacao) return;
+  servico.logistica_status = avaliacao.status;
+  servico.logistica_justificativa = justificativa || '';
+  servico.logistica_payload = avaliacao.backendPayload || null;
+}
+
 async function validarTempoOperacional(servico, contexto = {}) {
   const baseServico = servico || {};
   const dt = getServiceDateValue(baseServico);
@@ -5538,6 +5609,14 @@ window.debugTempoOperacional = async function(servicoIdOuObjeto, contexto = {}) 
 };
 
 async function validarLogisticaServico(servico, options = {}) {
+  if (!options.usarFallbackLocal) {
+    try {
+      return await validarLogisticaServicoBackend(servico, options);
+    } catch (e) {
+      logisticaDebug('[Motor logística backend] indisponível, usando fallback local', e?.message || e);
+    }
+  }
+
   const ignoreId = options.ignoreId ?? null;
   const margemMin = Number(options.margemMin || LOGISTICA_MARGEM_SEGURANCA_MIN);
   const dt = getServiceDateValue(servico);
@@ -5872,7 +5951,7 @@ function abrirModalValidacaoLogistica(resultado, options = {}) {
     ${(resultado?.sugestoes || []).length ? `<div class="logistica-suggestions">${resultado.sugestoes.map(s => `<span>${sanitize(s)}</span>`).join('')}</div>` : ''}
   `;
 
-  const allowProceed = status === 'alerta' && options.allowProceed !== false;
+  const allowProceed = (status === 'alerta' || status === 'conflito_critico') && options.allowProceed !== false;
   actions.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="resolverValidacaoLogistica(false,'horario')">Ajustar horário</button>
     <button class="btn btn-ghost btn-sm" onclick="resolverValidacaoLogistica(false,'tecnico')">Trocar técnico</button>
@@ -5903,6 +5982,31 @@ function getTargetGroupId(servico) {
 }
 
 async function simularAgendamentoOperacional(servico, options = {}) {
+  if (!options.usarFallbackLocal) {
+    try {
+      const dtBackend = getServiceDateValue(servico);
+      const baseDaySvcs = services.filter(s => getServiceDateValue(s) === dtBackend)
+        .filter(s => options.ignoreId === null || options.ignoreId === undefined || !sameId(s.id, options.ignoreId))
+        .filter(s => !sameId(s.id, servico.id));
+      const backend = await simularAgendamentoBackend([servico, ...baseDaySvcs], dtBackend);
+      const targetGroupId = getTargetGroupId(servico);
+      const rota = (backend.routes || []).find(r => r.id === targetGroupId) || null;
+      const item = (rota?.sequencia || []).find(entry => sameId(entry.servico?.id, servico.id)) || null;
+      const warnings = uniqueReasons([...(rota?.warnings || []), ...(item?.warningReasons || [])]);
+      const blocks = uniqueReasons([...(rota?.blocks || []), ...(item?.blockReasons || [])]);
+      return {
+        severity: blocks.length ? 'block' : warnings.length ? 'warn' : 'ok',
+        warnings,
+        blocks,
+        rota,
+        item,
+        backend
+      };
+    } catch (e) {
+      logisticaDebug('[Simulação logística backend] indisponível, usando fallback local', e?.message || e);
+    }
+  }
+
   const ignoreId = options.ignoreId ?? null;
   const dt = getServiceDateValue(servico);
   const baseDaySvcs = services.filter(s => getServiceDateValue(s) === dt)
@@ -8480,12 +8584,15 @@ async function salvarEdicaoSvc(id) {
         .catch(e => logisticaDebug('[Motor Tempo Operacional] Erro na comparação paralela', e?.message || e));
     }
     if (avaliacao.status === 'conflito_critico') {
-      await abrirModalValidacaoLogistica(avaliacao, { allowProceed: false });
-      return;
+      const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: true });
+      if (!decisao?.permitir) return;
+      const justificativa = window.prompt('Justifique por que este conflito crítico será mantido:', '') || '';
+      aplicarJustificativaLogistica(candidato, avaliacao, justificativa);
     }
     if (avaliacao.status === 'alerta') {
       const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: true });
       if (!decisao?.permitir) return;
+      aplicarJustificativaLogistica(candidato, avaliacao, '');
     }
 
     if (typeof simularAgendamentoOperacional === 'function') {
@@ -8503,7 +8610,9 @@ async function salvarEdicaoSvc(id) {
     updateBadges();
     const pageRenders = {agenda:renderAgenda, hoje:renderHoje, rotas:renderRotas, equipes:renderEquipes};
     if(pageRenders[currentPage]) pageRenders[currentPage]();
-    if (avaliacao.status === 'alerta') {
+    if (avaliacao.status === 'conflito_critico') {
+      toast('Serviço atualizado com justificativa logística crítica', 'warn');
+    } else if (avaliacao.status === 'alerta') {
       toast(mensagemResumoValidacaoLogistica(avaliacao), 'warn');
     } else {
       toast('✓ Serviço atualizado', 'ok');
@@ -11224,12 +11333,15 @@ async function confirmNewSvc(){
       .catch(e => logisticaDebug('[Motor Tempo Operacional] Erro na comparação paralela', e?.message || e));
   }
   if (avaliacao.status === 'conflito_critico') {
-    await abrirModalValidacaoLogistica(avaliacao, { allowProceed: false });
-    return;
+    const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: true });
+    if (!decisao?.permitir) return;
+    const justificativa = window.prompt('Justifique por que este conflito crítico será mantido:', '') || '';
+    aplicarJustificativaLogistica(newS, avaliacao, justificativa);
   }
   if (avaliacao.status === 'alerta') {
     const decisao = await abrirModalValidacaoLogistica(avaliacao, { allowProceed: true });
     if (!decisao?.permitir) return;
+    aplicarJustificativaLogistica(newS, avaliacao, '');
   }
   if (typeof simularAgendamentoOperacional === 'function') {
     simularAgendamentoOperacional(newS)
@@ -11249,7 +11361,9 @@ async function confirmNewSvc(){
   updateFooter();
   
   // Feedback ao usuário
-  if (avaliacao.status === 'alerta') {
+  if (avaliacao.status === 'conflito_critico') {
+    toast('Serviço criado com justificativa logística crítica','warn');
+  } else if (avaliacao.status === 'alerta') {
     toast(mensagemResumoValidacaoLogistica(avaliacao),'warn');
   } else {
     toast(`✅ Serviço criado! (${tipoServico})`,'ok');
@@ -12078,23 +12192,46 @@ async function rotGerarDoSistema() {
       return;
     }
 
-    const grupos = rotAgruparPorTecnico(daySvcsRoteiraveis);
-    const rotas = await Promise.all(grupos.map(grupo => rotMontarRotaOtimizadaGoogle(grupo.svcs, {
-      sharedServiceKeys: grupo.sharedServiceKeys || [],
-      sharedLabelByKey: grupo.sharedLabelByKey || {}
-    })));
+    try {
+      const backend = await simularAgendamentoBackend(daySvcsRoteiraveis, data);
+      rotDados = (backend.routes || []).map(rota => {
+        const veiculo = rotVeiculoPreferencial(rota.svcs || [], rota.veiculo || '');
+        const enriched = {
+          ...rota,
+          veiculo,
+          warningReasons: rota.warnings || [],
+          blockReasons: rota.blocks || [],
+          severity: rota.status === 'critico' ? 'block' : rota.status === 'alerta' ? 'warn' : 'ok',
+          rotaOtimizadaDisponivel: !(rota.warnings || []).some(w => String(w).includes('estimativa')),
+          rotaAviso: (rota.warnings || []).join(' · ')
+        };
+        return {
+          ...enriched,
+          portalLink: rotMontarLinkPortal(enriched, data),
+          portalText: rotMontarTextoPortal(enriched, data),
+          whatsappText: rotMontarTextoWhatsApp(enriched, data)
+        };
+      });
+    } catch (backendError) {
+      logisticaDebug('[Roteiro backend] indisponível, usando fallback local', backendError?.message || backendError);
+      const grupos = rotAgruparPorTecnico(daySvcsRoteiraveis);
+      const rotas = await Promise.all(grupos.map(grupo => rotMontarRotaOtimizadaGoogle(grupo.svcs, {
+        sharedServiceKeys: grupo.sharedServiceKeys || [],
+        sharedLabelByKey: grupo.sharedLabelByKey || {}
+      })));
 
-    rotDados = grupos.map((grupo, idx) => {
-      const rota = rotas[idx];
-      const veiculo = rotVeiculoPreferencial(grupo.svcs, grupo.veiculo);
-      const enriched = { ...grupo, veiculo, ...rota };
-      return {
-        ...enriched,
-        portalLink: rotMontarLinkPortal(enriched, data),
-        portalText: rotMontarTextoPortal(enriched, data),
-        whatsappText: rotMontarTextoWhatsApp(enriched, data)
-      };
-    });
+      rotDados = grupos.map((grupo, idx) => {
+        const rota = rotas[idx];
+        const veiculo = rotVeiculoPreferencial(grupo.svcs, grupo.veiculo);
+        const enriched = { ...grupo, veiculo, ...rota };
+        return {
+          ...enriched,
+          portalLink: rotMontarLinkPortal(enriched, data),
+          portalText: rotMontarTextoPortal(enriched, data),
+          whatsappText: rotMontarTextoWhatsApp(enriched, data)
+        };
+      });
+    }
 
     // KPIs
     const exec = daySvcsRoteiraveis.filter(s=>(s.status||s.st)==='executado').length;

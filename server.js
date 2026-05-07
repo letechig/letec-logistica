@@ -5,6 +5,8 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const readXlsxFile = require('read-excel-file/node');
 const { createClient } = require('@supabase/supabase-js');
+const { DistanceClient } = require('./src/logistics/distance');
+const { validateService, buildDayRoutes } = require('./src/logistics/engine');
 require('dotenv').config();
 
 const app = express();
@@ -318,6 +320,46 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 );
+app.locals.supabase = supabase;
+
+function getSupabaseClient() {
+  return app.locals.supabase || supabase;
+}
+
+function createDistanceClient() {
+  return new DistanceClient({
+    apiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+    timeoutMs: REQUEST_TIMEOUT_MS
+  });
+}
+
+async function fetchLogisticsCatalogs() {
+  const db = getSupabaseClient();
+  const [serviceTypesResult, techniciansResult] = await Promise.all([
+    db.from('service_types').select('*'),
+    db.from('technicians').select('*')
+  ]);
+
+  if (serviceTypesResult.error) throw serviceTypesResult.error;
+  if (techniciansResult.error) throw techniciansResult.error;
+
+  return {
+    serviceTypes: serviceTypesResult.data || [],
+    technicians: techniciansResult.data || []
+  };
+}
+
+async function fetchServicesForDate(date) {
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('services')
+    .select('*')
+    .or(`date.eq.${date},data.eq.${date}`)
+    .order('horario', { ascending: true, nullsFirst: false });
+
+  if (error) throw error;
+  return data || [];
+}
 
 // Routes
 app.get('/api/health', (req, res) => {
@@ -326,6 +368,89 @@ app.get('/api/health', (req, res) => {
     message: 'Letec Logistics Backend is running',
     mapsProxy: !!process.env.GOOGLE_MAPS_API_KEY
   });
+});
+
+app.post('/api/logistics/validate-service', async (req, res) => {
+  try {
+    const service = req.body.service || req.body.servico || req.body;
+    if (!service || typeof service !== 'object') {
+      return res.status(400).json({ error: 'service is required' });
+    }
+
+    const catalogs = req.body.serviceTypes && req.body.technicians
+      ? { serviceTypes: req.body.serviceTypes, technicians: req.body.technicians }
+      : await fetchLogisticsCatalogs();
+
+    const services = Array.isArray(req.body.services)
+      ? req.body.services
+      : Array.isArray(req.body.servicos)
+        ? req.body.servicos
+        : await fetchServicesForDate(service.dt || service.date || service.data);
+
+    const result = await validateService(service, {
+      services,
+      serviceTypes: catalogs.serviceTypes,
+      technicians: catalogs.technicians,
+      ignoreId: req.body.ignoreId ?? req.body.ignore_id ?? null,
+      distanceClient: createDistanceClient()
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('[POST /api/logistics/validate-service] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao validar logística do serviço', details: error.message });
+  }
+});
+
+app.get('/api/logistics/day-route', async (req, res) => {
+  try {
+    const date = String(req.query.date || req.query.data || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+    }
+
+    const [catalogs, services] = await Promise.all([
+      fetchLogisticsCatalogs(),
+      fetchServicesForDate(date)
+    ]);
+
+    const result = await buildDayRoutes(services, {
+      date,
+      serviceTypes: catalogs.serviceTypes,
+      technicians: catalogs.technicians,
+      distanceClient: createDistanceClient()
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('[GET /api/logistics/day-route] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao calcular roteiro do dia', details: error.message });
+  }
+});
+
+app.post('/api/logistics/simulate-route', async (req, res) => {
+  try {
+    const services = req.body.services || req.body.servicos || [];
+    if (!Array.isArray(services)) {
+      return res.status(400).json({ error: 'services must be an array' });
+    }
+
+    const catalogs = req.body.serviceTypes && req.body.technicians
+      ? { serviceTypes: req.body.serviceTypes, technicians: req.body.technicians }
+      : await fetchLogisticsCatalogs();
+
+    const result = await buildDayRoutes(services, {
+      date: req.body.date || req.body.data || '',
+      serviceTypes: catalogs.serviceTypes,
+      technicians: catalogs.technicians,
+      distanceClient: createDistanceClient()
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('[POST /api/logistics/simulate-route] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao simular roteiro', details: error.message });
+  }
 });
 
 // Static frontend assets
@@ -1278,9 +1403,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`[Server] Letec Logistics Backend running on port ${PORT}`);
-  console.log(`[Security] Helmet.js enabled with CSP and HSTS`);
-  console.log(`[Limits] Global: 100 req/15min | Write: 30 req/15min`);
-  console.log(`[CORS] Allowed origins: ${allowedOrigins.length ? allowedOrigins.join(', ') : 'All (development mode)'}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`[Server] Letec Logistics Backend running on port ${PORT}`);
+    console.log(`[Security] Helmet.js enabled with CSP and HSTS`);
+    console.log(`[Limits] Global: 100 req/15min | Write: 30 req/15min`);
+    console.log(`[CORS] Allowed origins: ${allowedOrigins.length ? allowedOrigins.join(', ') : 'All (development mode)'}`);
+  });
+}
+
+module.exports = app;
