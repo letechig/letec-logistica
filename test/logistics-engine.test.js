@@ -233,6 +233,10 @@ test('buildRouteForGroup cacheia distâncias repetidas e inclui retorno à base 
   assert.equal(route.retornoBaseMin, 20);
   assert.equal(route.retornoBaseKm, 8);
   assert.equal(route.tempoTotalMin, 90);
+  assert.equal(route.confiabilidadeGeral, 'alta');
+  assert.equal(route.esperaTotalMin, 0);
+  assert.equal(route.atrasoTotalMin, 10);
+  assert.equal(route.scoreOperacional >= 80, true);
 });
 
 test('buildRouteForGroup mantém compatibilidade quando retorno à base é desativado', async () => {
@@ -250,6 +254,36 @@ test('buildRouteForGroup mantém compatibilidade quando retorno à base é desat
   assert.equal(route.retornoBaseMin, 0);
   assert.equal(route.retornoBaseKm, 0);
   assert.equal(route.tempoTotalMin, 70);
+});
+
+test('buildRouteForGroup expõe espera, atraso, confiabilidade e score operacional', async () => {
+  const route = await buildRouteForGroup({
+    id: 't1',
+    equipe: 'Ana',
+    tecnicos_ids: ['t1'],
+    svcs: [
+      { id: 1, date: '2026-05-07', horario: '08:30', tipos: ['VIS'], endereco: 'Rua A, 1' },
+      { id: 2, date: '2026-05-07', horario: '08:35', tipos: ['VIS'], endereco: 'Rua B, 2' },
+    ],
+  }, {
+    serviceTypes,
+    config: { incluirRetornoBase: false },
+    distanceClient: {
+      async getDistance(origem, destino) {
+        if (/Rua A/.test(String(destino))) return { km: 5, minutos: 10, origem: 'estimado' };
+        return { km: 5, minutos: 20, origem: 'estimado' };
+      },
+    },
+  });
+
+  assert.equal(route.confiabilidadeGeral, 'baixa');
+  assert.equal(route.sequencia[0].confiabilidadeDistancia, 'baixa');
+  assert.equal(route.sequencia[0].esperaMin, 20);
+  assert.equal(route.sequencia[1].atrasoMin, 45);
+  assert.equal(route.esperaTotalMin, 20);
+  assert.equal(route.atrasoTotalMin, 45);
+  assert.equal(route.classificacaoOperacional, 'atencao');
+  assert.ok(route.motivosScore.some(m => /Distância estimada/.test(m)));
 });
 
 test('validateService usa jornada com serviços, deslocamentos e retorno à base', async () => {
@@ -287,5 +321,42 @@ test('validateService usa jornada com serviços, deslocamentos e retorno à base
 
   assert.equal(result.status, 'alerta');
   assert.equal(result.detalhes.regraAplicada, 'jornada_estourada');
+  assert.equal(result.confiabilidadeGeral, 'alta');
+  assert.equal(Number.isFinite(result.scoreOperacional), true);
   assert.match(result.mensagens.join(' '), /incluindo deslocamentos/);
+});
+
+test('validateService respeita modo de validação rígido sem mudar o padrão flexível', async () => {
+  const services = [{
+    id: 1,
+    date: '2026-05-07',
+    horario: '09:00',
+    tipos: ['DS'],
+    tecnicos_ids: ['t1'],
+    endereco: 'Rua A, 1',
+  }];
+  const candidate = {
+    id: 2,
+    date: '2026-05-07',
+    horario: '09:30',
+    tipos: ['DR'],
+    tecnicos_ids: ['t1'],
+    endereco: 'Rua B, 2',
+  };
+
+  const flex = await validateService(candidate, { services, serviceTypes, technicians, distanceClient: fixedDistance });
+  const rigido = await validateService(candidate, {
+    services,
+    serviceTypes,
+    technicians,
+    distanceClient: fixedDistance,
+    config: { modoValidacao: 'rigido' },
+  });
+
+  assert.equal(flex.status, 'critico');
+  assert.equal(flex.podeSalvar, true);
+  assert.equal(flex.exigeJustificativa, true);
+  assert.equal(rigido.status, 'critico');
+  assert.equal(rigido.podeSalvar, false);
+  assert.equal(rigido.exigeJustificativa, false);
 });

@@ -72,6 +72,8 @@ test('POST /api/logistics/validate-service valida com payload local sem Supabase
     const payload = await response.json();
     assert.equal(payload.status, 'critico');
     assert.equal(payload.exigeJustificativa, true);
+    assert.equal(typeof payload.scoreOperacional, 'number');
+    assert.ok(['alta', 'baixa'].includes(payload.confiabilidadeGeral));
   });
 });
 
@@ -83,5 +85,7 @@ test('GET /api/logistics/day-route calcula roteiro usando mock Supabase', async 
     assert.equal(payload.totalServices, 2);
     assert.equal(payload.routes.length, 1);
     assert.equal(payload.routes[0].warnings.length > 0, true);
+    assert.equal(typeof payload.routes[0].scoreOperacional, 'number');
+    assert.ok(['alta', 'baixa'].includes(payload.routes[0].confiabilidadeGeral));
   });
 });

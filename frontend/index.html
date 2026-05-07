@@ -5333,6 +5333,11 @@ function normalizarResultadoLogisticaApi(resultado = {}) {
     margemSegurancaMin: detalhes.margemMin || LOGISTICA_MARGEM_SEGURANCA_MIN,
     deslocamentoConsideradoMin: detalhes.deslocamentoEstimadoMin ?? null,
     deslocamentoOrigem: detalhes.regraAplicada || 'backend',
+    confiabilidade: detalhes.confiabilidadeGeral || resultado.confiabilidadeGeral || '',
+    scoreOperacional: detalhes.scoreOperacional ?? resultado.scoreOperacional ?? null,
+    classificacaoOperacional: detalhes.classificacaoOperacional || resultado.classificacaoOperacional || '',
+    atrasoTotalMin: detalhes.atrasoTotalMin ?? resultado.atrasoTotalMin ?? null,
+    esperaTotalMin: detalhes.esperaTotalMin ?? resultado.esperaTotalMin ?? null,
     contexto: [],
     backendPayload: resultado
   };
@@ -5934,7 +5939,10 @@ function abrirModalValidacaoLogistica(resultado, options = {}) {
     ['Origem da duração', logisticaOrigemDuracaoLabel(resultado?.duracaoOrigem)],
     ['Intervalo disponível', resultado?.intervaloDisponivelMin !== null && resultado?.intervaloDisponivelMin !== undefined ? `${resultado.intervaloDisponivelMin}min` : '—'],
     ['Margem de segurança', `${resultado?.margemSegurancaMin || LOGISTICA_MARGEM_SEGURANCA_MIN}min`],
-    ['Deslocamento considerado', resultado?.deslocamentoConsideradoMin !== null && resultado?.deslocamentoConsideradoMin !== undefined ? `${resultado.deslocamentoConsideradoMin}min (${resultado.deslocamentoOrigem || '—'})` : '—']
+    ['Deslocamento considerado', resultado?.deslocamentoConsideradoMin !== null && resultado?.deslocamentoConsideradoMin !== undefined ? `${resultado.deslocamentoConsideradoMin}min (${resultado.deslocamentoOrigem || '—'})` : '—'],
+    ['Confiabilidade', resultado?.confiabilidade || '—'],
+    ['Score', resultado?.scoreOperacional !== null && resultado?.scoreOperacional !== undefined ? `${resultado.scoreOperacional} (${resultado.classificacaoOperacional || '—'})` : '—'],
+    ['Atraso / espera', `${resultado?.atrasoTotalMin ?? 0}min / ${resultado?.esperaTotalMin ?? 0}min`]
   ];
 
   body.innerHTML = `
@@ -12203,7 +12211,12 @@ async function rotGerarDoSistema() {
           blockReasons: rota.blocks || [],
           severity: rota.status === 'critico' ? 'block' : rota.status === 'alerta' ? 'warn' : 'ok',
           rotaOtimizadaDisponivel: !(rota.warnings || []).some(w => String(w).includes('estimativa')),
-          rotaAviso: (rota.warnings || []).join(' · ')
+          rotaAviso: (rota.warnings || []).join(' · '),
+          confiabilidadeGeral: rota.confiabilidadeGeral || '',
+          scoreOperacional: rota.scoreOperacional ?? null,
+          classificacaoOperacional: rota.classificacaoOperacional || '',
+          atrasoTotalMin: rota.atrasoTotalMin ?? 0,
+          esperaTotalMin: rota.esperaTotalMin ?? 0
         };
         return {
           ...enriched,
@@ -12430,6 +12443,9 @@ function rotRenderizarSugestoes(equipes) {
     const severityBg = getRouteSeverityBg(eq.severity);
     const severityLabel = getRouteSeverityLabel(eq.severity);
     const diagnostico = uniqueReasons([...(eq.blockReasons || []), ...(eq.warningReasons || [])]);
+    const metricasOperacionais = eq.scoreOperacional !== null && eq.scoreOperacional !== undefined
+      ? `Score ${eq.scoreOperacional} · ${eq.classificacaoOperacional || '—'} · conf. ${eq.confiabilidadeGeral || '—'} · atraso ${eq.atrasoTotalMin || 0}min · espera ${eq.esperaTotalMin || 0}min`
+      : '';
     return `<div class="card" style="padding:16px;border-top:3px solid ${cor}">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
         <div>
@@ -12444,6 +12460,7 @@ function rotRenderizarSugestoes(equipes) {
         </div>
       </div>
       ${diagnostico.length ? `<div style="margin:-2px 0 12px 0;font-size:10px;color:${severityColor};font-family:var(--mono)">${diagnostico.join(' · ')}</div>` : ''}
+      ${metricasOperacionais ? `<div style="margin:-4px 0 12px 0;font-size:10px;color:var(--text2);font-family:var(--mono)">${metricasOperacionais}</div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
         <div style="padding:8px;background:var(--surface);border-radius:var(--r2);text-align:center">
@@ -12500,6 +12517,9 @@ function rotRenderizarLocal(equipes, data) {
     const severityBg = getRouteSeverityBg(eq.severity);
     const severityLabel = getRouteSeverityLabel(eq.severity);
     const diagnostico = uniqueReasons([...(eq.blockReasons || []), ...(eq.warningReasons || [])]);
+    const metricasOperacionais = eq.scoreOperacional !== null && eq.scoreOperacional !== undefined
+      ? `Score ${eq.scoreOperacional} · ${eq.classificacaoOperacional || '—'} · conf. ${eq.confiabilidadeGeral || '—'} · atraso ${eq.atrasoTotalMin || 0}min · espera ${eq.esperaTotalMin || 0}min`
+      : '';
 
     return `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column">
       <!-- Cabeçalho -->
@@ -12517,6 +12537,7 @@ function rotRenderizarLocal(equipes, data) {
           </div>
         </div>
         ${diagnostico.length ? `<div style="margin-bottom:8px;font-size:10px;color:${severityColor};font-family:var(--mono)">${diagnostico.join(' · ')}</div>` : ''}
+        ${metricasOperacionais ? `<div style="margin-bottom:8px;font-size:10px;color:var(--text2);font-family:var(--mono)">${metricasOperacionais}</div>` : ''}
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
           <div style="padding:7px;background:var(--surface);border-radius:var(--r2);text-align:center">
             <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">${eq.sequencia.length}</div>

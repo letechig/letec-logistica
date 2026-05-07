@@ -26,6 +26,7 @@ const CONFIG = {
   margemMin: 15,
   descansoMin: 600,
   incluirRetornoBase: true,
+  modoValidacao: 'flexivel',
   deslocamentoMin: 15,
   deslocamentoMax: 45,
   deslocamentoExtremoMin: 90,
@@ -456,6 +457,76 @@ function compareSeverity(a, b) {
   return (weight[b] || 0) - (weight[a] || 0);
 }
 
+function getDistanceReliability(distance) {
+  const origem = String(distance?.origem || '');
+  return origem === 'google' || origem === 'mesmo_local' ? 'alta' : 'baixa';
+}
+
+function aplicarModoValidacao(result, config) {
+  if (result.status !== 'critico') {
+    return {
+      ...result,
+      podeSalvar: result.podeSalvar !== false,
+      exigeJustificativa: !!result.exigeJustificativa,
+    };
+  }
+
+  if (config.modoValidacao === 'rigido') {
+    return {
+      ...result,
+      podeSalvar: false,
+      exigeJustificativa: false,
+    };
+  }
+
+  return {
+    ...result,
+    podeSalvar: true,
+    exigeJustificativa: true,
+  };
+}
+
+function calcularScoreOperacional(route, config) {
+  const motivos = [];
+  let score = 100;
+  const atrasoPenalty = Math.floor((route.atrasoTotalMin || 0) / 5);
+  const esperaPenalty = Math.floor((route.esperaTotalMin || 0) / 15);
+
+  if (atrasoPenalty) {
+    score -= atrasoPenalty;
+    motivos.push(`Atraso acumulado: -${atrasoPenalty}`);
+  }
+  if (esperaPenalty) {
+    score -= esperaPenalty;
+    motivos.push(`Espera acumulada: -${esperaPenalty}`);
+  }
+  if (route.confiabilidadeGeral === 'baixa') {
+    score -= 15;
+    motivos.push('Distância estimada: -15');
+  }
+  if ((route.tempoTotalMin || 0) > config.jornadaMin) {
+    score -= 20;
+    motivos.push('Jornada acima do limite: -20');
+  }
+  if ((route.blocks || []).length) {
+    score -= 30;
+    motivos.push('Bloqueios críticos: -30');
+  }
+
+  const scoreOperacional = Math.max(0, Math.min(100, Math.round(score)));
+  const classificacaoOperacional = (route.blocks || []).length || scoreOperacional < 50
+    ? 'critica'
+    : scoreOperacional >= 80
+      ? 'boa'
+      : 'atencao';
+
+  return {
+    scoreOperacional,
+    classificacaoOperacional,
+    motivosScore: motivos,
+  };
+}
+
 async function validateService(service, options = {}) {
   const config = { ...CONFIG, ...(options.config || {}) };
   const universe = Array.isArray(options.services) ? options.services : [];
@@ -611,6 +682,23 @@ async function validateService(service, options = {}) {
     distanceClient,
   });
   const jornadaTotal = jornadaRoute.tempoTotalMin;
+  result = {
+    ...result,
+    confiabilidadeGeral: jornadaRoute.confiabilidadeGeral,
+    scoreOperacional: jornadaRoute.scoreOperacional,
+    classificacaoOperacional: jornadaRoute.classificacaoOperacional,
+    atrasoTotalMin: jornadaRoute.atrasoTotalMin,
+    esperaTotalMin: jornadaRoute.esperaTotalMin,
+    motivosScore: jornadaRoute.motivosScore,
+    detalhes: {
+      ...result.detalhes,
+      confiabilidadeGeral: jornadaRoute.confiabilidadeGeral,
+      scoreOperacional: jornadaRoute.scoreOperacional,
+      classificacaoOperacional: jornadaRoute.classificacaoOperacional,
+      atrasoTotalMin: jornadaRoute.atrasoTotalMin,
+      esperaTotalMin: jornadaRoute.esperaTotalMin,
+    },
+  };
   if (jornadaTotal > config.jornadaMin) {
     apply({
       status: jornadaTotal > config.jornadaMin * 1.25 ? 'critico' : 'alerta',
@@ -639,6 +727,7 @@ async function validateService(service, options = {}) {
   result.exigeJustificativa = result.status === 'critico';
   result.mensagens = unique(result.mensagens);
   result.sugestoes = unique(result.sugestoes);
+  result = aplicarModoValidacao(result, config);
   return result;
 }
 
@@ -678,6 +767,9 @@ async function buildRouteForGroup(group, options = {}) {
   let retornoBaseMin = 0;
   let retornoBaseKm = 0;
   let retornoBaseOrigem = '';
+  let esperaTotalMin = 0;
+  let atrasoTotalMin = 0;
+  let confiabilidadeGeral = 'alta';
   const warnings = [];
   const blocks = [];
 
@@ -704,10 +796,17 @@ async function buildRouteForGroup(group, options = {}) {
       : await distanceClient.getDistance(currentAddress, service.endereco || '');
     const duracao = resolverDuracao(service, serviceTypes);
     const scheduled = getHorarioServicoMin(service);
-    const inicio = Math.max(cursor + (dist.minutos || 0), scheduled ?? config.inicioExpedienteMin);
+    const chegadaMin = cursor + (dist.minutos || 0);
+    const esperaMin = scheduled !== null ? Math.max(0, scheduled - chegadaMin) : 0;
+    const atrasoMin = scheduled !== null ? Math.max(0, chegadaMin - scheduled) : 0;
+    const inicio = Math.max(chegadaMin, scheduled ?? config.inicioExpedienteMin);
     const fim = inicio + duracao.minutos;
+    const confiabilidadeDistancia = getDistanceReliability(dist);
 
-    if (dist.origem !== 'google' && dist.origem !== 'mesmo_local') warnings.push('Google Maps indisponível; roteiro usa estimativa operacional.');
+    if (confiabilidadeDistancia === 'baixa') {
+      confiabilidadeGeral = 'baixa';
+      warnings.push('Rota usa distância estimada; confirme deslocamento real antes de operar.');
+    }
     if ((dist.minutos || 0) > config.deslocamentoExtremoMin || (dist.km || 0) > config.deslocamentoExtremoKm) blocks.push('Inviável por deslocamento extremo');
 
     sequencia.push({
@@ -717,9 +816,14 @@ async function buildRouteForGroup(group, options = {}) {
       deslocamentoMin: dist.minutos || 0,
       km: Number(dist.km || 0),
       deslocamentoOrigem: dist.origem,
+      confiabilidadeDistancia,
       duracaoServicoMin: duracao.minutos,
       origemDuracao: duracao.origem,
       horarioAgendadoMin: scheduled,
+      chegadaEstimadaMin: chegadaMin,
+      chegadaPrevista: formatarHora(chegadaMin),
+      esperaMin,
+      atrasoMin,
       inicioSugeridoMin: inicio,
       fimSugeridoMin: fim,
       inicioPrevisto: formatarHora(inicio),
@@ -730,6 +834,8 @@ async function buildRouteForGroup(group, options = {}) {
     tempoServicoMin += duracao.minutos;
     tempoDeslocamentoMin += dist.minutos || 0;
     kmTotal += Number(dist.km || 0);
+    esperaTotalMin += esperaMin;
+    atrasoTotalMin += atrasoMin;
   }
 
   if (config.incluirRetornoBase && sequencia.length) {
@@ -739,7 +845,8 @@ async function buildRouteForGroup(group, options = {}) {
     retornoBaseOrigem = retorno.origem || '';
     tempoDeslocamentoMin += retornoBaseMin;
     kmTotal += retornoBaseKm;
-    if (retorno.origem !== 'google' && retorno.origem !== 'mesmo_local') {
+    if (getDistanceReliability(retorno) === 'baixa') {
+      confiabilidadeGeral = 'baixa';
       warnings.push('Retorno à base usa estimativa operacional.');
     }
     if (retornoBaseMin > config.deslocamentoExtremoMin || retornoBaseKm > config.deslocamentoExtremoKm) {
@@ -750,7 +857,7 @@ async function buildRouteForGroup(group, options = {}) {
   const tempoTotalMin = tempoServicoMin + tempoDeslocamentoMin;
   if (tempoTotalMin > config.jornadaMin) blocks.push('Inviável por jornada');
   const severity = blocks.length ? 'critico' : warnings.length ? 'alerta' : 'ok';
-  return {
+  const route = {
     ...group,
     sequencia,
     tempoServicoMin,
@@ -760,11 +867,18 @@ async function buildRouteForGroup(group, options = {}) {
     retornoBaseMin,
     retornoBaseKm: Number(retornoBaseKm.toFixed(1)),
     retornoBaseOrigem,
+    esperaTotalMin,
+    atrasoTotalMin,
+    confiabilidadeGeral,
     livreMin: Math.max(0, config.jornadaMin - tempoTotalMin),
     ocupacaoPct: config.jornadaMin > 0 ? Math.round((tempoTotalMin / config.jornadaMin) * 100) : 0,
     status: severity,
     warnings: unique(warnings),
     blocks: unique(blocks),
+  };
+  return {
+    ...route,
+    ...calcularScoreOperacional(route, config),
   };
 }
 
