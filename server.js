@@ -238,6 +238,70 @@ function buildCustomerAddress({ rua, numero, bairro, cidade, uf, complemento, re
   return address.trim() || null;
 }
 
+const CUSTOMER_OPTIONAL_WRITE_COLUMNS = new Set([
+  'whatsapp',
+  'email',
+  'cep',
+  'endereco_completo',
+  'rua',
+  'numero',
+  'bairro',
+  'cidade',
+  'uf',
+  'complemento',
+  'referencia',
+  'latitude',
+  'longitude',
+  'tipo_local',
+  'restricoes_operacionais',
+  'nivel_urgencia_padrao',
+  'observacoes_operacionais',
+  'cliente_recorrente',
+  'periodicidade',
+  'data_ultimo_servico',
+  'categoria',
+  'tipo',
+  'cpf_cnpj',
+  'contato',
+  'zona',
+  'tipo_cliente',
+  'status_operacional',
+  'prioridade',
+  'origem'
+]);
+
+function getMissingSchemaColumn(error) {
+  if (!error || !['PGRST204', '42703'].includes(error.code)) return null;
+  const message = String(error.message || '');
+  const match = message.match(/'([^']+)' column/) || message.match(/column\s+\w+\.([a-zA-Z0-9_]+)\s+does not exist/);
+  return match ? match[1] : null;
+}
+
+async function runCustomerWriteWithSchemaFallback(buildQuery, payload, context) {
+  const workingPayload = { ...payload };
+  const removedColumns = [];
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const result = await buildQuery(workingPayload);
+    if (!result.error) {
+      if (removedColumns.length) {
+        console.warn(`[${context}] Ignored customer column(s) missing from PostgREST schema cache: ${removedColumns.join(', ')}`);
+      }
+      return result;
+    }
+
+    const missingColumn = getMissingSchemaColumn(result.error);
+    if (!missingColumn || !CUSTOMER_OPTIONAL_WRITE_COLUMNS.has(missingColumn) || !(missingColumn in workingPayload)) {
+      return result;
+    }
+
+    removedColumns.push(missingColumn);
+    delete workingPayload[missingColumn];
+  }
+
+  return buildQuery(workingPayload);
+}
+
 async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
@@ -251,7 +315,7 @@ async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, c
 
   const { data, error } = await supabase
     .from('customers')
-    .select('id,nome,telefone,whatsapp,nome_normalizado,cpf_cnpj,cep,endereco,endereco_completo,rua,numero,bairro,cidade,uf')
+    .select('*')
     .eq('ativo', true);
 
   if (error) throw error;
@@ -851,45 +915,48 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
-      .from('customers')
-      .insert([{
-        nome: nome.trim(),
-        nome_normalizado: nomeNormalizado,
-        telefone: telefoneNormalizado,
-        whatsapp: whatsappNormalizado || null,
-        email: emailNormalizado,
-        cep: cepNormalizado,
-        endereco: enderecoFinal,
-        endereco_completo: enderecoCompletoFinal,
-        rua: rua ? rua.trim() : null,
-        numero: numero ? String(numero).trim() : null,
-        bairro: bairro ? bairro.trim() : null,
-        cidade: cidade ? cidade.trim() : null,
-        uf: ufNormalizada,
-        complemento: complemento ? complemento.trim() : null,
-        referencia: referencia ? referencia.trim() : null,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        tipo_local: tipo_local ? tipo_local.trim() : null,
-        restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
-        nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
-        observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
-        cliente_recorrente: clienteRecorrente,
-        periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
-        data_ultimo_servico: dataUltimoServicoISO,
-        tipo: tipo || 'PF',
-        cpf_cnpj,
-        contato: contato ? String(contato).trim() : null,
-        zona: zona ? String(zona).trim() : null,
-        tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
-        status_operacional: status_operacional ? String(status_operacional).trim() : null,
-        prioridade: prioridade ? String(prioridade).trim() : null,
-        origem: origem ? String(origem).trim() : null,
-        observacoes,
-        ativo: true
-      }])
-      .select();
+    const insertPayload = {
+      nome: nome.trim(),
+      nome_normalizado: nomeNormalizado,
+      telefone: telefoneNormalizado,
+      whatsapp: whatsappNormalizado || null,
+      email: emailNormalizado,
+      cep: cepNormalizado,
+      endereco: enderecoFinal,
+      endereco_completo: enderecoCompletoFinal,
+      rua: rua ? rua.trim() : null,
+      numero: numero ? String(numero).trim() : null,
+      bairro: bairro ? bairro.trim() : null,
+      cidade: cidade ? cidade.trim() : null,
+      uf: ufNormalizada,
+      complemento: complemento ? complemento.trim() : null,
+      referencia: referencia ? String(referencia).trim() : null,
+      latitude: latitude ? parseFloat(latitude) : null,
+      longitude: longitude ? parseFloat(longitude) : null,
+      tipo_local: tipo_local ? tipo_local.trim() : null,
+      restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
+      nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
+      observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
+      cliente_recorrente: clienteRecorrente,
+      periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
+      data_ultimo_servico: dataUltimoServicoISO,
+      tipo: tipo || 'PF',
+      cpf_cnpj,
+      contato: contato ? String(contato).trim() : null,
+      zona: zona ? String(zona).trim() : null,
+      tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
+      status_operacional: status_operacional ? String(status_operacional).trim() : null,
+      prioridade: prioridade ? String(prioridade).trim() : null,
+      origem: origem ? String(origem).trim() : null,
+      observacoes,
+      ativo: true
+    };
+
+    const { data, error } = await runCustomerWriteWithSchemaFallback(
+      payload => supabase.from('customers').insert([payload]).select(),
+      insertPayload,
+      'POST /api/customers'
+    );
 
     if (error) {
       if (error.code === '23505') {
@@ -990,47 +1057,49 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
-      .from('customers')
-      .update({
-        nome: nome.trim(),
-        nome_normalizado: nomeNormalizado,
-        telefone: telefoneNormalizado,
-        whatsapp: whatsappNormalizado || null,
-        email: emailNormalizado,
-        cep: cepNormalizado,
-        endereco: enderecoFinal,
-        endereco_completo: enderecoCompletoFinal,
-        rua: rua ? rua.trim() : null,
-        numero: numero ? String(numero).trim() : null,
-        bairro: bairro ? bairro.trim() : null,
-        cidade: cidade ? cidade.trim() : null,
-        uf: ufNormalizada,
-        complemento: complemento ? complemento.trim() : null,
-        referencia: referencia ? referencia.trim() : null,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        tipo_local: tipo_local ? tipo_local.trim() : null,
-        restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
-        nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
-        observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
-        cliente_recorrente: clienteRecorrente,
-        periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
-        data_ultimo_servico: dataUltimoServicoISO,
-        categoria: categoria || 'eventual',
-        tipo,
-        cpf_cnpj,
-        contato: contato ? String(contato).trim() : null,
-        zona: zona ? String(zona).trim() : null,
-        tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
-        status_operacional: status_operacional ? String(status_operacional).trim() : null,
-        prioridade: prioridade ? String(prioridade).trim() : null,
-        origem: origem ? String(origem).trim() : null,
-        observacoes,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', parseInt(id, 10))
-      .select();
+    const updatePayload = {
+      nome: nome.trim(),
+      nome_normalizado: nomeNormalizado,
+      telefone: telefoneNormalizado,
+      whatsapp: whatsappNormalizado || null,
+      email: emailNormalizado,
+      cep: cepNormalizado,
+      endereco: enderecoFinal,
+      endereco_completo: enderecoCompletoFinal,
+      rua: rua ? rua.trim() : null,
+      numero: numero ? String(numero).trim() : null,
+      bairro: bairro ? bairro.trim() : null,
+      cidade: cidade ? cidade.trim() : null,
+      uf: ufNormalizada,
+      complemento: complemento ? complemento.trim() : null,
+      referencia: referencia ? String(referencia).trim() : null,
+      latitude: latitude ? parseFloat(latitude) : null,
+      longitude: longitude ? parseFloat(longitude) : null,
+      tipo_local: tipo_local ? tipo_local.trim() : null,
+      restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
+      nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
+      observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
+      cliente_recorrente: clienteRecorrente,
+      periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
+      data_ultimo_servico: dataUltimoServicoISO,
+      categoria: categoria || 'eventual',
+      tipo,
+      cpf_cnpj,
+      contato: contato ? String(contato).trim() : null,
+      zona: zona ? String(zona).trim() : null,
+      tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
+      status_operacional: status_operacional ? String(status_operacional).trim() : null,
+      prioridade: prioridade ? String(prioridade).trim() : null,
+      origem: origem ? String(origem).trim() : null,
+      observacoes,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await runCustomerWriteWithSchemaFallback(
+      payload => supabase.from('customers').update(payload).eq('id', parseInt(id, 10)).select(),
+      updatePayload,
+      'PUT /api/customers/:id'
+    );
 
     if (error) {
       if (error.code === '23505') {
