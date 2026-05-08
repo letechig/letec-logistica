@@ -331,6 +331,10 @@ CREATE TABLE IF NOT EXISTS technician_events (
   resolvido_em TIMESTAMP WITH TIME ZONE,
   operador_responsavel TEXT,
   observacao_resolucao TEXT,
+  whatsapp_escalado_em TIMESTAMP WITH TIME ZONE,
+  whatsapp_escalado_para TEXT,
+  whatsapp_escalado_status TEXT DEFAULT 'nao_enviado',
+  whatsapp_escalado_erro TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
@@ -355,6 +359,10 @@ ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS visto_em TIMESTAMP WITH T
 ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS resolvido_em TIMESTAMP WITH TIME ZONE;
 ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS operador_responsavel TEXT;
 ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS observacao_resolucao TEXT;
+ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS whatsapp_escalado_em TIMESTAMP WITH TIME ZONE;
+ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS whatsapp_escalado_para TEXT;
+ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS whatsapp_escalado_status TEXT DEFAULT 'nao_enviado';
+ALTER TABLE technician_events ADD COLUMN IF NOT EXISTS whatsapp_escalado_erro TEXT;
 ALTER TABLE technician_messages ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'normal';
 ALTER TABLE technician_messages ADD COLUMN IF NOT EXISTS lido BOOLEAN DEFAULT false;
 ALTER TABLE technician_messages ADD COLUMN IF NOT EXISTS lido_em TIMESTAMP WITH TIME ZONE;
@@ -365,6 +373,8 @@ CREATE INDEX IF NOT EXISTS idx_technician_events_visto ON technician_events(vist
 CREATE INDEX IF NOT EXISTS idx_technician_events_prioridade ON technician_events(prioridade);
 CREATE INDEX IF NOT EXISTS idx_technician_events_status ON technician_events(status);
 CREATE INDEX IF NOT EXISTS idx_technician_events_status_prioridade ON technician_events(status, prioridade);
+CREATE INDEX IF NOT EXISTS idx_technician_events_escalation_ready ON technician_events(status, prioridade, created_at);
+CREATE INDEX IF NOT EXISTS idx_technician_events_whatsapp_escalado_status ON technician_events(whatsapp_escalado_status);
 CREATE INDEX IF NOT EXISTS idx_technician_messages_date ON technician_messages(date);
 CREATE INDEX IF NOT EXISTS idx_technician_messages_lido ON technician_messages(lido);
 

@@ -6318,6 +6318,7 @@ let fieldOpsSchemaReady = true;
 const FIELD_OPS_SOUND_PREF_KEY = 'letec_field_ops_sound_enabled';
 const FIELD_OPS_ALERTED_IDS_KEY = 'letec_field_ops_alerted_ids';
 const FIELD_OPS_POLL_INTERVAL_MS = 15000;
+const FIELD_OPS_WHATSAPP_ESCALATION_MIN = 3;
 let fieldOpsSoundEnabled = (() => {
   try { return localStorage.getItem(FIELD_OPS_SOUND_PREF_KEY) === '1'; }
   catch(e) { return false; }
@@ -12379,6 +12380,48 @@ function getFieldOpsEventId(ev = {}) {
   return String(ev.id ?? `${ev.created_at || ''}|${ev.tipo || ''}|${ev.titulo || ''}|${ev.tecnico || ev.equipe || ''}`);
 }
 
+function fieldOpsEventAgeMin(ev = {}) {
+  const created = new Date(ev.created_at || 0).getTime();
+  if (!Number.isFinite(created) || created <= 0) return 0;
+  return Math.max(0, Math.floor((Date.now() - created) / 60000));
+}
+
+function shouldEscalateFieldOpsWhatsapp(ev = {}) {
+  return isFieldOpsEventPending(ev)
+    && getFieldOpsEventPriority(ev) === 'urgente'
+    && !ev.whatsapp_escalado_em
+    && fieldOpsEventAgeMin(ev) >= FIELD_OPS_WHATSAPP_ESCALATION_MIN;
+}
+
+function buildFieldOpsWhatsappMessage(ev = {}) {
+  const lines = [
+    '🚨 Pedido de ajuda no campo',
+    '',
+    `Técnico/equipe: ${ev.tecnico || ev.equipe || 'Equipe não informada'}`,
+    ev.date ? `Data: ${ev.date}` : '',
+    ev.created_at ? `Horário: ${fmtPortalDateTime(ev.created_at)}` : '',
+    ev.titulo ? `Aviso: ${ev.titulo}` : '',
+    ev.detalhes ? `Detalhes: ${ev.detalhes}` : '',
+    ev.lat && ev.lng ? `Localização: https://maps.google.com/?q=${encodeURIComponent(`${ev.lat},${ev.lng}`)}` : '',
+    '',
+    'Acesse a Central de Campo para acompanhar e resolver.'
+  ];
+  return lines.filter(line => line !== '').join('\n');
+}
+
+function abrirFieldOpsWhatsapp(id) {
+  const ev = (technicianEvents || []).find(item => String(item.id) === String(id));
+  if (!ev) { toast('Aviso não encontrado para WhatsApp', 'err'); return; }
+  const suporte = typeof rotSuporteWhatsApp === 'function' ? rotSuporteWhatsApp() : '';
+  const target = suporte ? `55${suporte.replace(/^55/, '')}` : '';
+  const message = buildFieldOpsWhatsappMessage(ev);
+  if (!target) toast('WhatsApp de suporte não configurado; abrindo conversa manual.', 'warn');
+  const url = target
+    ? `https://wa.me/${target}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/?text=${encodeURIComponent(message)}`;
+  window.open(url, '_blank');
+}
+
 function persistFieldOpsAlertedEventIds() {
   try {
     const ids = Array.from(fieldOpsAlertedEventIds).slice(-200);
@@ -12484,6 +12527,7 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
   const eventos = sortFieldOpsEvents(eventosDia);
   const pendentesCampo = eventosDia.filter(isFieldOpsEventPending).length;
   const urgentesCampo = eventosDia.filter(ev => isFieldOpsEventPending(ev) && getFieldOpsEventPriority(ev) === 'urgente').length;
+  const escalonarCampo = eventosDia.filter(shouldEscalateFieldOpsWhatsapp).length;
   const recados = (technicianMessages || []).filter(msg => !msg.date || msg.date === date).slice(0, 8);
   el.style.display = '';
   el.innerHTML = `
@@ -12502,11 +12546,13 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
           <span class="chip ${pendentesCampo ? 'chip-orange' : 'chip-gray'}">${pendentesCampo} pendente${pendentesCampo === 1 ? '' : 's'}</span>
           <span class="chip ${urgentesCampo ? 'chip-red' : 'chip-gray'}">${urgentesCampo} urgente${urgentesCampo === 1 ? '' : 's'}</span>
+          <span class="chip ${escalonarCampo ? 'chip-red' : 'chip-gray'}">${escalonarCampo} escalonar</span>
         </div>
         <div style="max-height:min(620px,58vh);overflow-y:auto;padding-right:6px;display:flex;flex-direction:column;gap:8px">
           ${eventos.length ? eventos.map(ev => {
             const prioridade = getFieldOpsEventPriority(ev);
             const pendente = isFieldOpsEventPending(ev);
+            const escalonarWhatsapp = shouldEscalateFieldOpsWhatsapp(ev);
             const cardBg = !pendente ? 'var(--bg2)' : prioridade === 'urgente' ? 'var(--red-bg)' : prioridade === 'alerta' ? 'var(--orange-bg)' : 'var(--blue-bg)';
             const borderColor = prioridade === 'urgente' ? 'rgba(220,38,38,.38)' : prioridade === 'alerta' ? 'rgba(234,88,12,.34)' : 'var(--border)';
             const borderLeft = prioridade === 'urgente' ? '4px solid var(--red)' : prioridade === 'alerta' ? '4px solid var(--orange)' : '1px solid var(--border)';
@@ -12522,10 +12568,14 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
                   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                     <div style="font-weight:800;font-size:12px;color:var(--text)">${sanitize(ev.titulo || ev.tipo || 'Evento')}</div>
                     ${priorityChip}
+                    ${escalonarWhatsapp ? '<span class="chip chip-red">WhatsApp pendente</span>' : ''}
                   </div>
                   <div style="font-size:11px;color:var(--text2);margin-top:2px">${sanitize(ev.tecnico || ev.equipe || 'Equipe')} · ${fmtPortalDateTime(ev.created_at)}</div>
                 </div>
-                ${pendente ? `<button class="btn btn-ghost btn-xs" onclick="marcarEventoCampoVisto(${jsArg(ev.id)})">Marcar visto</button>` : '<span class="chip chip-gray">Visto</span>'}
+                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                  ${escalonarWhatsapp ? `<button class="btn btn-ghost btn-xs" onclick="abrirFieldOpsWhatsapp(${jsArg(ev.id)})">Abrir WhatsApp</button>` : ''}
+                  ${pendente ? `<button class="btn btn-ghost btn-xs" onclick="marcarEventoCampoVisto(${jsArg(ev.id)})">Marcar visto</button>` : '<span class="chip chip-gray">Visto</span>'}
+                </div>
               </div>
               ${ev.detalhes ? `<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.45">${sanitize(ev.detalhes)}</div>` : ''}
               ${ev.lat && ev.lng ? `<a href="https://maps.google.com/?q=${encodeURIComponent(`${ev.lat},${ev.lng}`)}" target="_blank" style="display:inline-flex;margin-top:6px;font-size:11px;color:var(--blue2);font-weight:700;text-decoration:none">Ver localização</a>` : ''}
