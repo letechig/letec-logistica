@@ -12316,6 +12316,43 @@ function getFieldOpsDate() {
   return document.getElementById('hoje-date')?.value || new Date().toISOString().split('T')[0];
 }
 
+function getFieldOpsEventPriority(ev = {}) {
+  const rawPriority = String(ev.prioridade || ev.priority || '').trim().toLowerCase();
+  const rawType = String(ev.tipo || ev.type || '').trim().toLowerCase();
+  const rawText = `${ev.titulo || ''} ${ev.detalhes || ''}`.toLowerCase();
+  if (['urgente', 'urgent', 'alta', 'critico', 'crítico'].includes(rawPriority)) return 'urgente';
+  if (rawType === 'ajuda' || rawText.includes('pedido de ajuda') || rawText.includes('chamar ajuda')) return 'urgente';
+  if (['alerta', 'warning', 'problema'].includes(rawPriority) || rawType === 'problema') return 'alerta';
+  return 'normal';
+}
+
+function isFieldOpsEventPending(ev = {}) {
+  const status = String(ev.status || '').trim().toLowerCase();
+  if (['resolvido', 'cancelado', 'visto'].includes(status)) return false;
+  if (status === 'pendente' || status === 'em_atendimento') return true;
+  return !ev.visto;
+}
+
+function sortFieldOpsEvents(events = []) {
+  const priorityRank = { urgente: 0, alerta: 1, normal: 2 };
+  return [...events].sort((a, b) => {
+    const pendingDiff = Number(isFieldOpsEventPending(b)) - Number(isFieldOpsEventPending(a));
+    if (pendingDiff) return pendingDiff;
+    const priorityDiff = (priorityRank[getFieldOpsEventPriority(a)] ?? 2) - (priorityRank[getFieldOpsEventPriority(b)] ?? 2);
+    if (priorityDiff) return priorityDiff;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+}
+
+function isFieldOpsSchemaColumnMissing(error) {
+  if (!error) return false;
+  const text = `${error.code || ''} ${error.message || ''} ${error.details || ''}`.toLowerCase();
+  return text.includes('pgrst204')
+    || text.includes('schema cache')
+    || text.includes('column')
+    || text.includes('visto_em');
+}
+
 function renderFieldOpsPanel(data = getFieldOpsDate()) {
   const el = document.getElementById('field-ops-panel');
   if (!el) return;
@@ -12328,7 +12365,10 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
     </div>`;
     return;
   }
-  const eventos = (technicianEvents || []).filter(ev => !ev.date || ev.date === date).slice(0, 12);
+  const eventosDia = (technicianEvents || []).filter(ev => !ev.date || ev.date === date);
+  const eventos = sortFieldOpsEvents(eventosDia);
+  const pendentesCampo = eventosDia.filter(isFieldOpsEventPending).length;
+  const urgentesCampo = eventosDia.filter(ev => isFieldOpsEventPending(ev) && getFieldOpsEventPriority(ev) === 'urgente').length;
   const recados = (technicianMessages || []).filter(msg => !msg.date || msg.date === date).slice(0, 8);
   el.style.display = '';
   el.innerHTML = `
@@ -12341,20 +12381,38 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
           </div>
           <button class="btn btn-ghost btn-sm" onclick="carregarEventosCampoDoSupabase()">Atualizar</button>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          ${eventos.length ? eventos.map(ev => `
-            <div style="padding:10px;border:1px solid var(--border);border-radius:var(--r2);background:${ev.visto ? 'var(--bg2)' : 'var(--blue-bg)'}">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <span class="chip ${pendentesCampo ? 'chip-orange' : 'chip-gray'}">${pendentesCampo} pendente${pendentesCampo === 1 ? '' : 's'}</span>
+          <span class="chip ${urgentesCampo ? 'chip-red' : 'chip-gray'}">${urgentesCampo} urgente${urgentesCampo === 1 ? '' : 's'}</span>
+        </div>
+        <div style="max-height:min(620px,58vh);overflow-y:auto;padding-right:6px;display:flex;flex-direction:column;gap:8px">
+          ${eventos.length ? eventos.map(ev => {
+            const prioridade = getFieldOpsEventPriority(ev);
+            const pendente = isFieldOpsEventPending(ev);
+            const cardBg = !pendente ? 'var(--bg2)' : prioridade === 'urgente' ? 'var(--red-bg)' : prioridade === 'alerta' ? 'var(--orange-bg)' : 'var(--blue-bg)';
+            const borderColor = prioridade === 'urgente' ? 'rgba(220,38,38,.38)' : prioridade === 'alerta' ? 'rgba(234,88,12,.34)' : 'var(--border)';
+            const borderLeft = prioridade === 'urgente' ? '4px solid var(--red)' : prioridade === 'alerta' ? '4px solid var(--orange)' : '1px solid var(--border)';
+            const priorityChip = prioridade === 'urgente'
+              ? '<span class="chip chip-red">URGENTE</span>'
+              : prioridade === 'alerta'
+                ? '<span class="chip chip-orange">Alerta</span>'
+                : '';
+            return `
+            <div style="padding:10px;border:1px solid ${borderColor};border-left:${borderLeft};border-radius:var(--r2);background:${cardBg}">
               <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
                 <div>
-                  <div style="font-weight:800;font-size:12px;color:var(--text)">${sanitize(ev.titulo || ev.tipo || 'Evento')}</div>
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <div style="font-weight:800;font-size:12px;color:var(--text)">${sanitize(ev.titulo || ev.tipo || 'Evento')}</div>
+                    ${priorityChip}
+                  </div>
                   <div style="font-size:11px;color:var(--text2);margin-top:2px">${sanitize(ev.tecnico || ev.equipe || 'Equipe')} · ${fmtPortalDateTime(ev.created_at)}</div>
                 </div>
-                ${ev.visto ? '<span class="chip chip-gray">Visto</span>' : `<button class="btn btn-ghost btn-xs" onclick="marcarEventoCampoVisto(${jsArg(ev.id)})">Marcar visto</button>`}
+                ${pendente ? `<button class="btn btn-ghost btn-xs" onclick="marcarEventoCampoVisto(${jsArg(ev.id)})">Marcar visto</button>` : '<span class="chip chip-gray">Visto</span>'}
               </div>
               ${ev.detalhes ? `<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.45">${sanitize(ev.detalhes)}</div>` : ''}
               ${ev.lat && ev.lng ? `<a href="https://maps.google.com/?q=${encodeURIComponent(`${ev.lat},${ev.lng}`)}" target="_blank" style="display:inline-flex;margin-top:6px;font-size:11px;color:var(--blue2);font-weight:700;text-decoration:none">Ver localização</a>` : ''}
             </div>
-          `).join('') : '<div class="text-muted" style="padding:10px">Sem notificações nesta data.</div>'}
+          `}).join('') : '<div class="text-muted" style="padding:10px">Sem notificações nesta data.</div>'}
         </div>
       </div>
       <div class="card" style="padding:14px">
@@ -12383,9 +12441,15 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
 
 async function marcarEventoCampoVisto(id) {
   try {
-    const { error } = await supabaseClient.from('technician_events').update({ visto:true }).eq('id', id);
-    if (error) throw error;
-    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, visto:true } : ev);
+    const vistoEm = new Date().toISOString();
+    const payload = { visto:true, status:'visto', visto_em:vistoEm };
+    const result = await supabaseClient.from('technician_events').update(payload).eq('id', id);
+    if (result.error) {
+      if (!isFieldOpsSchemaColumnMissing(result.error)) throw result.error;
+      const fallback = await supabaseClient.from('technician_events').update({ visto:true }).eq('id', id);
+      if (fallback.error) throw fallback.error;
+    }
+    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, visto:true, status:'visto', visto_em:vistoEm } : ev);
     renderFieldOpsPanel();
   } catch(e) { toast('Erro ao marcar evento como visto', 'err'); }
 }
