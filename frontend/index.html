@@ -12409,7 +12409,7 @@ function buildFieldOpsWhatsappMessage(ev = {}) {
   return lines.filter(line => line !== '').join('\n');
 }
 
-function abrirFieldOpsWhatsapp(id) {
+async function abrirFieldOpsWhatsapp(id) {
   const ev = (technicianEvents || []).find(item => String(item.id) === String(id));
   if (!ev) { toast('Aviso não encontrado para WhatsApp', 'err'); return; }
   const suporte = typeof rotSuporteWhatsApp === 'function' ? rotSuporteWhatsApp() : '';
@@ -12420,6 +12420,30 @@ function abrirFieldOpsWhatsapp(id) {
     ? `https://wa.me/${target}?text=${encodeURIComponent(message)}`
     : `https://wa.me/?text=${encodeURIComponent(message)}`;
   window.open(url, '_blank');
+  await registrarFieldOpsWhatsappAberto(id, target);
+}
+
+async function registrarFieldOpsWhatsappAberto(id, target = '') {
+  const escaladoEm = new Date().toISOString();
+  const payload = {
+    whatsapp_escalado_em: escaladoEm,
+    whatsapp_escalado_para: target || null,
+    whatsapp_escalado_status: 'manual_aberto',
+    whatsapp_escalado_erro: null
+  };
+  try {
+    const { error } = await supabaseClient.from('technician_events').update(payload).eq('id', id);
+    if (error) throw error;
+    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, ...payload } : ev);
+    renderFieldOpsPanel();
+    toast('Escalonamento WhatsApp registrado', 'ok');
+  } catch(e) {
+    if (isFieldOpsSchemaColumnMissing(e)) {
+      toast('WhatsApp aberto, mas campos de escalonamento ainda não existem no banco.', 'warn');
+      return;
+    }
+    toast('WhatsApp aberto, mas não foi possível registrar o escalonamento.', 'warn');
+  }
 }
 
 function persistFieldOpsAlertedEventIds() {
