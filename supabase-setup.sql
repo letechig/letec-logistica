@@ -539,6 +539,35 @@ CREATE INDEX IF NOT EXISTS idx_data_reviews_customer_id ON data_reviews(customer
 CREATE INDEX IF NOT EXISTS idx_data_reviews_tipo ON data_reviews(tipo_problema);
 CREATE INDEX IF NOT EXISTS idx_data_reviews_status ON data_reviews(status_revisao);
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS customer_reminders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_id TEXT NOT NULL,
+  customer_id TEXT,
+  tipo TEXT NOT NULL,
+  canal TEXT NOT NULL DEFAULT 'whatsapp_manual',
+  status TEXT NOT NULL DEFAULT 'pendente',
+  destino TEXT,
+  mensagem TEXT,
+  aberto_em TIMESTAMP WITH TIME ZONE,
+  enviado_em TIMESTAMP WITH TIME ZONE,
+  erro TEXT,
+  operador TEXT,
+  origem_contato TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reminders_unique_service_tipo_canal
+  ON customer_reminders(service_id, tipo, canal);
+CREATE INDEX IF NOT EXISTS idx_customer_reminders_service_id ON customer_reminders(service_id);
+CREATE INDEX IF NOT EXISTS idx_customer_reminders_customer_id ON customer_reminders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_reminders_status ON customer_reminders(status);
+CREATE INDEX IF NOT EXISTS idx_customer_reminders_tipo ON customer_reminders(tipo);
+CREATE INDEX IF NOT EXISTS idx_customer_reminders_created_at ON customer_reminders(created_at);
+
 -- Migração: atualizar registros existentes com valores padrão
 UPDATE customers SET categoria = 'eventual' WHERE categoria IS NULL;
 UPDATE customers SET tipo = 'PF' WHERE tipo IS NULL OR tipo = '';

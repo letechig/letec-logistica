@@ -2985,6 +2985,8 @@ async function carregarVeiculos(){
         <div id="rot-sugestao-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px"></div>
       </div>
 
+      <div id="customer-reminders-panel" style="display:none;margin-bottom:20px"></div>
+
       <!-- Cards por equipe -->
       <div id="rot-equipes-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;margin-bottom:24px"></div>
 
@@ -6335,6 +6337,8 @@ let fieldOpsPollingInFlight = false;
 let inventoryProducts = [];
 let inventoryMovements = [];
 let inventorySchemaReady = true;
+let customerReminders = [];
+let customerRemindersSchemaReady = true;
 let inventoryModalMode = null;
 let inventoryEditingProductId = null;
 let inventoryProductFilter = 'todos';
@@ -12201,6 +12205,291 @@ Acesse o Portal do Técnico para registrar chegada, início, finalização e che
 ${portalLink}`;
 }
 
+function normalizeReminderText(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function normalizarTelefoneWhatsApp(numero) {
+  const digits = String(numero || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55')) {
+    const local = digits.slice(2);
+    return local.length === 10 || local.length === 11 ? digits : '';
+  }
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return '';
+}
+
+function reminderTodayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function reminderShiftDateKey(dateKey, days) {
+  const d = new Date(`${dateKey}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function reminderFmtDate(dateKey) {
+  if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return dateKey || 'data prevista';
+  const [y, m, d] = dateKey.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function reminderServiceId(service = {}) {
+  return String(service.id ?? `${getServiceDateValue(service)}|${service.cliente || service.cl || ''}|${service.horario || service.hr || ''}`);
+}
+
+function reminderKey(serviceId, tipo, canal = 'whatsapp_manual') {
+  return `${serviceId}||${tipo}||${canal}`;
+}
+
+function remindersByKey() {
+  const map = new Map();
+  (customerReminders || []).forEach(item => map.set(reminderKey(String(item.service_id), item.tipo, item.canal || 'whatsapp_manual'), item));
+  return map;
+}
+
+async function carregarClientesParaLembretes() {
+  if (Array.isArray(clientesData) && clientesData.length) return clientesData;
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers?include_inactive=true`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    clientesData = await response.json();
+  } catch(e) {
+    console.warn('Clientes indisponíveis para lembretes:', e.message || e);
+    clientesData = [];
+  }
+  return clientesData;
+}
+
+async function carregarCustomerReminders(serviceIds = []) {
+  if (!serviceIds.length) { customerReminders = []; return []; }
+  try {
+    const { data, error } = await supabaseClient
+      .from('customer_reminders')
+      .select('*')
+      .in('service_id', serviceIds.map(String));
+    if (error) throw error;
+    customerReminders = data || [];
+    customerRemindersSchemaReady = true;
+  } catch(e) {
+    console.warn('Lembretes de clientes indisponíveis:', e.message || e);
+    customerReminders = [];
+    customerRemindersSchemaReady = false;
+  }
+  return customerReminders;
+}
+
+function resolverClienteParaLembrete(service = {}) {
+  const customers = Array.isArray(clientesData) ? clientesData : [];
+  const explicitId = service.customer_id || service.cliente_id || service.clienteId || service.client_id;
+  if (explicitId) {
+    const byId = customers.find(c => String(c.id) === String(explicitId));
+    if (byId) return { customer: byId, status: 'ok', origem: 'id' };
+    return { customer: null, status: 'nao_encontrado', origem: 'id' };
+  }
+  const serviceName = normalizeReminderText(service.cliente || service.cl || '');
+  if (!serviceName) return { customer: null, status: 'nao_encontrado', origem: 'sem_nome' };
+  const matches = customers.filter(c => {
+    const norm = normalizeReminderText(c.nome_normalizado || c.nome);
+    return norm && norm === serviceName;
+  });
+  if (matches.length === 1) return { customer: matches[0], status: 'ok', origem: 'nome_exato' };
+  if (matches.length > 1) return { customer: null, status: 'ambiguo', origem: 'nome_exato' };
+  return { customer: null, status: 'nao_encontrado', origem: 'nome_exato' };
+}
+
+function resolverContatoLembrete(customer) {
+  if (!customer) return { numero: '', origem: 'sem_contato', label: 'sem WhatsApp válido' };
+  const whats = normalizarTelefoneWhatsApp(customer.whatsapp);
+  if (whats) return { numero: whats, origem: 'customer_whatsapp', label: `+${whats}` };
+  const tel = normalizarTelefoneWhatsApp(customer.telefone);
+  if (tel) return { numero: tel, origem: 'customer_telefone', label: `+${tel}` };
+  return { numero: '', origem: 'sem_contato', label: 'sem WhatsApp válido' };
+}
+
+function reminderTipoLabel(tipo) {
+  const labels = {
+    dia_anterior: 'Dia anterior',
+    dia_do_atendimento: 'Dia do atendimento',
+    equipe_a_caminho: 'Equipe a caminho'
+  };
+  return labels[tipo] || tipo;
+}
+
+function montarMensagemLembrete(service, tipo, equipeLabel = '') {
+  const F = sf(service);
+  const cliente = F.cliente || 'cliente';
+  const data = reminderFmtDate(getServiceDateValue(service));
+  const horario = F.horario && F.horario !== '—' ? F.horario : '';
+  const servico = F.tipo || F.tipoLabel || 'Atendimento';
+  const endereco = F.endereco || 'Endereço cadastrado';
+  const equipe = equipeLabel || F.equipe || 'Equipe Letec';
+  if (tipo === 'dia_anterior') {
+    const quando = horario ? `amanhã, ${data}, às ${horario}` : `amanhã, ${data}`;
+    return `Olá, ${cliente}. Tudo bem?\n\nPassando para lembrar que seu atendimento com a Letec está agendado para ${quando}.\n\nServiço: ${servico}\nEndereço: ${endereco}\n\nQualquer dúvida ou ajuste, estamos à disposição.`;
+  }
+  if (tipo === 'equipe_a_caminho') {
+    return `Olá, ${cliente}. Nossa equipe está a caminho do seu atendimento.\n\nEquipe: ${equipe}\n\nAté breve.`;
+  }
+  const quando = horario ? `hoje, às ${horario}` : 'hoje';
+  return `Olá, ${cliente}. Tudo bem?\n\nSeu atendimento com a Letec está previsto para ${quando}.\n\nServiço: ${servico}\nEquipe responsável: ${equipe}\n\nEm caso de dúvida, estamos à disposição.`;
+}
+
+function gerarLembretesElegiveis(servicos = [], data = '') {
+  const today = reminderTodayKey();
+  const tomorrow = reminderShiftDateKey(today, 1);
+  const out = [];
+  (servicos || []).forEach(service => {
+    const status = String(service.status || service.st || '').toLowerCase();
+    if (status === 'cancelado') return;
+    const serviceDate = getServiceDateValue(service);
+    const serviceId = reminderServiceId(service);
+    const equipe = service.equipe || service.eq || getEquipeTexto(service) || 'Equipe Letec';
+    if (serviceDate === tomorrow) out.push({ service, serviceId, tipo: 'dia_anterior', equipe });
+    if (serviceDate === today) {
+      out.push({ service, serviceId, tipo: 'dia_do_atendimento', equipe });
+      if (equipe && equipe !== '—') out.push({ service, serviceId, tipo: 'equipe_a_caminho', equipe });
+    }
+  });
+  return out.filter(item => !data || getServiceDateValue(item.service) === data);
+}
+
+function montarDadosLembretes(servicos = [], data = '') {
+  const existing = remindersByKey();
+  return gerarLembretesElegiveis(servicos, data).map(item => {
+    const clienteInfo = resolverClienteParaLembrete(item.service);
+    const contato = resolverContatoLembrete(clienteInfo.customer);
+    const mensagem = montarMensagemLembrete(item.service, item.tipo, item.equipe);
+    const lembrete = existing.get(reminderKey(item.serviceId, item.tipo));
+    return { ...item, clienteInfo, contato, mensagem, lembrete };
+  });
+}
+
+function reminderStatusChip(item) {
+  const status = item?.lembrete?.status || 'pendente';
+  if (status === 'manual_aberto') return '<span class="chip chip-blue">WhatsApp aberto</span>';
+  if (status === 'enviado') return '<span class="chip chip-green">Enviado</span>';
+  if (status === 'cancelado') return '<span class="chip chip-gray">Cancelado</span>';
+  if (status === 'erro') return '<span class="chip chip-red">Erro</span>';
+  return '<span class="chip chip-orange">Pendente</span>';
+}
+
+function renderCustomerRemindersPanel(servicos = [], data = '') {
+  const el = document.getElementById('customer-reminders-panel');
+  if (!el) return;
+  const items = montarDadosLembretes(servicos, data);
+  if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const semContato = items.filter(item => !item.contato.numero).length;
+  const abertos = items.filter(item => ['manual_aberto','enviado'].includes(item.lembrete?.status)).length;
+  el.style.display = '';
+  el.innerHTML = `<div class="card" style="padding:14px">
+    <div class="flex ic sb mb2" style="gap:10px;align-items:flex-start">
+      <div>
+        <div class="card-label">Lembretes para clientes</div>
+        <div class="section-sub" style="font-size:11px">Mensagens manuais e rastreáveis. Abrir WhatsApp não confirma envio.</div>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
+        <span class="chip chip-blue">${items.length} elegível${items.length === 1 ? '' : 'is'}</span>
+        <span class="chip ${semContato ? 'chip-orange' : 'chip-gray'}">${semContato} sem WhatsApp</span>
+        <span class="chip ${abertos ? 'chip-green' : 'chip-gray'}">${abertos} aberto${abertos === 1 ? '' : 's'}</span>
+      </div>
+    </div>
+    ${customerRemindersSchemaReady ? '' : '<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(234,88,12,.25);border-radius:var(--r2);background:var(--orange-bg);color:var(--orange);font-size:11px;font-weight:700">Migração customer_reminders pendente: mensagens abrem/copiam, mas não registram no banco.</div>'}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
+      ${items.map((item, idx) => {
+        const F = sf(item.service);
+        const clienteWarn = item.clienteInfo.status === 'ambiguo' ? '<span class="chip chip-orange">cliente ambíguo</span>' : item.clienteInfo.status === 'ok' ? '' : '<span class="chip chip-gray">cliente não localizado</span>';
+        const contatoChip = item.contato.numero ? `<span class="chip chip-green">${sanitize(item.contato.label)}</span>` : '<span class="chip chip-orange">sem WhatsApp válido</span>';
+        return `<div style="border:1px solid var(--border);border-radius:var(--r2);background:var(--bg2);padding:10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div>
+              <div style="font-weight:800;font-size:12px;color:var(--text)">${sanitize(F.cliente)}</div>
+              <div style="font-size:10px;color:var(--text2);margin-top:2px">${reminderTipoLabel(item.tipo)} · ${sanitize(F.horario || 'sem horário')} · ${sanitize(F.equipe || item.equipe || 'Equipe Letec')}</div>
+            </div>
+            ${reminderStatusChip(item)}
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">${contatoChip}${clienteWarn}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">${sanitize(F.tipo || F.tipoLabel || 'Atendimento')} · ${sanitize(F.endereco || 'Endereço não informado')}</div>
+          <textarea id="cust-rem-msg-${idx}" readonly style="margin-top:8px;width:100%;min-height:88px;resize:vertical;background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:8px;color:var(--text2);font-size:10px;line-height:1.45">${sanitize(item.mensagem)}</textarea>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">
+            ${item.contato.numero && item.lembrete?.status !== 'enviado' ? `<button class="btn btn-green btn-xs" onclick="abrirCustomerReminderWhatsApp(${idx})">Abrir WhatsApp</button>` : ''}
+            <button class="btn btn-ghost btn-xs" onclick="copiarCustomerReminderTexto(${idx})">Copiar texto</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+  window._customerReminderRenderItems = items;
+}
+
+async function registrarCustomerReminderManualAberto(item) {
+  if (!item) return null;
+  if (!customerRemindersSchemaReady) {
+    toast('WhatsApp aberto, mas a tabela customer_reminders ainda não está disponível.', 'warn');
+    return null;
+  }
+  const now = new Date().toISOString();
+  const payload = {
+    service_id: item.serviceId,
+    customer_id: item.clienteInfo.customer?.id ? String(item.clienteInfo.customer.id) : null,
+    tipo: item.tipo,
+    canal: 'whatsapp_manual',
+    status: 'manual_aberto',
+    destino: item.contato.numero || null,
+    mensagem: item.mensagem,
+    aberto_em: now,
+    erro: null,
+    origem_contato: item.contato.origem,
+    metadata: {
+      cliente: item.service.cliente || item.service.cl || '',
+      data: getServiceDateValue(item.service),
+      horario: item.service.horario || item.service.hr || '',
+      equipe: item.equipe || ''
+    },
+    updated_at: now
+  };
+  try {
+    const { data, error } = await supabaseClient
+      .from('customer_reminders')
+      .upsert(payload, { onConflict: 'service_id,tipo,canal' })
+      .select();
+    if (error) throw error;
+    const saved = data?.[0] || payload;
+    const key = reminderKey(item.serviceId, item.tipo);
+    customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'whatsapp_manual') !== key), saved];
+    return saved;
+  } catch(e) {
+    console.warn('Falha ao registrar lembrete:', e.message || e);
+    customerRemindersSchemaReady = false;
+    toast('WhatsApp aberto, mas o lembrete não foi registrado no banco.', 'warn');
+    return null;
+  }
+}
+
+async function abrirCustomerReminderWhatsApp(index) {
+  const item = window._customerReminderRenderItems?.[index];
+  if (!item) return;
+  if (!item.contato.numero) { toast('Cliente sem WhatsApp válido. Copie o texto manualmente.', 'warn'); return; }
+  window.open(`https://wa.me/${item.contato.numero}?text=${encodeURIComponent(item.mensagem)}`, '_blank');
+  await registrarCustomerReminderManualAberto(item);
+  toast('WhatsApp aberto. Confirme manualmente se a mensagem foi enviada.', 'warn');
+  renderCustomerRemindersPanel(services, document.getElementById('rot-data')?.value || '');
+}
+
+function copiarCustomerReminderTexto(index) {
+  const item = window._customerReminderRenderItems?.[index];
+  if (!item) return;
+  navigator.clipboard.writeText(item.mensagem)
+    .then(() => toast('Texto do lembrete copiado', 'ok'))
+    .catch(() => toast('Erro ao copiar lembrete', 'err'));
+}
+
 // ─── Gerar Roteiro do sistema ────────────────
 async function rotGerarDoSistema() {
   const data = document.getElementById('rot-data')?.value;
@@ -12216,8 +12505,12 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-empty').innerHTML = 'Nenhum serviço encontrado para esta data.';
       document.getElementById('rot-sugestao-grid').innerHTML = '';
       document.getElementById('rot-equipes-grid').innerHTML = '';
+      renderCustomerRemindersPanel([], data);
       return;
     }
+
+    await carregarClientesParaLembretes();
+    await carregarCustomerReminders(daySvcs.map(reminderServiceId));
 
     const daySvcsRoteiraveis = daySvcs.filter(serviceTemEquipe);
     if (!daySvcsRoteiraveis.length) {
@@ -12229,6 +12522,7 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-empty').innerHTML = 'Há serviço(s) na data, mas nenhum possui técnico/equipe definido para roteiro confirmado.';
       document.getElementById('rot-sugestao-grid').innerHTML = '';
       document.getElementById('rot-equipes-grid').innerHTML = '';
+      renderCustomerRemindersPanel(daySvcs, data);
       return;
     }
 
@@ -12294,6 +12588,7 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-kpi-km').textContent       = `${kmTotal} km`;
 
     rotRenderizarSugestoes(rotDados);
+    renderCustomerRemindersPanel(daySvcs, data);
     rotRenderizarLocal(rotDados, data);
   } catch (e) {
     console.error('Erro ao gerar roteiro do dia:', e);
@@ -12304,6 +12599,7 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-empty').style.display = 'block';
     document.getElementById('rot-sugestao-grid').innerHTML = '';
     document.getElementById('rot-equipes-grid').innerHTML = '';
+    renderCustomerRemindersPanel([], data);
     toast(`Erro ao gerar roteiro: ${e.message || e}`, 'err');
   }
 }
