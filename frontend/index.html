@@ -6317,6 +6317,7 @@ let technicianMessages = [];
 let fieldOpsSchemaReady = true;
 const FIELD_OPS_SOUND_PREF_KEY = 'letec_field_ops_sound_enabled';
 const FIELD_OPS_ALERTED_IDS_KEY = 'letec_field_ops_alerted_ids';
+const FIELD_OPS_POLL_INTERVAL_MS = 15000;
 let fieldOpsSoundEnabled = (() => {
   try { return localStorage.getItem(FIELD_OPS_SOUND_PREF_KEY) === '1'; }
   catch(e) { return false; }
@@ -6329,6 +6330,7 @@ let fieldOpsAlertedEventIds = (() => {
   } catch(e) { return new Set(); }
 })();
 let fieldOpsAudioContext = null;
+let fieldOpsPollingInFlight = false;
 let inventoryProducts = [];
 let inventoryMovements = [];
 let inventorySchemaReady = true;
@@ -7594,6 +7596,19 @@ async function carregarRecadosTecnicosDoSupabase() {
     fieldOpsSchemaReady = false;
     technicianMessages = [];
     if (typeof renderFieldOpsPanel === 'function' && currentPage === 'hoje') renderFieldOpsPanel();
+  }
+}
+
+async function pollFieldOpsUpdates() {
+  if (currentPage !== 'hoje' || fieldOpsPollingInFlight) return;
+  fieldOpsPollingInFlight = true;
+  try {
+    await Promise.all([
+      carregarEventosCampoDoSupabase(),
+      carregarRecadosTecnicosDoSupabase()
+    ]);
+  } finally {
+    fieldOpsPollingInFlight = false;
   }
 }
 
@@ -14323,12 +14338,7 @@ window.addEventListener('load', async () => {
     await carregarRecadosTecnicosDoSupabase();
     await carregarEstoqueDoSupabase();
     if (!window._fieldOpsPolling) {
-      window._fieldOpsPolling = setInterval(() => {
-        if (currentPage === 'hoje') {
-          carregarEventosCampoDoSupabase();
-          carregarRecadosTecnicosDoSupabase();
-        }
-      }, 60000);
+      window._fieldOpsPolling = setInterval(pollFieldOpsUpdates, FIELD_OPS_POLL_INTERVAL_MS);
     }
 });
 </script>
