@@ -12420,6 +12420,9 @@ function renderCustomerRemindersPanel(servicos = [], data = '') {
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">
             ${item.contato.numero && item.lembrete?.status !== 'enviado' ? `<button class="btn btn-green btn-xs" onclick="abrirCustomerReminderWhatsApp(${idx})">Abrir WhatsApp</button>` : ''}
             <button class="btn btn-ghost btn-xs" onclick="copiarCustomerReminderTexto(${idx})">Copiar texto</button>
+            ${item.lembrete?.status !== 'enviado' ? `<button class="btn btn-ghost btn-xs" onclick="atualizarCustomerReminderStatus(${idx}, 'enviado')">Marcar enviado</button>` : ''}
+            ${!['cancelado','enviado'].includes(item.lembrete?.status) ? `<button class="btn btn-ghost btn-xs" onclick="atualizarCustomerReminderStatus(${idx}, 'cancelado')">Cancelar</button>` : ''}
+            ${item.lembrete?.status !== 'erro' && item.lembrete?.status !== 'enviado' ? `<button class="btn btn-ghost btn-xs" onclick="atualizarCustomerReminderStatus(${idx}, 'erro')">Marcar erro</button>` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -12470,6 +12473,69 @@ async function registrarCustomerReminderManualAberto(item) {
     toast('WhatsApp aberto, mas o lembrete não foi registrado no banco.', 'warn');
     return null;
   }
+}
+
+async function upsertCustomerReminderStatus(item, status, extra = {}) {
+  if (!item) return null;
+  if (!customerRemindersSchemaReady) {
+    toast('Tabela customer_reminders ainda não está disponível.', 'warn');
+    return null;
+  }
+  const now = new Date().toISOString();
+  const payload = {
+    service_id: item.serviceId,
+    customer_id: item.clienteInfo.customer?.id ? String(item.clienteInfo.customer.id) : null,
+    tipo: item.tipo,
+    canal: 'whatsapp_manual',
+    status,
+    destino: item.contato.numero || null,
+    mensagem: item.mensagem,
+    origem_contato: item.contato.origem,
+    metadata: {
+      cliente: item.service.cliente || item.service.cl || '',
+      data: getServiceDateValue(item.service),
+      horario: item.service.horario || item.service.hr || '',
+      equipe: item.equipe || ''
+    },
+    updated_at: now,
+    ...extra
+  };
+  try {
+    const { data, error } = await supabaseClient
+      .from('customer_reminders')
+      .upsert(payload, { onConflict: 'service_id,tipo,canal' })
+      .select();
+    if (error) throw error;
+    const saved = data?.[0] || payload;
+    const key = reminderKey(item.serviceId, item.tipo);
+    customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'whatsapp_manual') !== key), saved];
+    return saved;
+  } catch(e) {
+    console.warn('Falha ao atualizar lembrete:', e.message || e);
+    toast('Não foi possível atualizar o status do lembrete.', 'err');
+    return null;
+  }
+}
+
+async function atualizarCustomerReminderStatus(index, status) {
+  const item = window._customerReminderRenderItems?.[index];
+  if (!item) return;
+  const now = new Date().toISOString();
+  const extra = {};
+  if (status === 'enviado') {
+    extra.enviado_em = now;
+    extra.erro = null;
+  } else if (status === 'cancelado') {
+    extra.erro = null;
+  } else if (status === 'erro') {
+    const motivo = window.prompt('Descreva o erro do lembrete, se houver:', item.lembrete?.erro || '');
+    extra.erro = motivo === null ? (item.lembrete?.erro || 'Erro marcado manualmente') : (motivo.trim() || 'Erro marcado manualmente');
+  }
+  const saved = await upsertCustomerReminderStatus(item, status, extra);
+  if (!saved) return;
+  const labels = { enviado:'Lembrete marcado como enviado', cancelado:'Lembrete cancelado', erro:'Lembrete marcado com erro' };
+  toast(labels[status] || 'Lembrete atualizado', status === 'erro' ? 'warn' : 'ok');
+  renderCustomerRemindersPanel(services, document.getElementById('rot-data')?.value || '');
 }
 
 async function abrirCustomerReminderWhatsApp(index) {
