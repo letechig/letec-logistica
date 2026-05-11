@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "import:clients": "node scripts/import-client-base.js",
     "audit:frontend": "node scripts/audit-frontend.js",
-    "test": "node --test test/logistics-*.test.js",
+    "test": "node --test test/*.test.js",
     "audit": "npm audit"
   },
   "keywords": [

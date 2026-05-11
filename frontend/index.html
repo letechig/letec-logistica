@@ -6339,6 +6339,7 @@ let inventoryMovements = [];
 let inventorySchemaReady = true;
 let customerReminders = [];
 let customerRemindersSchemaReady = true;
+let evolutionStatus = { checked:false, configured:false, connected:false };
 let inventoryModalMode = null;
 let inventoryEditingProductId = null;
 let inventoryProductFilter = 'todos';
@@ -12244,13 +12245,13 @@ function reminderServiceId(service = {}) {
   return String(service.id ?? `${getServiceDateValue(service)}|${service.cliente || service.cl || ''}|${service.horario || service.hr || ''}`);
 }
 
-function reminderKey(serviceId, tipo, canal = 'whatsapp_manual') {
+function reminderKey(serviceId, tipo, canal = 'evolution_api') {
   return `${serviceId}||${tipo}||${canal}`;
 }
 
 function remindersByKey() {
   const map = new Map();
-  (customerReminders || []).forEach(item => map.set(reminderKey(String(item.service_id), item.tipo, item.canal || 'whatsapp_manual'), item));
+  (customerReminders || []).forEach(item => map.set(reminderKey(String(item.service_id), item.tipo, item.canal || 'evolution_api'), item));
   return map;
 }
 
@@ -12283,6 +12284,25 @@ async function carregarCustomerReminders(serviceIds = []) {
     customerRemindersSchemaReady = false;
   }
   return customerReminders;
+}
+
+async function carregarEvolutionStatus(force = false) {
+  if (evolutionStatus.checked && !force) return evolutionStatus;
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/evolution/status`, { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    evolutionStatus = {
+      checked: true,
+      configured: !!payload.configured,
+      connected: response.ok && !!payload.connected,
+      instance: payload.instance || '',
+      state: payload.state || '',
+      error: payload.error || ''
+    };
+  } catch(e) {
+    evolutionStatus = { checked:true, configured:false, connected:false, error:e.message || 'Evolution indisponível' };
+  }
+  return evolutionStatus;
 }
 
 function resolverClienteParaLembrete(service = {}) {
@@ -12374,10 +12394,22 @@ function montarDadosLembretes(servicos = [], data = '') {
 function reminderStatusChip(item) {
   const status = item?.lembrete?.status || 'pendente';
   if (status === 'manual_aberto') return '<span class="chip chip-blue">WhatsApp aberto</span>';
+  if (status === 'enviando') return '<span class="chip chip-blue">Enviando</span>';
   if (status === 'enviado') return '<span class="chip chip-green">Enviado</span>';
   if (status === 'cancelado') return '<span class="chip chip-gray">Cancelado</span>';
   if (status === 'erro') return '<span class="chip chip-red">Erro</span>';
   return '<span class="chip chip-orange">Pendente</span>';
+}
+
+function evolutionStatusAlertHtml() {
+  if (!evolutionStatus.checked) return '';
+  if (evolutionStatus.connected) {
+    return `<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(22,163,74,.25);border-radius:var(--r2);background:var(--green-bg);color:var(--green);font-size:11px;font-weight:700">Evolution API conectada${evolutionStatus.instance ? ` · instância ${sanitize(evolutionStatus.instance)}` : ''}</div>`;
+  }
+  const msg = evolutionStatus.configured
+    ? `Evolution configurada, mas instância desconectada${evolutionStatus.state ? ` (${sanitize(evolutionStatus.state)})` : ''}.`
+    : 'Evolution API ainda não configurada no backend.';
+  return `<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(234,88,12,.25);border-radius:var(--r2);background:var(--orange-bg);color:var(--orange);font-size:11px;font-weight:700">${msg} Use copiar texto como fallback.</div>`;
 }
 
 function renderCustomerRemindersPanel(servicos = [], data = '') {
@@ -12387,19 +12419,21 @@ function renderCustomerRemindersPanel(servicos = [], data = '') {
   if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const semContato = items.filter(item => !item.contato.numero).length;
   const abertos = items.filter(item => ['manual_aberto','enviado'].includes(item.lembrete?.status)).length;
+  const evolutionReady = evolutionStatus.connected;
   el.style.display = '';
   el.innerHTML = `<div class="card" style="padding:14px">
     <div class="flex ic sb mb2" style="gap:10px;align-items:flex-start">
       <div>
         <div class="card-label">Lembretes para clientes</div>
-        <div class="section-sub" style="font-size:11px">Mensagens manuais e rastreáveis. Abrir WhatsApp não confirma envio.</div>
+        <div class="section-sub" style="font-size:11px">Envio manual assistido pela Evolution API, com registro no Supabase.</div>
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
         <span class="chip chip-blue">${items.length} elegível${items.length === 1 ? '' : 'is'}</span>
         <span class="chip ${semContato ? 'chip-orange' : 'chip-gray'}">${semContato} sem WhatsApp</span>
-        <span class="chip ${abertos ? 'chip-green' : 'chip-gray'}">${abertos} aberto${abertos === 1 ? '' : 's'}</span>
+        <span class="chip ${abertos ? 'chip-green' : 'chip-gray'}">${abertos} enviado/aberto${abertos === 1 ? '' : 's'}</span>
       </div>
     </div>
+    ${evolutionStatusAlertHtml()}
     ${customerRemindersSchemaReady ? '' : '<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(234,88,12,.25);border-radius:var(--r2);background:var(--orange-bg);color:var(--orange);font-size:11px;font-weight:700">Migração customer_reminders pendente: mensagens abrem/copiam, mas não registram no banco.</div>'}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
       ${items.map((item, idx) => {
@@ -12418,7 +12452,7 @@ function renderCustomerRemindersPanel(servicos = [], data = '') {
           <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">${sanitize(F.tipo || F.tipoLabel || 'Atendimento')} · ${sanitize(F.endereco || 'Endereço não informado')}</div>
           <textarea id="cust-rem-msg-${idx}" readonly style="margin-top:8px;width:100%;min-height:88px;resize:vertical;background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:8px;color:var(--text2);font-size:10px;line-height:1.45">${sanitize(item.mensagem)}</textarea>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">
-            ${item.contato.numero && item.lembrete?.status !== 'enviado' ? `<button class="btn btn-green btn-xs" onclick="abrirCustomerReminderWhatsApp(${idx})">Abrir WhatsApp</button>` : ''}
+            ${item.contato.numero && item.lembrete?.status !== 'enviado' ? `<button class="btn btn-green btn-xs" ${evolutionReady ? '' : 'disabled'} onclick="enviarCustomerReminderEvolution(${idx})">Enviar via Evolution</button>` : ''}
             <button class="btn btn-ghost btn-xs" onclick="copiarCustomerReminderTexto(${idx})">Copiar texto</button>
             ${item.lembrete?.status !== 'enviado' ? `<button class="btn btn-ghost btn-xs" onclick="atualizarCustomerReminderStatus(${idx}, 'enviado')">Marcar enviado</button>` : ''}
             ${!['cancelado','enviado'].includes(item.lembrete?.status) ? `<button class="btn btn-ghost btn-xs" onclick="atualizarCustomerReminderStatus(${idx}, 'cancelado')">Cancelar</button>` : ''}
@@ -12442,7 +12476,7 @@ async function registrarCustomerReminderManualAberto(item) {
     service_id: item.serviceId,
     customer_id: item.clienteInfo.customer?.id ? String(item.clienteInfo.customer.id) : null,
     tipo: item.tipo,
-    canal: 'whatsapp_manual',
+    canal: 'evolution_api',
     status: 'manual_aberto',
     destino: item.contato.numero || null,
     mensagem: item.mensagem,
@@ -12465,7 +12499,7 @@ async function registrarCustomerReminderManualAberto(item) {
     if (error) throw error;
     const saved = data?.[0] || payload;
     const key = reminderKey(item.serviceId, item.tipo);
-    customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'whatsapp_manual') !== key), saved];
+    customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'evolution_api') !== key), saved];
     return saved;
   } catch(e) {
     console.warn('Falha ao registrar lembrete:', e.message || e);
@@ -12486,7 +12520,7 @@ async function upsertCustomerReminderStatus(item, status, extra = {}) {
     service_id: item.serviceId,
     customer_id: item.clienteInfo.customer?.id ? String(item.clienteInfo.customer.id) : null,
     tipo: item.tipo,
-    canal: 'whatsapp_manual',
+    canal: 'evolution_api',
     status,
     destino: item.contato.numero || null,
     mensagem: item.mensagem,
@@ -12508,7 +12542,7 @@ async function upsertCustomerReminderStatus(item, status, extra = {}) {
     if (error) throw error;
     const saved = data?.[0] || payload;
     const key = reminderKey(item.serviceId, item.tipo);
-    customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'whatsapp_manual') !== key), saved];
+    customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'evolution_api') !== key), saved];
     return saved;
   } catch(e) {
     console.warn('Falha ao atualizar lembrete:', e.message || e);
@@ -12548,6 +12582,53 @@ async function abrirCustomerReminderWhatsApp(index) {
   renderCustomerRemindersPanel(services, document.getElementById('rot-data')?.value || '');
 }
 
+async function prepararCustomerReminderEvolution(item) {
+  if (!item || !customerRemindersSchemaReady) return item?.lembrete || null;
+  if (item.lembrete?.id) return item.lembrete;
+  return upsertCustomerReminderStatus(item, 'pendente');
+}
+
+async function enviarCustomerReminderEvolution(index) {
+  const item = window._customerReminderRenderItems?.[index];
+  if (!item) return;
+  if (!item.contato.numero) { toast('Cliente sem WhatsApp válido. Copie o texto manualmente.', 'warn'); return; }
+  const textarea = document.getElementById(`cust-rem-msg-${index}`);
+  const mensagem = String(textarea?.value || item.mensagem || '').trim();
+  if (!mensagem) { toast('Mensagem vazia', 'err'); return; }
+  const ok = window.confirm(`Enviar este lembrete via Evolution API para ${item.contato.label}?\n\n${mensagem}`);
+  if (!ok) return;
+
+  const status = await carregarEvolutionStatus(true);
+  if (!status.connected) {
+    toast('Evolution API desconectada. Use copiar texto como fallback.', 'warn');
+    renderCustomerRemindersPanel(services, document.getElementById('rot-data')?.value || '');
+    return;
+  }
+
+  const saved = await prepararCustomerReminderEvolution({ ...item, mensagem });
+  if (!saved?.id) {
+    toast('Não foi possível preparar o lembrete para envio.', 'err');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customer-reminders/${encodeURIComponent(saved.id)}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destino: item.contato.numero, mensagem })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || payload.erro || `HTTP ${response.status}`);
+    const key = reminderKey(item.serviceId, item.tipo);
+    customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'evolution_api') !== key), payload];
+    toast('Lembrete enviado via Evolution', 'ok');
+  } catch(e) {
+    toast('Falha ao enviar via Evolution: ' + (e.message || e), 'err');
+    await carregarCustomerReminders([item.serviceId]);
+  }
+  renderCustomerRemindersPanel(services, document.getElementById('rot-data')?.value || '');
+}
+
 function copiarCustomerReminderTexto(index) {
   const item = window._customerReminderRenderItems?.[index];
   if (!item) return;
@@ -12577,6 +12658,7 @@ async function rotGerarDoSistema() {
 
     await carregarClientesParaLembretes();
     await carregarCustomerReminders(daySvcs.map(reminderServiceId));
+    await carregarEvolutionStatus();
 
     const daySvcsRoteiraveis = daySvcs.filter(serviceTemEquipe);
     if (!daySvcsRoteiraveis.length) {

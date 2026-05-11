@@ -26,3 +26,71 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: EVOLUTION_API_URL
+        sync: false
+      - key: EVOLUTION_API_KEY
+        sync: false
+      - key: EVOLUTION_INSTANCE_NAME
+        value: letec
+      - key: EVOLUTION_SEND_DELAY_MS
+        value: 1200
+
+  - type: web
+    name: letec-evolution-api
+    env: docker
+    plan: starter
+    region: oregon
+    rootDir: evolution-api
+    healthCheckPath: /
+    autoDeploy: false
+    disk:
+      name: evolution-instances
+      mountPath: /evolution/instances
+      sizeGB: 1
+    envVars:
+      - key: SERVER_TYPE
+        value: http
+      - key: SERVER_PORT
+        value: 8080
+      - key: SERVER_URL
+        sync: false
+      - key: AUTHENTICATION_API_KEY
+        sync: false
+      - key: AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES
+        value: true
+      - key: DATABASE_ENABLED
+        value: true
+      - key: DATABASE_PROVIDER
+        value: postgresql
+      - key: DATABASE_CONNECTION_URI
+        sync: false
+      - key: DATABASE_CONNECTION_CLIENT_NAME
+        value: evolution_exchange
+      - key: DATABASE_SAVE_DATA_INSTANCE
+        value: true
+      - key: DATABASE_SAVE_DATA_NEW_MESSAGE
+        value: true
+      - key: DATABASE_SAVE_MESSAGE_UPDATE
+        value: true
+      - key: DATABASE_SAVE_DATA_CONTACTS
+        value: true
+      - key: DATABASE_SAVE_DATA_CHATS
+        value: true
+      - key: DATABASE_SAVE_DATA_LABELS
+        value: true
+      - key: DATABASE_SAVE_DATA_HISTORIC
+        value: true
+      - key: CACHE_REDIS_ENABLED
+        value: true
+      - key: CACHE_REDIS_URI
+        sync: false
+      - key: CACHE_REDIS_PREFIX_KEY
+        value: evolution
+      - key: CACHE_REDIS_SAVE_INSTANCES
+        value: false
+      - key: CACHE_LOCAL_ENABLED
+        value: false
+      - key: QRCODE_LIMIT
+        value: 30
+      - key: LANGUAGE
+        value: pt-BR

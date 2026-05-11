@@ -12,6 +12,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
+const EVOLUTION_SEND_DELAY_MS = Number(process.env.EVOLUTION_SEND_DELAY_MS || 1200);
 const CLIENT_IMPORT_WORKBOOK = process.env.CLIENT_IMPORT_WORKBOOK ||
   path.resolve(__dirname, '..', 'BASE_CLIENTES_TRATADA_LETEC (1).xlsx');
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
@@ -70,6 +71,17 @@ function buildMatrixUrl(origins, destinations) {
 
 function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeBrazilWhatsAppNumber(value) {
+  const digits = normalizePhone(value);
+  if (!digits) return '';
+  if (digits.startsWith('55')) {
+    const local = digits.slice(2);
+    return local.length === 10 || local.length === 11 ? digits : '';
+  }
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return '';
 }
 
 function normalizeEmail(value) {
@@ -388,6 +400,112 @@ app.locals.supabase = supabase;
 
 function getSupabaseClient() {
   return app.locals.supabase || supabase;
+}
+
+function getEvolutionConfig() {
+  const apiUrl = String(process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+  const apiKey = String(process.env.EVOLUTION_API_KEY || '');
+  const instance = String(process.env.EVOLUTION_INSTANCE_NAME || 'letec').trim();
+  return {
+    apiUrl,
+    apiKey,
+    instance,
+    configured: !!(apiUrl && apiKey && instance)
+  };
+}
+
+async function evolutionFetch(pathname, options = {}) {
+  const fetchImpl = app.locals.evolutionFetch || fetch;
+  const config = getEvolutionConfig();
+  if (!config.configured) {
+    const error = new Error('Evolution API nao configurada');
+    error.status = 503;
+    throw error;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(`${config.apiUrl}${pathname}`, {
+      ...options,
+      signal: options.signal || controller.signal,
+      headers: {
+        Accept: 'application/json',
+        apikey: config.apiKey,
+        ...(options.headers || {})
+      }
+    });
+    const text = await response.text();
+    let payload = {};
+    if (text) {
+      try { payload = JSON.parse(text); }
+      catch(e) { payload = { raw: text }; }
+    }
+    if (!response.ok) {
+      const error = new Error(payload.error || payload.message || `Evolution API HTTP ${response.status}`);
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractEvolutionMessageId(payload = {}) {
+  return payload.key?.id
+    || payload.message?.key?.id
+    || payload.instance?.messageId
+    || null;
+}
+
+async function sendEvolutionText({ number, text }) {
+  const config = getEvolutionConfig();
+  const normalized = normalizeBrazilWhatsAppNumber(number);
+  if (!normalized) {
+    const error = new Error('Numero de WhatsApp invalido. Use DDD + numero ou 55 + DDD + numero.');
+    error.status = 400;
+    throw error;
+  }
+  const cleanText = String(text || '').trim();
+  if (!cleanText) {
+    const error = new Error('Mensagem obrigatoria');
+    error.status = 400;
+    throw error;
+  }
+
+  const payload = await evolutionFetch(`/message/sendText/${encodeURIComponent(config.instance)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      number: normalized,
+      text: cleanText,
+      delay: EVOLUTION_SEND_DELAY_MS,
+      linkPreview: false
+    })
+  });
+
+  return {
+    number: normalized,
+    provider: 'evolution_api',
+    providerMessageId: extractEvolutionMessageId(payload),
+    providerStatus: payload.status || payload.instance?.state || 'sent',
+    providerResponse: payload
+  };
+}
+
+async function markCustomerReminderSendAttempt(db, id, payload) {
+  const builder = db
+    .from('customer_reminders')
+    .update(payload)
+    .eq('id', id)
+    .select();
+  const { data, error } = typeof builder.maybeSingle === 'function'
+    ? await builder.maybeSingle()
+    : await builder;
+  if (error) throw error;
+  return Array.isArray(data) ? (data[0] || null) : (data || null);
 }
 
 function createDistanceClient() {
@@ -1354,6 +1472,130 @@ app.get('/api/customer-service-history', async (req, res) => {
   } catch (error) {
     console.error('[GET /api/customer-service-history] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar historico importado' });
+  }
+});
+
+app.get('/api/evolution/status', async (req, res) => {
+  const config = getEvolutionConfig();
+  if (!config.configured) {
+    return res.status(503).json({
+      configured: false,
+      connected: false,
+      instance: config.instance || null,
+      error: 'Evolution API nao configurada'
+    });
+  }
+
+  try {
+    const payload = await evolutionFetch(`/instance/connectionState/${encodeURIComponent(config.instance)}`);
+    const state = payload.instance?.state || payload.state || payload.status || '';
+    res.json({
+      configured: true,
+      connected: String(state).toLowerCase() === 'open',
+      instance: config.instance,
+      state,
+      details: payload
+    });
+  } catch (error) {
+    res.status(error.status === 404 ? 404 : 502).json({
+      configured: true,
+      connected: false,
+      instance: config.instance,
+      error: error.message,
+      details: error.payload || null
+    });
+  }
+});
+
+app.post('/api/customer-reminders/:id/send', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  const { id } = req.params;
+  const now = new Date().toISOString();
+
+  try {
+    const reminderQuery = db
+      .from('customer_reminders')
+      .select('*')
+      .eq('id', id);
+    const { data: rawData, error } = typeof reminderQuery.maybeSingle === 'function'
+      ? await reminderQuery.maybeSingle()
+      : await reminderQuery;
+    const data = Array.isArray(rawData) ? rawData[0] : rawData;
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Lembrete nao encontrado' });
+
+    const number = normalizeBrazilWhatsAppNumber(req.body?.destino || data.destino);
+    if (!number) {
+      return res.status(400).json({ error: 'Lembrete sem WhatsApp valido' });
+    }
+
+    const text = String(req.body?.mensagem || data.mensagem || '').trim();
+    if (!text) {
+      return res.status(400).json({ error: 'Lembrete sem mensagem' });
+    }
+
+    await markCustomerReminderSendAttempt(db, id, {
+      canal: 'evolution_api',
+      status: 'enviando',
+      destino: number,
+      mensagem: text,
+      provider: 'evolution_api',
+      erro: null,
+      updated_at: now,
+      tentativas: Number(data.tentativas || 0) + 1
+    });
+
+    try {
+      const result = await sendEvolutionText({ number, text });
+      const saved = await markCustomerReminderSendAttempt(db, id, {
+        canal: 'evolution_api',
+        status: 'enviado',
+        destino: result.number,
+        mensagem: text,
+        provider: result.provider,
+        provider_message_id: result.providerMessageId,
+        provider_status: result.providerStatus,
+        provider_response: result.providerResponse,
+        enviado_em: new Date().toISOString(),
+        erro: null,
+        updated_at: new Date().toISOString()
+      });
+      return res.json(saved || {
+        ...data,
+        status: 'enviado',
+        canal: 'evolution_api',
+        destino: result.number,
+        provider: result.provider,
+        provider_message_id: result.providerMessageId,
+        provider_status: result.providerStatus,
+        provider_response: result.providerResponse
+      });
+    } catch (sendError) {
+      const saved = await markCustomerReminderSendAttempt(db, id, {
+        canal: 'evolution_api',
+        status: 'erro',
+        destino: number,
+        mensagem: text,
+        provider: 'evolution_api',
+        provider_status: 'error',
+        provider_response: sendError.payload || { message: sendError.message },
+        erro: sendError.message,
+        updated_at: new Date().toISOString()
+      });
+      return res.status(sendError.status || 502).json(saved || {
+        ...data,
+        status: 'erro',
+        canal: 'evolution_api',
+        destino: number,
+        provider: 'evolution_api',
+        provider_status: 'error',
+        erro: sendError.message
+      });
+    }
+  } catch (error) {
+    console.error('[POST /api/customer-reminders/:id/send] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao enviar lembrete', detail: error.message });
   }
 });
 
