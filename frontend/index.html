@@ -2509,6 +2509,7 @@ async function carregarVeiculos(){
     const s = servico;
     const payload = {
       date:         s.data        || s.dt        || null,
+      cliente_id:   s.cliente_id  ? Number(s.cliente_id) : null,
       cliente:      s.cliente     || s.cl        || '',
       endereco:     s.endereco    || '',
       horario:      s.horario     || s.hr        || '',
@@ -3348,7 +3349,7 @@ async function carregarVeiculos(){
         <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Gerenciar Duplicatas</button>
       </div>
       <div class="filter-bar">
-        <input class="finput" id="cli-search" placeholder="🔍  Buscar por nome, telefone ou endereço..." oninput="renderClientes()">
+        <input class="finput" id="cli-search" placeholder="🔍  Buscar por nome, telefone ou endereço..." oninput="clientesResetPage()">
         <select class="fsel" id="cli-categoria-filter" onchange="renderClientes()">
           <option value="">Todas as categorias</option>
           <option value="eventual">Eventuais</option>
@@ -3396,6 +3397,13 @@ async function carregarVeiculos(){
           <option value="todos">Incluir históricos/inativos</option>
         </select>
         <div class="text-muted" id="cli-count"></div>
+      </div>
+      <div class="flex ic sb mb2" style="gap:10px;flex-wrap:wrap">
+        <div class="text-muted" id="cli-page-info">Página 1</div>
+        <div class="flex gap2">
+          <button class="btn btn-ghost btn-sm" id="cli-prev-page" onclick="clientesGoPage(-1)">Anterior</button>
+          <button class="btn btn-ghost btn-sm" id="cli-next-page" onclick="clientesGoPage(1)">Próxima</button>
+        </div>
       </div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>#</th><th>Cliente</th><th>Telefone</th><th>Endereço</th><th>Tipo</th><th>Status</th><th>Prior.</th><th>Local</th><th>Recorr.</th><th>Último</th><th>Ações</th></tr></thead>
@@ -3772,6 +3780,48 @@ async function carregarVeiculos(){
                 <textarea id="cli-form-obs-operacionais" class="finput" placeholder="Notas importantes para a equipe técnica"></textarea>
               </div>
             </div>
+          </section>
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Serviços contratados</div>
+              <div class="client-section-desc">Registre o que foi contratado, periodicidade e status operacional.</div>
+            </div>
+            <div class="client-grid-3">
+              <div class="client-field">
+                <label class="client-label">Serviço contratado</label>
+                <input id="cli-contract-service" class="finput" placeholder="Ex: Controle de pragas">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Periodicidade</label>
+                <select id="cli-contract-periodicidade" class="fsel">
+                  <option value="">Sem periodicidade</option>
+                  <option value="semanal">Semanal</option>
+                  <option value="quinzenal">Quinzenal</option>
+                  <option value="mensal">Mensal</option>
+                  <option value="bimestral">Bimestral</option>
+                  <option value="trimestral">Trimestral</option>
+                  <option value="semestral">Semestral</option>
+                  <option value="anual">Anual</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Status</label>
+                <select id="cli-contract-status" class="fsel">
+                  <option value="Ativo">Ativo</option>
+                  <option value="A renovar">A renovar</option>
+                  <option value="Vencido">Vencido</option>
+                  <option value="Cancelado">Cancelado</option>
+                </select>
+              </div>
+              <div class="client-field full">
+                <label class="client-label">Observações do contrato</label>
+                <input id="cli-contract-obs" class="finput" placeholder="Detalhes, escopo combinado, restrições...">
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="addClientContractDraft()">Adicionar serviço contratado</button>
+            </div>
+            <div id="cli-contracts-list" style="display:flex;flex-direction:column;gap:8px"></div>
           </section>
         </div>
 
@@ -8551,11 +8601,11 @@ function openEditSvc(id) {
             </div>
             <div class="svc-edit-grid">
               <div class="svc-edit-field full">
-                <label class="svc-edit-label" for="ed-client-select">Cliente cadastrado</label>
-                <select id="ed-client-select" onchange="onServicoClienteSelect('ed')">
-                  <option value="">Selecione um cliente cadastrado</option>
-                </select>
-                <div id="ed-client-hint" class="svc-edit-help">Selecione um cliente cadastrado para preencher o endereço automaticamente.</div>
+                <label class="svc-edit-label" for="ed-client-search">Buscar cliente cadastrado</label>
+                <input type="search" id="ed-client-search" class="finput" placeholder="Digite 3 letras para buscar..." oninput="buscarClienteServicoAutocomplete('ed')" autocomplete="off">
+                <input type="hidden" id="ed-client-select" value="${escapeHtmlAttr(clienteIdSelecionado)}">
+                <div id="ed-client-suggestions" style="margin-top:6px;display:none"></div>
+                <div id="ed-client-hint" class="svc-edit-help">Busque um cliente para preencher e vincular automaticamente.</div>
               </div>
               <div class="svc-edit-field full">
                 <label class="svc-edit-label" for="ed-cl">Cliente / Condomínio</label>
@@ -8639,7 +8689,10 @@ async function salvarEdicaoSvc(id) {
     const novoHr    = document.getElementById('ed-hr')?.value;
     const novoCl    = document.getElementById('ed-cl')?.value.trim();
     const novoEnd   = document.getElementById('ed-end')?.value.trim();
-    const cliente_id = document.getElementById('ed-cl')?.dataset.clientId || document.getElementById('ed-end')?.dataset.clientId || document.getElementById('ed-client-select')?.value || '';
+    let cliente_id = document.getElementById('ed-cl')?.dataset.clientId || document.getElementById('ed-end')?.dataset.clientId || document.getElementById('ed-client-select')?.value || '';
+    if (!cliente_id && novoCl) {
+      cliente_id = await garantirClienteDoServico('ed');
+    }
     const novoSt    = document.getElementById('ed-st')?.value;
     const tecnicos_ids = Array.from(
       document.querySelectorAll('#ed-tecnicos-container input:checked')
@@ -10124,6 +10177,10 @@ function renderEquipes(){
 let clientesData = [];
 let clienteEditando = null;
 let revisaoDadosData = [];
+let clientesPage = 1;
+let clientesPageSize = 50;
+let clientesTotal = 0;
+let clienteContratosDraft = [];
 
 async function renderClientes(){
   try {
@@ -10139,13 +10196,17 @@ async function renderClientes(){
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (ativoFilter === 'todos') params.set('include_inactive', 'true');
+    params.set('page', String(clientesPage));
+    params.set('limit', String(clientesPageSize));
     const queryString = params.toString();
     const url = `${API_BASE_URL}/api/customers${queryString ? `?${queryString}` : ''}`;
     
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Erro ao carregar clientes: ${response.status}`);
     
-    clientesData = await response.json();
+    const payload = await response.json();
+    clientesData = Array.isArray(payload) ? payload : (payload.items || []);
+    clientesTotal = Array.isArray(payload) ? clientesData.length : (payload.total || clientesData.length);
     
     let filtered = clientesData;
     if (categoriaFilter) filtered = filtered.filter(c => c.categoria === categoriaFilter);
@@ -10158,7 +10219,14 @@ async function renderClientes(){
     
     filtered.sort((a,b) => a.nome.localeCompare(b.nome));
     
-    document.getElementById('cli-count').textContent = `${filtered.length} cliente(s) · ${clientesData.length} total`;
+    const totalPages = Math.max(Math.ceil(clientesTotal / clientesPageSize), 1);
+    document.getElementById('cli-count').textContent = `${filtered.length} nesta página · ${clientesTotal} total`;
+    const pageInfo = document.getElementById('cli-page-info');
+    if (pageInfo) pageInfo.textContent = `Página ${clientesPage} de ${totalPages} · 50 por página`;
+    const prevBtn = document.getElementById('cli-prev-page');
+    const nextBtn = document.getElementById('cli-next-page');
+    if (prevBtn) prevBtn.disabled = clientesPage <= 1;
+    if (nextBtn) nextBtn.disabled = clientesPage >= totalPages;
     
     document.getElementById('cli-tbody').innerHTML = filtered.map((c,i) => {
       const tipoChip = c.tipo === 'PJ' ? '<span class="chip chip-blue">PJ</span>' : '<span class="chip chip-cyan">PF</span>';
@@ -10195,6 +10263,17 @@ async function renderClientes(){
     console.error('Erro renderClientes:', error);
     document.getElementById('cli-tbody').innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red)">Erro ao carregar clientes: ${error.message}</td></tr>`;
   }
+}
+
+function clientesGoPage(delta) {
+  const totalPages = Math.max(Math.ceil(clientesTotal / clientesPageSize), 1);
+  clientesPage = Math.min(Math.max(clientesPage + delta, 1), totalPages);
+  renderClientes();
+}
+
+function clientesResetPage() {
+  clientesPage = 1;
+  renderClientes();
 }
 
 function openServiceFromClient(clientId) {
@@ -10332,6 +10411,76 @@ async function atualizarRevisaoDados(id, status) {
   }
 }
 
+function renderClientContractsDraft() {
+  const list = document.getElementById('cli-contracts-list');
+  if (!list) return;
+  if (!clienteContratosDraft.length) {
+    list.innerHTML = '<div class="text-muted" style="font-size:12px">Nenhum serviço contratado cadastrado.</div>';
+    return;
+  }
+  list.innerHTML = clienteContratosDraft.map((item, index) => `
+    <div style="border:1px solid var(--border);border-radius:var(--r2);padding:9px;background:var(--bg2);display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+      <div>
+        <div class="bold">${sanitize(item.tipo_servico)}</div>
+        <div style="font-size:11px;color:var(--text3)">${sanitize(item.periodicidade || 'sem periodicidade')} · ${sanitize(item.status_contrato || 'Ativo')}</div>
+        ${item.observacoes ? `<div style="font-size:11px;color:var(--text2);margin-top:3px">${sanitize(item.observacoes)}</div>` : ''}
+      </div>
+      <button class="btn btn-ghost btn-xs" onclick="removeClientContractDraft(${index})">Remover</button>
+    </div>
+  `).join('');
+}
+
+function addClientContractDraft() {
+  const service = document.getElementById('cli-contract-service')?.value.trim();
+  if (!service) { toast('Informe o serviço contratado', 'warn'); return; }
+  clienteContratosDraft.push({
+    tipo_servico: service,
+    periodicidade: document.getElementById('cli-contract-periodicidade')?.value || '',
+    status_contrato: document.getElementById('cli-contract-status')?.value || 'Ativo',
+    observacoes: document.getElementById('cli-contract-obs')?.value.trim() || ''
+  });
+  ['cli-contract-service','cli-contract-obs'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderClientContractsDraft();
+}
+
+function removeClientContractDraft(index) {
+  clienteContratosDraft.splice(index, 1);
+  renderClientContractsDraft();
+}
+
+async function loadClientContracts(customerId) {
+  clienteContratosDraft = [];
+  if (!customerId) { renderClientContractsDraft(); return; }
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/contracts?customer_id=${encodeURIComponent(customerId)}`);
+    if (!response.ok) throw new Error(`Erro ${response.status}`);
+    const payload = await response.json();
+    clienteContratosDraft = (Array.isArray(payload) ? payload : []).map(item => ({
+      tipo_servico: item.tipo_servico || '',
+      periodicidade: item.periodicidade || '',
+      status_contrato: item.status_contrato || 'Ativo',
+      observacoes: item.observacoes || ''
+    })).filter(item => item.tipo_servico);
+  } catch(e) {
+    console.warn('Contratos do cliente indisponíveis:', e.message || e);
+    clienteContratosDraft = [];
+  }
+  renderClientContractsDraft();
+}
+
+async function saveClientContracts(customerId) {
+  if (!customerId) return;
+  const response = await fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(customerId)}/contracts`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contracts: clienteContratosDraft })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || `Erro ${response.status}`);
+  }
+}
+
 function openClientModal(clientId = null) {
   if (clientId) {
     // Editar cliente existente
@@ -10392,6 +10541,7 @@ function openClientModal(clientId = null) {
     // Mostrar histórico operacional
     document.getElementById('cli-historico-section').style.display = 'block';
     loadClientHistory();
+    loadClientContracts(clienteEditando.id);
   } else {
     // Novo cliente
     clienteEditando = null;
@@ -10434,6 +10584,8 @@ function openClientModal(clientId = null) {
     
     // Esconder histórico para novos clientes
     document.getElementById('cli-historico-section').style.display = 'none';
+    clienteContratosDraft = [];
+    renderClientContractsDraft();
   }
   
   document.getElementById('cli-form-error').style.display = 'none';
@@ -10809,6 +10961,9 @@ async function saveClient() {
     }
     
     const savedCustomer = await response.json();
+    if (savedCustomer?.id) {
+      await saveClientContracts(savedCustomer.id);
+    }
     closeClientModal();
     await renderClientes();
 
@@ -10909,17 +11064,7 @@ function getClienteIdPorNomeServico(nome) {
 function renderServicoClientesSelect(prefix = 'ns', selectedClientId = '') {
   const select = document.getElementById(`${prefix}-client-select`);
   if (!select) return;
-
-  const selectedId = String(selectedClientId || select.value || '');
-  const clientes = [...(clientesData || [])]
-    .filter(c => c && c.id !== undefined && c.id !== null)
-    .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
-
-  select.innerHTML = '<option value="">Selecionar cliente cadastrado...</option>' + clientes.map(c => {
-    const id = String(c.id);
-    const telefone = c.telefone ? ` - ${c.telefone}` : '';
-    return `<option value="${escapeHtmlAttr(id)}"${id === selectedId ? ' selected' : ''}>${sanitize(c.nome || 'Cliente sem nome')}${sanitize(telefone)}</option>`;
-  }).join('');
+  select.value = String(selectedClientId || select.value || '');
 }
 
 function preencherServicoPorCliente(prefix = 'ns', cliente) {
@@ -10971,6 +11116,71 @@ function onServicoClienteSelect(prefix = 'ns') {
   preencherServicoPorCliente(prefix, cliente);
 }
 
+async function buscarClientesServicoRemoto(term) {
+  const q = String(term || '').trim();
+  if (q.length < 3) return [];
+  const params = new URLSearchParams({ search: q, limit: '10' });
+  const response = await fetch(`${API_BASE_URL}/api/customers?${params.toString()}`);
+  if (!response.ok) throw new Error(`Erro ${response.status}`);
+  const payload = await response.json();
+  return Array.isArray(payload) ? payload : (payload.items || []);
+}
+
+async function buscarClienteServicoAutocomplete(prefix = 'ns') {
+  const input = document.getElementById(`${prefix}-client-search`);
+  const suggestions = document.getElementById(`${prefix}-client-suggestions`);
+  const hint = document.getElementById(`${prefix}-client-hint`);
+  const term = input?.value || '';
+  if (!suggestions) return;
+  if (term.trim().length < 3) {
+    suggestions.style.display = 'none';
+    suggestions.innerHTML = '';
+    return;
+  }
+  suggestions.style.display = 'block';
+  suggestions.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:6px">Buscando...</div>';
+  try {
+    const results = await buscarClientesServicoRemoto(term);
+    clientesData = mergeClientesCache(results);
+    if (!results.length) {
+      suggestions.innerHTML = '<div style="font-size:11px;color:var(--orange);padding:6px">Nenhum cliente encontrado. Ao salvar, será criado um novo cadastro.</div>';
+      if (hint) {
+        hint.textContent = 'Cliente novo: o sistema criará o cadastro automaticamente ao salvar.';
+        hint.style.color = 'var(--orange)';
+      }
+      return;
+    }
+    suggestions.innerHTML = results.map(c => `
+      <button type="button" class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;margin-bottom:4px;text-align:left" onclick="selecionarClienteServicoAutocomplete('${prefix}', ${jsArg(c.id)})">
+        ${sanitize(c.nome || 'Cliente sem nome')} <span class="mono" style="color:var(--text3);font-size:10px">${sanitize(c.telefone || c.whatsapp || '')}</span>
+      </button>
+    `).join('');
+  } catch(e) {
+    suggestions.innerHTML = `<div style="font-size:11px;color:var(--red);padding:6px">${sanitize(e.message || e)}</div>`;
+  }
+}
+
+function mergeClientesCache(items = []) {
+  const map = new Map((clientesData || []).map(c => [String(c.id), c]));
+  items.forEach(c => { if (c?.id) map.set(String(c.id), c); });
+  return Array.from(map.values());
+}
+
+function selecionarClienteServicoAutocomplete(prefix = 'ns', id) {
+  const cliente = (clientesData || []).find(c => String(c.id) === String(id));
+  if (!cliente) return;
+  const select = document.getElementById(`${prefix}-client-select`);
+  const search = document.getElementById(`${prefix}-client-search`);
+  const suggestions = document.getElementById(`${prefix}-client-suggestions`);
+  if (select) select.value = String(cliente.id);
+  if (search) search.value = cliente.nome || '';
+  if (suggestions) {
+    suggestions.style.display = 'none';
+    suggestions.innerHTML = '';
+  }
+  preencherServicoPorCliente(prefix, cliente);
+}
+
 function onServicoClienteManualInput(prefix = 'ns') {
   const select = document.getElementById(`${prefix}-client-select`);
   const nomeInput = document.getElementById(`${prefix}-cl`);
@@ -10997,8 +11207,11 @@ function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentN
     const resolvedClientId = String(selectedClientId || getClienteIdPorNomeServico(currentName) || '');
     renderServicoClientesSelect(prefix, resolvedClientId);
     if (resolvedClientId) {
+      const cliente = (clientesData || []).find(c => String(c.id) === resolvedClientId);
       const select = document.getElementById(`${prefix}-client-select`);
+      const search = document.getElementById(`${prefix}-client-search`);
       if (select) select.value = resolvedClientId;
+      if (search && cliente) search.value = cliente.nome || currentName || '';
       const nomeInput = document.getElementById(`${prefix}-cl`);
       const enderecoInput = document.getElementById(`${prefix}-end`);
       if (nomeInput) nomeInput.dataset.clientId = resolvedClientId;
@@ -11009,6 +11222,60 @@ function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentN
 
 function onNovoServicoClienteSelect() { onServicoClienteSelect('ns'); }
 function onNovoServicoClienteManualInput() { onServicoClienteManualInput('ns'); }
+
+async function garantirClienteDoServico(prefix = 'ns') {
+  const nomeInput = document.getElementById(`${prefix}-cl`);
+  const enderecoInput = document.getElementById(`${prefix}-end`);
+  const hidden = document.getElementById(`${prefix}-client-select`);
+  const nome = String(nomeInput?.value || '').trim();
+  const endereco = String(enderecoInput?.value || '').trim();
+  const selectedId = String(nomeInput?.dataset.clientId || enderecoInput?.dataset.clientId || hidden?.value || '').trim();
+  if (selectedId) return selectedId;
+  if (!nome) return '';
+
+  const existing = await buscarClientesServicoRemoto(nome).catch(() => []);
+  const exact = existing.find(c => normalizarNome(c.nome || '') === normalizarNome(nome));
+  if (exact) {
+    selecionarClienteServicoAutocomplete(prefix, exact.id);
+    return String(exact.id);
+  }
+  if (existing.length) {
+    const useExisting = confirmAction(`Encontramos cliente parecido: "${existing[0].nome}". Deseja usar esse cadastro existente?`);
+    if (useExisting) {
+      selecionarClienteServicoAutocomplete(prefix, existing[0].id);
+      return String(existing[0].id);
+    }
+  }
+
+  const payload = {
+    nome,
+    endereco,
+    endereco_completo: endereco,
+    categoria: 'eventual',
+    tipo_cliente: 'Eventual',
+    origem: 'agenda'
+  };
+  const response = await fetch(`${API_BASE_URL}/api/customers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const saved = await response.json().catch(() => ({}));
+  if (response.status === 409 && saved.duplicateId) {
+    const usarDuplicado = confirmAction(`${saved.error || 'Cliente semelhante encontrado'}. Usar esse cadastro existente?`);
+    if (usarDuplicado) {
+      const duplicate = existing.find(c => String(c.id) === String(saved.duplicateId)) || { id: saved.duplicateId, nome };
+      clientesData = mergeClientesCache([duplicate]);
+      selecionarClienteServicoAutocomplete(prefix, saved.duplicateId);
+      return String(saved.duplicateId);
+    }
+  }
+  if (!response.ok) throw new Error(saved.error || `Erro ${response.status} ao criar cliente`);
+  clientesData = mergeClientesCache([saved]);
+  selecionarClienteServicoAutocomplete(prefix, saved.id);
+  toast(`Cliente "${saved.nome || nome}" cadastrado automaticamente`, 'ok');
+  return String(saved.id || '');
+}
 
 async function geocodeClientAddress() {
   const enderecoInput = document.getElementById('cli-form-end');
@@ -11345,11 +11612,11 @@ function openNewSvc(initialData = {}){
     </div>
     <div class="form-row mb3">
       <div class="field">
-        <label>Cliente cadastrado</label>
-        <select id="ns-client-select" onchange="onNovoServicoClienteSelect()">
-          <option value="">Carregando clientes...</option>
-        </select>
-        <div id="ns-client-hint" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Selecione um cliente cadastrado para preencher o endereço automaticamente.</div>
+        <label>Buscar cliente cadastrado</label>
+        <input type="search" id="ns-client-search" class="finput" placeholder="Digite 3 letras para buscar..." oninput="buscarClienteServicoAutocomplete('ns')" autocomplete="off">
+        <input type="hidden" id="ns-client-select" value="${escapeHtmlAttr(defaults.clientId)}">
+        <div id="ns-client-suggestions" style="margin-top:6px;display:none"></div>
+        <div id="ns-client-hint" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Busque um cliente para preencher e vincular automaticamente.</div>
       </div>
     </div>
     <div class="form-row mb3">
@@ -11416,7 +11683,13 @@ async function confirmNewSvc(){
   const enderecoEl  = document.getElementById('ns-end');
   const endereco    = enderecoEl?.value.trim()||'';
   const horario     = document.getElementById('ns-hr')?.value||'';
-  const cliente_id  = clienteInput?.dataset.clientId || enderecoEl?.dataset.clientId || document.getElementById('ns-client-select')?.value || '';
+  let cliente_id = '';
+  try {
+    cliente_id = await garantirClienteDoServico('ns');
+  } catch(e) {
+    toast('Não foi possível cadastrar/vincular o cliente: ' + (e.message || e), 'err');
+    return;
+  }
 
   // Gerar ID único (timestamp numérico compatível com BIGINT PK do Supabase)
   const newId = Date.now();

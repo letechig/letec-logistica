@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS services (
   id          BIGINT PRIMARY KEY,
   date        DATE,
   data        DATE,
+  cliente_id  INTEGER,
   cliente     TEXT,
   endereco    TEXT,
   horario     TEXT,
@@ -257,6 +258,7 @@ CREATE TABLE IF NOT EXISTS services (
 );
 
 ALTER TABLE services ADD COLUMN IF NOT EXISTS exec_status TEXT DEFAULT 'agendado';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS cliente_id INTEGER;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS chegada_hora TIMESTAMP WITH TIME ZONE;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS chegada_lat DOUBLE PRECISION;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS chegada_lng DOUBLE PRECISION;
@@ -321,6 +323,7 @@ ALTER TABLE checklists ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME Z
 ALTER TABLE checklists ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_services_exec_status ON services(exec_status);
+CREATE INDEX IF NOT EXISTS idx_services_cliente_id ON services(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_services_tecnicos_ids ON services USING GIN(tecnicos_ids);
 CREATE INDEX IF NOT EXISTS idx_checklists_date ON checklists(date);
 CREATE INDEX IF NOT EXISTS idx_checklists_motorista ON checklists(LOWER(motorista));

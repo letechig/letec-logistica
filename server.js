@@ -211,6 +211,10 @@ function areDuplicateCustomers(left, right) {
   const rightWhatsapp = normalizePhone(right.whatsapp);
   if (leftWhatsapp && rightWhatsapp && leftWhatsapp === rightWhatsapp) return true;
 
+  const leftDocument = normalizeDocument(left.cpf_cnpj);
+  const rightDocument = normalizeDocument(right.cpf_cnpj);
+  if (leftDocument && rightDocument && leftDocument === rightDocument) return true;
+
   const leftName = left.nome_normalizado || normalizeCustomerName(left.nome);
   const rightName = right.nome_normalizado || normalizeCustomerName(right.nome);
   if (leftName && rightName && leftName === rightName) return true;
@@ -314,7 +318,7 @@ async function runCustomerWriteWithSchemaFallback(buildQuery, payload, context) 
   return buildQuery(workingPayload);
 }
 
-async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf }) {
+async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf, db }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
   const whatsappNormalizado = normalizePhone(whatsapp);
@@ -325,7 +329,8 @@ async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, c
     buildCustomerAddress({ rua, numero, bairro, cidade, uf })
   );
 
-  const { data, error } = await supabase
+  const client = db || getSupabaseClient();
+  const { data, error } = await client
     .from('customers')
     .select('*')
     .eq('ativo', true);
@@ -344,7 +349,7 @@ async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, c
 
     if (telefoneNormalizado && itemTelNorm && itemTelNorm === telefoneNormalizado) return true;
     if (whatsappNormalizado && itemWhatsappNorm && itemWhatsappNorm === whatsappNormalizado) return true;
-    if (documentoNormalizado && itemDocumentoNorm === documentoNormalizado && enderecoNormalizado && itemEnderecoNorm === enderecoNormalizado) return true;
+    if (documentoNormalizado && itemDocumentoNorm === documentoNormalizado) return true;
     if (nomeNormalizado && itemNomeNorm === nomeNormalizado && enderecoNormalizado && itemEnderecoNorm === enderecoNormalizado) return true;
     return false;
   });
@@ -920,10 +925,11 @@ app.get('/api/maps/distance-matrix', async (req, res) => {
 // Example routes for logistics operations
 app.get('/api/services', async (req, res) => {
   try {
+    const db = getSupabaseClient();
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
     const cliente = String(req.query.cliente || '').trim();
 
-    let query = supabase
+    let query = db
       .from('services')
       .select('*')
       .order('date', { ascending: false, nullsFirst: false })
@@ -944,7 +950,8 @@ app.get('/api/services', async (req, res) => {
 
 app.post('/api/services', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const db = getSupabaseClient();
+    const { data, error } = await db
       .from('services')
       .insert(req.body)
       .select();
@@ -1129,6 +1136,7 @@ app.get('/api/cep/:cep', async (req, res) => {
 // CUSTOMERS CRUD
 app.get('/api/customers', async (req, res) => {
   try {
+    const db = getSupabaseClient();
     const {
       search,
       tipo_local,
@@ -1138,11 +1146,18 @@ app.get('/api/customers', async (req, res) => {
       tipo_cliente,
       status_operacional,
       prioridade,
-      include_inactive
+      include_inactive,
+      limit: rawLimit,
+      offset: rawOffset,
+      page: rawPage
     } = req.query;
-    let query = supabase
+    const hasPagination = rawPage !== undefined || rawOffset !== undefined;
+    const limit = Math.min(Math.max(parseInt(rawLimit, 10) || (hasPagination ? 50 : 500), 1), 500);
+    const page = Math.max(parseInt(rawPage, 10) || 1, 1);
+    const offset = Math.max(parseInt(rawOffset, 10) || ((page - 1) * limit), 0);
+    let query = db
       .from('customers')
-      .select('*')
+      .select('*', hasPagination ? { count: 'exact' } : undefined)
       .order('nome', { ascending: true });
 
     if (String(include_inactive) !== 'true') {
@@ -1164,10 +1179,15 @@ app.get('/api/customers', async (req, res) => {
     if (cliente_recorrente !== undefined) {
       query = query.eq('cliente_recorrente', String(cliente_recorrente) === 'true');
     }
+    if (hasPagination) query = query.range(offset, offset + limit - 1);
+    else if (rawLimit !== undefined) query = query.limit(limit);
     
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     if (error) throw error;
-    res.json(data);
+    if (hasPagination) {
+      return res.json({ items: data || [], total: count || 0, page, limit, offset });
+    }
+    res.json(data || []);
   } catch (error) {
     console.error('[GET /api/customers] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar clientes' });
@@ -1176,6 +1196,7 @@ app.get('/api/customers', async (req, res) => {
 
 app.post('/api/customers', strictLimiter, async (req, res) => {
   try {
+    const db = getSupabaseClient();
     const {
       nome,
       telefone,
@@ -1248,7 +1269,8 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       numero,
       bairro,
       cidade,
-      uf: ufNormalizada
+      uf: ufNormalizada,
+      db
     });
     if (duplicate) {
       return res.status(409).json({
@@ -1295,7 +1317,7 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     };
 
     const { data, error } = await runCustomerWriteWithSchemaFallback(
-      payload => supabase.from('customers').insert([payload]).select(),
+      payload => db.from('customers').insert([payload]).select(),
       insertPayload,
       'POST /api/customers'
     );
@@ -1316,6 +1338,7 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
 
 app.put('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
+    const db = getSupabaseClient();
     const { id } = req.params;
     const {
       nome,
@@ -1390,7 +1413,8 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       numero,
       bairro,
       cidade,
-      uf: ufNormalizada
+      uf: ufNormalizada,
+      db
     });
     if (duplicate) {
       return res.status(409).json({
@@ -1438,7 +1462,7 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
     };
 
     const { data, error } = await runCustomerWriteWithSchemaFallback(
-      payload => supabase.from('customers').update(payload).eq('id', parseInt(id, 10)).select(),
+      payload => db.from('customers').update(payload).eq('id', parseInt(id, 10)).select(),
       updatePayload,
       'PUT /api/customers/:id'
     );
@@ -1460,6 +1484,7 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
 
 app.delete('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
+    const db = getSupabaseClient();
     const { id } = req.params;
     
     const { data, error } = await supabase
@@ -1526,7 +1551,8 @@ app.get('/api/geocode', async (req, res) => {
 // DUPLICATES MANAGEMENT
 app.get('/api/customers/duplicates', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const db = getSupabaseClient();
+    const { data, error } = await db
       .from('customers')
       .select('*')
       .eq('ativo', true)
@@ -1573,6 +1599,7 @@ app.get('/api/customers/duplicates', async (req, res) => {
 
 app.post('/api/customers/merge', strictLimiter, async (req, res) => {
   try {
+    const db = getSupabaseClient();
     const { primaryId, duplicateIds, keepFields } = req.body;
     
     if (!primaryId || !Array.isArray(duplicateIds) || duplicateIds.length === 0) {
@@ -1581,7 +1608,7 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
     
     // Get all customers involved
     const allIds = [primaryId, ...duplicateIds];
-    const { data: customers, error: fetchError } = await supabase
+    const { data: customers, error: fetchError } = await db
       .from('customers')
       .select('*')
       .in('id', allIds);
@@ -1617,7 +1644,8 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
     }
     
     // Update primary customer
-    const { error: updateError } = await supabase
+    const duplicateNote = `\n[Duplicatas mescladas nesta ficha: ${duplicateIds.join(', ')}]`;
+    const { error: updateError } = await db
       .from('customers')
       .update({
         endereco: merged.endereco,
@@ -1628,15 +1656,38 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
         whatsapp: merged.whatsapp,
         email: merged.email,
         uf: merged.uf,
-        observacoes: merged.observacoes,
+        observacoes: `${merged.observacoes || ''}${duplicateNote}`,
         updated_at: new Date().toISOString()
       })
       .eq('id', primaryId);
     
     if (updateError) throw updateError;
+
+    const relatedUpdates = [
+      ['services', 'cliente_id'],
+      ['contracts', 'customer_id'],
+      ['customer_service_history', 'customer_id'],
+      ['data_reviews', 'customer_id'],
+      ['customer_reminders', 'customer_id']
+    ];
+
+    for (const [table, column] of relatedUpdates) {
+      const { error: relatedError } = await db
+        .from(table)
+        .update({ [column]: primaryId })
+        .in(column, duplicateIds);
+      if (relatedError) {
+        const missing = getMissingSchemaColumn(relatedError);
+        if (missing || relatedError.code === '42P01' || relatedError.code === 'PGRST205') {
+          console.warn(`[POST /api/customers/merge] Ignorando tabela/coluna ausente: ${table}.${column}`);
+        } else {
+          throw relatedError;
+        }
+      }
+    }
     
     // Soft delete duplicates
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
       .from('customers')
       .update({ 
         ativo: false, 
@@ -1660,8 +1711,9 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
 
 app.get('/api/contracts', async (req, res) => {
   try {
+    const db = getSupabaseClient();
     const { customer_id, status_contrato } = req.query;
-    let query = supabase
+    let query = db
       .from('contracts')
       .select('*')
       .order('data_vencimento', { ascending: true, nullsFirst: false });
@@ -1675,6 +1727,38 @@ app.get('/api/contracts', async (req, res) => {
   } catch (error) {
     console.error('[GET /api/contracts] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar contratos' });
+  }
+});
+
+app.put('/api/customers/:id/contracts', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    const items = Array.isArray(req.body?.contracts) ? req.body.contracts : [];
+    if (!customerId) return res.status(400).json({ error: 'Cliente inválido' });
+
+    const cleaned = items
+      .map(item => ({
+        customer_id: customerId,
+        tipo_servico: String(item.tipo_servico || '').trim(),
+        periodicidade: String(item.periodicidade || '').trim() || null,
+        status_contrato: String(item.status_contrato || 'Ativo').trim(),
+        observacoes: String(item.observacoes || '').trim() || null,
+        updated_at: new Date().toISOString()
+      }))
+      .filter(item => item.tipo_servico);
+
+    const { error: deleteError } = await db.from('contracts').delete().eq('customer_id', customerId);
+    if (deleteError) throw deleteError;
+
+    if (!cleaned.length) return res.json([]);
+
+    const { data, error } = await db.from('contracts').insert(cleaned).select();
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[PUT /api/customers/:id/contracts] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao salvar serviços contratados' });
   }
 });
 
