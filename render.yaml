@@ -28,10 +28,14 @@ services:
         sync: false
       - key: EVOLUTION_API_URL
         sync: false
+      - key: EVOLUTION_URL
+        sync: false
       - key: EVOLUTION_API_KEY
         sync: false
       - key: EVOLUTION_INSTANCE_NAME
-        value: letec
+        value: Letec
+      - key: EVOLUTION_INSTANCE
+        value: Letec
       - key: EVOLUTION_SEND_DELAY_MS
         value: 1200
 

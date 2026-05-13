@@ -83,9 +83,14 @@ ON CONFLICT (nome) DO NOTHING;
 CREATE TABLE IF NOT EXISTS technicians (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nome       TEXT,
+  telefone   TEXT,
+  whatsapp   TEXT,
   ativo      BOOLEAN DEFAULT true,
   UNIQUE(nome)
 );
+
+ALTER TABLE technicians ADD COLUMN IF NOT EXISTS telefone TEXT;
+ALTER TABLE technicians ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 
 INSERT INTO technicians (nome) VALUES
   ('João Silva'),
@@ -243,6 +248,10 @@ CREATE TABLE IF NOT EXISTS services (
   checklist_servico JSONB,
   problema_descricao TEXT,
   tecnicos_ids JSONB DEFAULT '[]'::jsonb,
+  confirmado_cliente BOOLEAN DEFAULT false,
+  confirmado_cliente_em TIMESTAMP WITH TIME ZONE,
+  agenda_confirmada_tecnico BOOLEAN DEFAULT false,
+  agenda_confirmada_tecnico_em TIMESTAMP WITH TIME ZONE,
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
@@ -258,6 +267,10 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS tempo_execucao INTEGER;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS checklist_servico JSONB;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS problema_descricao TEXT;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS tecnicos_ids JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS confirmado_cliente BOOLEAN DEFAULT false;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS confirmado_cliente_em TIMESTAMP WITH TIME ZONE;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS agenda_confirmada_tecnico BOOLEAN DEFAULT false;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS agenda_confirmada_tecnico_em TIMESTAMP WITH TIME ZONE;
 
 INSERT INTO services (id, date, data, cliente, endereco, horario, tiposervico, tipos, equipe, veiculo, status) VALUES
   (1640995200001, '2026-04-07', '2026-04-07', 'Cliente A - Empresa XYZ',       'Rua das Flores, 123 - Centro',                '08:00', 'Manutenção', '["Manutenção"]'::jsonb, 'Equipe 1', 'Veículo 1', 'agendado'),
@@ -579,6 +592,34 @@ CREATE INDEX IF NOT EXISTS idx_customer_reminders_status ON customer_reminders(s
 CREATE INDEX IF NOT EXISTS idx_customer_reminders_tipo ON customer_reminders(tipo);
 CREATE INDEX IF NOT EXISTS idx_customer_reminders_created_at ON customer_reminders(created_at);
 CREATE INDEX IF NOT EXISTS idx_customer_reminders_provider_message_id ON customer_reminders(provider_message_id);
+
+CREATE TABLE IF NOT EXISTS logistica_whatsapp_mensagens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agendamento_id TEXT,
+  tecnico_id TEXT,
+  cliente_id TEXT,
+  destinatario_tipo TEXT NOT NULL,
+  destinatario_nome TEXT,
+  telefone TEXT,
+  grupo_jid TEXT,
+  direcao TEXT NOT NULL DEFAULT 'enviada',
+  tipo TEXT NOT NULL,
+  mensagem TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pendente',
+  resposta_api JSONB,
+  erro TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  enviado_em TIMESTAMP WITH TIME ZONE,
+  recebido_em TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_agendamento ON logistica_whatsapp_mensagens(agendamento_id);
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_tecnico ON logistica_whatsapp_mensagens(tecnico_id);
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_cliente ON logistica_whatsapp_mensagens(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_tipo ON logistica_whatsapp_mensagens(tipo);
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_status ON logistica_whatsapp_mensagens(status);
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_destinatario ON logistica_whatsapp_mensagens(destinatario_tipo);
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_created_at ON logistica_whatsapp_mensagens(created_at);
 
 -- Migração: atualizar registros existentes com valores padrão
 UPDATE customers SET categoria = 'eventual' WHERE categoria IS NULL;

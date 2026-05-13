@@ -2620,6 +2620,7 @@ async function carregarVeiculos(){
 
   <div class="nav-section-label">Operacional</div>
   <button class="nav-item" onclick="nav('roteiro',this)"><span class="ico">📱</span><span>Roteiro do Dia</span><span class="nav-badge" id="nb-roteiro" style="display:none">0</span></button>
+  <button class="nav-item" onclick="nav('comunicacao',this)"><span class="ico">💬</span><span>Comunicação</span></button>
   <button class="nav-item" onclick="nav('rotas',this)"><span class="ico">🗺</span><span>Rotas & KM</span></button>
   <button class="nav-item" onclick="nav('checklist',this)"><span class="ico">✅</span><span>Check List</span></button>
   <button class="nav-item" onclick="nav('frota',this)"><span class="ico">🚗</span><span>Frota</span><span class="nav-badge green" id="nb-frota">0</span></button>
@@ -2997,6 +2998,58 @@ async function carregarVeiculos(){
         <div style="font-size:12px;max-width:400px;margin:0 auto;line-height:1.6">
           O roteiro é gerado automaticamente com os serviços cadastrados no sistema,<br>agrupados por técnico e prontos para enviar pelo WhatsApp.
         </div>
+      </div>
+    </div>
+
+    <!-- ═══ COMUNICAÇÃO LOGÍSTICA ═══ -->
+    <div id="page-comunicacao" class="page">
+      <div class="flex ic sb mb3">
+        <div>
+          <div class="section-title">Comunicação Logística</div>
+          <div class="section-sub">WhatsApp operacional, lembretes e histórico de mensagens</div>
+        </div>
+        <div class="flex gap2" style="flex-wrap:wrap;align-items:center">
+          <input type="date" class="fsel" id="com-data" onchange="renderComunicacaoLogistica(true)">
+          <button class="btn btn-primary btn-sm" onclick="comEnviarAgendaTodos()">Enviar agenda para todos</button>
+          <button class="btn btn-green btn-sm" onclick="comEnviarLembretes24h()">Enviar lembretes 24h</button>
+          <button class="btn btn-ghost btn-sm" onclick="renderComunicacaoLogistica(true)">Atualizar</button>
+        </div>
+      </div>
+
+      <div id="com-evolution-status" style="margin-bottom:12px"></div>
+
+      <div class="grid-kpi" id="com-kpis" style="margin-bottom:16px"></div>
+
+      <div class="filter-bar">
+        <select class="fsel" id="com-filter-tipo" onchange="renderComunicacaoLogistica(true)">
+          <option value="">Todos os tipos</option>
+          <option value="agenda_tecnico">Agenda técnico</option>
+          <option value="confirmacao_cliente">Confirmação cliente</option>
+          <option value="lembrete_24h">Lembrete 24h</option>
+        </select>
+        <select class="fsel" id="com-filter-status" onchange="renderComunicacaoLogistica(true)">
+          <option value="">Todos os status</option>
+          <option value="pendente">Pendente</option>
+          <option value="enviado">Enviado</option>
+          <option value="erro">Erro</option>
+          <option value="recebido">Recebido</option>
+        </select>
+        <select class="fsel" id="com-filter-dest" onchange="renderComunicacaoLogistica(true)">
+          <option value="">Todos os destinatários</option>
+          <option value="tecnico">Técnico</option>
+          <option value="cliente">Cliente</option>
+          <option value="gestor">Gestor</option>
+          <option value="grupo">Grupo</option>
+        </select>
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>Data</th><th>Tipo</th><th>Destino</th><th>Status</th><th>Mensagem</th><th>Ações</th></tr>
+          </thead>
+          <tbody id="com-msg-tbody"></tbody>
+        </table>
       </div>
     </div>
 
@@ -6340,6 +6393,7 @@ let inventorySchemaReady = true;
 let customerReminders = [];
 let customerRemindersSchemaReady = true;
 let evolutionStatus = { checked:false, configured:false, connected:false };
+let logisticaWhatsappMensagens = [];
 let inventoryModalMode = null;
 let inventoryEditingProductId = null;
 let inventoryProductFilter = 'todos';
@@ -6833,6 +6887,7 @@ const PAGE_META = {
   dashboard:  { title:'Dashboard',          sub:'Visão geral operacional' },
   agenda:     { title:'Agenda de Serviços', sub:'Todos os serviços · Ano inteiro 2026' },
   roteiro:    { title:'Roteiro do Dia',    sub:'Operação do dia → sequência otimizada e WhatsApp por técnico' },
+  comunicacao:{ title:'Comunicação Logística', sub:'WhatsApp operacional, lembretes e histórico de mensagens' },
   rotas:      { title:'Rotas & KM',          sub:'Eficiência de deslocamento e KM rodados' },
   checklist:  { title:'Check List Diário',  sub:'Registro de saída e retorno' },
   frota:      { title:'Controle de Frota',  sub:'KPIs de veículos e motoristas' },
@@ -6861,7 +6916,7 @@ window.nav = function(page, btn) {
   currentPage = page;
   // Para agenda: carrega dados do Supabase antes de renderizar
   const renderAgendaComDados = async () => { await getServices(); renderAgenda(); };
-  const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, clientes: renderClientes, revisao: renderRevisaoDados, historico: renderHist, roteiro: rotGerarDoSistema, config: renderConfig };
+  const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, clientes: renderClientes, revisao: renderRevisaoDados, historico: renderHist, roteiro: rotGerarDoSistema, comunicacao: renderComunicacaoLogistica, config: renderConfig };
   if (renders[page]) renders[page]();
   updateBadges();
 }
@@ -7428,6 +7483,9 @@ function renderServiceCardActions(s, options = {}) {
   const canExecute = stKey !== 'executado';
   const canReagendar = stKey === 'agendado';
   const canCancel = stKey !== 'cancelado' && stKey !== 'executado';
+  const hasClient = !!(s.cliente || s.cl);
+  const canSendCustomerLogistics = hasClient && stKey !== 'cancelado';
+  const canSendReminder = canSendCustomerLogistics && stKey !== 'executado';
   const detailsLabel = options.detailsLabel || 'Ver detalhes';
   const detailAction = options.detailAction || `openEditSvc(${id})`;
 
@@ -7439,6 +7497,8 @@ function renderServiceCardActions(s, options = {}) {
       <summary title="Mais ações">⋮</summary>
       <div class="svc-action-menu-panel">
         <button type="button" onclick="${detailAction}">${detailsLabel}</button>
+        ${canSendCustomerLogistics ? `<button type="button" onclick="comEnviarConfirmacaoServico(${id})">Enviar confirmação</button>` : ''}
+        ${canSendReminder ? `<button type="button" onclick="comEnviarLembreteServico(${id})">Reenviar lembrete</button>` : ''}
         ${canReagendar ? `<button type="button" onclick="setSt(${id},'reagendado')${after}">Reagendar</button>` : ''}
         ${canCancel ? `<button type="button" class="danger" onclick="setSt(${id},'cancelado')${after}">Cancelar</button>` : ''}
       </div>
@@ -12637,6 +12697,169 @@ function copiarCustomerReminderTexto(index) {
     .catch(() => toast('Erro ao copiar lembrete', 'err'));
 }
 
+function comDataValue() {
+  const input = document.getElementById('com-data');
+  const today = new Date().toISOString().split('T')[0];
+  if (input && !input.value) input.value = today;
+  return input?.value || today;
+}
+
+function comTipoLabel(tipo) {
+  const labels = {
+    agenda_tecnico: 'Agenda técnico',
+    confirmacao_cliente: 'Confirmação cliente',
+    lembrete_24h: 'Lembrete 24h',
+    resumo_gestor: 'Resumo gestor',
+    status: 'Status'
+  };
+  return labels[tipo] || tipo || 'Mensagem';
+}
+
+function comStatusChip(status) {
+  const key = status || 'pendente';
+  const cls = key === 'enviado' ? 'chip-green' : key === 'erro' ? 'chip-red' : key === 'recebido' ? 'chip-blue' : 'chip-orange';
+  const label = key.charAt(0).toUpperCase() + key.slice(1);
+  return `<span class="chip ${cls}">${sanitize(label)}</span>`;
+}
+
+function comFormatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return sanitize(String(value).slice(0, 16));
+  return date.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+async function carregarMensagensLogistica() {
+  const params = new URLSearchParams({ data: comDataValue(), limit: '120' });
+  const tipo = document.getElementById('com-filter-tipo')?.value || '';
+  const status = document.getElementById('com-filter-status')?.value || '';
+  const dest = document.getElementById('com-filter-dest')?.value || '';
+  if (tipo) params.set('tipo', tipo);
+  if (status) params.set('status', status);
+  if (dest) params.set('destinatario_tipo', dest);
+  const response = await fetch(`${API_BASE_URL}/api/logistica/whatsapp/mensagens?${params.toString()}`, { cache: 'no-store' });
+  const payload = await response.json().catch(() => ([]));
+  if (!response.ok) throw new Error(payload.error || payload.detail || `HTTP ${response.status}`);
+  logisticaWhatsappMensagens = Array.isArray(payload) ? payload : [];
+  return logisticaWhatsappMensagens;
+}
+
+async function renderComunicacaoLogistica(force = false) {
+  const tbody = document.getElementById('com-msg-tbody');
+  if (!tbody) return;
+  comDataValue();
+  tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Carregando histórico...</td></tr>';
+  await carregarEvolutionStatus(force);
+  const statusBox = document.getElementById('com-evolution-status');
+  if (statusBox) statusBox.innerHTML = evolutionStatusAlertHtml();
+  try {
+    const items = await carregarMensagensLogistica();
+    const enviados = items.filter(m => m.status === 'enviado').length;
+    const erros = items.filter(m => m.status === 'erro').length;
+    const pendentes = items.filter(m => m.status === 'pendente').length;
+    const kpis = document.getElementById('com-kpis');
+    if (kpis) {
+      kpis.innerHTML = `
+        <div class="card card-accent"><div class="card-label">Mensagens</div><div class="card-value cv-blue">${items.length}</div></div>
+        <div class="card card-green"><div class="card-label">Enviadas</div><div class="card-value cv-green">${enviados}</div></div>
+        <div class="card card-orange"><div class="card-label">Pendentes</div><div class="card-value cv-orange">${pendentes}</div></div>
+        <div class="card"><div class="card-label">Erros</div><div class="card-value" style="color:var(--red)">${erros}</div></div>`;
+    }
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Nenhuma mensagem encontrada para os filtros atuais.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(msg => {
+      const preview = sanitize(msg.mensagem || '').replace(/\n+/g, ' ').slice(0, 130);
+      const dest = [msg.destinatario_tipo, msg.destinatario_nome].filter(Boolean).join(' · ') || msg.telefone || msg.grupo_jid || '—';
+      return `<tr>
+        <td class="mono">${comFormatDate(msg.created_at)}</td>
+        <td>${sanitize(comTipoLabel(msg.tipo))}</td>
+        <td><div class="bold">${sanitize(dest)}</div><div class="mono" style="font-size:10px;color:var(--text3)">${sanitize(msg.telefone || msg.grupo_jid || '')}</div></td>
+        <td>${comStatusChip(msg.status)}</td>
+        <td style="max-width:360px;font-size:11px;color:var(--text2)">${preview}${(msg.mensagem || '').length > 130 ? '...' : ''}${msg.erro ? `<div style="color:var(--red);margin-top:4px">${sanitize(msg.erro)}</div>` : ''}</td>
+        <td>${['erro','pendente'].includes(String(msg.status)) ? `<button class="btn btn-ghost btn-sm" onclick="comReenviarMensagem(${jsArg(msg.id)})">Reenviar</button>` : '<span class="text-muted">—</span>'}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--red)">Erro ao carregar mensagens: ${sanitize(e.message || e)}</td></tr>`;
+  }
+}
+
+async function comPostJson(path, body = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || payload.detail || `HTTP ${response.status}`);
+  return payload;
+}
+
+async function comEnviarAgendaTodos() {
+  const data = comDataValue();
+  if (!evolutionStatus.connected) await carregarEvolutionStatus(true);
+  if (!evolutionStatus.connected && !confirmAction('Evolution API parece desconectada. Tentar enviar mesmo assim?')) return;
+  try {
+    const result = await comPostJson('/api/logistica/whatsapp/enviar-agenda-dia-todos', { data });
+    const enviados = (result.results || []).filter(r => r.message?.status === 'enviado').length;
+    toast(`Agenda enviada para ${enviados} técnico(s)`, 'ok');
+    await renderComunicacaoLogistica(true);
+  } catch(e) {
+    toast('Falha ao enviar agenda: ' + (e.message || e), 'err');
+    await renderComunicacaoLogistica(true);
+  }
+}
+
+async function comEnviarLembretes24h() {
+  const data = comDataValue();
+  if (!confirmAction(`Enviar lembretes 24h usando ${data} como data base?`)) return;
+  try {
+    const result = await comPostJson('/api/logistica/whatsapp/enviar-lembretes-24h', { data });
+    const enviados = (result.results || []).filter(r => r.message?.status === 'enviado').length;
+    toast(`Lembretes 24h enviados: ${enviados}`, 'ok');
+    await renderComunicacaoLogistica(true);
+  } catch(e) {
+    toast('Falha ao enviar lembretes: ' + (e.message || e), 'err');
+    await renderComunicacaoLogistica(true);
+  }
+}
+
+async function comReenviarMensagem(id) {
+  if (!confirmAction('Reenviar esta mensagem via Evolution API?')) return;
+  try {
+    await comPostJson(`/api/logistica/whatsapp/mensagens/${encodeURIComponent(id)}/reenviar`, {});
+    toast('Mensagem reenviada', 'ok');
+    await renderComunicacaoLogistica(true);
+  } catch(e) {
+    toast('Falha ao reenviar: ' + (e.message || e), 'err');
+    await renderComunicacaoLogistica(true);
+  }
+}
+
+async function comEnviarConfirmacaoServico(id) {
+  if (!confirmAction('Enviar confirmação de agendamento para o cliente?')) return;
+  try {
+    await comPostJson('/api/logistica/whatsapp/enviar-confirmacao-cliente', { agendamento_id: id });
+    toast('Confirmação enviada ao cliente', 'ok');
+    if (currentPage === 'comunicacao') await renderComunicacaoLogistica(true);
+  } catch(e) {
+    toast('Falha ao enviar confirmação: ' + (e.message || e), 'err');
+  }
+}
+
+async function comEnviarLembreteServico(id) {
+  if (!confirmAction('Reenviar lembrete 24h para o cliente?')) return;
+  try {
+    await comPostJson('/api/logistica/whatsapp/enviar-lembrete-cliente', { agendamento_id: id, force: true });
+    toast('Lembrete enviado ao cliente', 'ok');
+    if (currentPage === 'comunicacao') await renderComunicacaoLogistica(true);
+  } catch(e) {
+    toast('Falha ao enviar lembrete: ' + (e.message || e), 'err');
+  }
+}
+
 // ─── Gerar Roteiro do sistema ────────────────
 async function rotGerarDoSistema() {
   const data = document.getElementById('rot-data')?.value;
@@ -14542,24 +14765,36 @@ async function carregarTecnicosConfig() {
           <button class="btn btn-primary btn-sm" onclick="formNovoTecnico()">+ Novo Técnico</button>
         </div>
         <div id="form-novo-tecnico" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg2);border-radius:var(--r2)">
-          <div class="form-row fr-2 mb3"><div class="field"><label>Nome</label><input type="text" id="cfg-tec-nome" placeholder="Nome do técnico"></div></div>
+          <div class="form-row fr-3 mb3">
+            <div class="field"><label>Nome</label><input type="text" id="cfg-tec-nome" placeholder="Nome do técnico"></div>
+            <div class="field"><label>Telefone</label><input type="tel" id="cfg-tec-telefone" placeholder="5511999999999" oninput="this.value=this.value.replace(/\\D/g,'')"></div>
+            <div class="field"><label>WhatsApp</label><input type="tel" id="cfg-tec-whatsapp" placeholder="5511999999999" oninput="this.value=this.value.replace(/\\D/g,'')"></div>
+          </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onclick="salvarTecnico()">Salvar</button>
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('form-novo-tecnico').style.display='none'">Cancelar</button>
           </div>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>ID</th><th>Nome</th><th>Ativo</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(t => `<tr><td class="mono">${sanitize(t.id)}</td><td class="bold">${sanitize(t.nome)}</td><td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</tbody>
+          <thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>WhatsApp</th><th>Ativo</th><th>Ações</th></tr></thead>
+          <tbody>${items.map(t => `<tr><td class="mono">${sanitize(t.id)}</td><td class="bold">${sanitize(t.nome)}</td><td class="mono">${sanitize(t.telefone || '—')}</td><td class="mono">${sanitize(t.whatsapp || '—')}</td><td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</tbody>
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
 }
-function formNovoTecnico() { document.getElementById('form-novo-tecnico').style.display = ''; document.getElementById('cfg-tec-nome').value = ''; document.getElementById('cfg-tec-nome').focus(); }
+function formNovoTecnico() {
+  document.getElementById('form-novo-tecnico').style.display = '';
+  document.getElementById('cfg-tec-nome').value = '';
+  document.getElementById('cfg-tec-telefone').value = '';
+  document.getElementById('cfg-tec-whatsapp').value = '';
+  document.getElementById('cfg-tec-nome').focus();
+}
 async function salvarTecnico() {
   const nome = document.getElementById('cfg-tec-nome')?.value.trim();
+  const telefone = document.getElementById('cfg-tec-telefone')?.value.trim() || null;
+  const whatsapp = document.getElementById('cfg-tec-whatsapp')?.value.trim() || null;
   if (!nome) { toast('Preencha o nome do técnico', 'err'); return; }
-  try { const { error } = await supabaseClient.from('technicians').insert([{ nome, ativo: true }]); if (error) throw error; toast('✅ Técnico salvo!', 'ok'); document.getElementById('form-novo-tecnico').style.display = 'none'; await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
+  try { const { error } = await supabaseClient.from('technicians').insert([{ nome, telefone, whatsapp, ativo: true }]); if (error) throw error; toast('✅ Técnico salvo!', 'ok'); document.getElementById('form-novo-tecnico').style.display = 'none'; await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
 }
 async function toggleTecnico(id, ativo) {
   const msg = ativo ? 'Ativar este técnico?' : 'Desativar este técnico? Ele sairá das novas seleções, mas o histórico será mantido.';

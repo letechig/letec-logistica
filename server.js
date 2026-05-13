@@ -403,9 +403,9 @@ function getSupabaseClient() {
 }
 
 function getEvolutionConfig() {
-  const apiUrl = String(process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+  const apiUrl = String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL || '').replace(/\/$/, '');
   const apiKey = String(process.env.EVOLUTION_API_KEY || '');
-  const instance = String(process.env.EVOLUTION_INSTANCE_NAME || 'letec').trim();
+  const instance = String(process.env.EVOLUTION_INSTANCE_NAME || process.env.EVOLUTION_INSTANCE || 'Letec').trim();
   return {
     apiUrl,
     apiKey,
@@ -506,6 +506,230 @@ async function markCustomerReminderSendAttempt(db, id, payload) {
     : await builder;
   if (error) throw error;
   return Array.isArray(data) ? (data[0] || null) : (data || null);
+}
+
+function ymdToBr(date) {
+  const value = String(date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || 'data prevista';
+  const [year, month, day] = value.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function serviceDateValue(service = {}) {
+  return String(service.date || service.data || service.dt || '').slice(0, 10);
+}
+
+function serviceTimeValue(service = {}) {
+  return String(service.horario || service.hr || '').trim() || 'sem horario';
+}
+
+function serviceTypeValue(service = {}) {
+  if (Array.isArray(service.tipos) && service.tipos.length) return service.tipos.join(' + ');
+  if (typeof service.tipos === 'string' && service.tipos.trim()) {
+    try {
+      const parsed = JSON.parse(service.tipos);
+      if (Array.isArray(parsed) && parsed.length) return parsed.join(' + ');
+    } catch(e) {}
+    return service.tipos;
+  }
+  return service.tiposervico || service.tipoServico || service.sc || 'Atendimento';
+}
+
+function serviceTechnicianIds(service = {}) {
+  const raw = service.tecnicos_ids || service.tecnicosIds || service.technicians_ids || [];
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch(e) {}
+  }
+  return [];
+}
+
+function isServiceCancelledOrDone(service = {}) {
+  const status = String(service.status || service.st || '').toLowerCase();
+  const execStatus = String(service.exec_status || '').toLowerCase();
+  return ['cancelado', 'executado', 'concluido', 'concluído'].includes(status)
+    || ['finalizado', 'concluido', 'concluído'].includes(execStatus);
+}
+
+function normalizeLooseForMatch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function maybeSingle(builder) {
+  const { data, error } = typeof builder.maybeSingle === 'function'
+    ? await builder.maybeSingle()
+    : await builder;
+  if (error) throw error;
+  return Array.isArray(data) ? (data[0] || null) : (data || null);
+}
+
+async function fetchServiceById(db, id) {
+  return maybeSingle(db.from('services').select('*').eq('id', id));
+}
+
+async function fetchServicesByDate(db, date) {
+  const { data, error } = await db
+    .from('services')
+    .select('*')
+    .or(`date.eq.${date},data.eq.${date}`)
+    .order('horario', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchTechniciansByIds(db, ids = []) {
+  const wanted = [...new Set(ids.map(String).filter(Boolean))];
+  if (!wanted.length) return [];
+  const { data, error } = await db
+    .from('technicians')
+    .select('*')
+    .in('id', wanted);
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchTechnicianById(db, id) {
+  return maybeSingle(db.from('technicians').select('*').eq('id', id));
+}
+
+async function fetchCustomerForService(db, service = {}) {
+  const explicitId = service.customer_id || service.cliente_id || service.clienteId || service.client_id;
+  if (explicitId) {
+    const byId = await maybeSingle(db.from('customers').select('*').eq('id', explicitId));
+    if (byId) return byId;
+  }
+
+  const serviceName = normalizeLooseForMatch(service.cliente || service.cl || '');
+  if (!serviceName) return null;
+  const { data, error } = await db
+    .from('customers')
+    .select('*')
+    .eq('ativo', true)
+    .limit(500);
+  if (error) throw error;
+  const matches = (data || []).filter(customer => normalizeLooseForMatch(customer.nome_normalizado || customer.nome) === serviceName);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function customerPhone(customer = {}) {
+  return normalizeBrazilWhatsAppNumber(customer.whatsapp || customer.telefone || '');
+}
+
+function technicianPhone(technician = {}) {
+  return normalizeBrazilWhatsAppNumber(technician.whatsapp || technician.telefone || '');
+}
+
+function buildServiceLine(service = {}, index = 1) {
+  return `${index}) ${serviceTimeValue(service)} - ${service.cliente || service.cl || 'Cliente'}\nServiço: ${serviceTypeValue(service)}\nEndereço: ${service.endereco || 'Endereco nao informado'}\nContato: ${service.contato_cliente || service.telefone || '-'}\nObservações: ${service.observacoes || service.obs || '-'}`;
+}
+
+function buildTechnicianAgendaMessage(technician, date, services = []) {
+  const lines = services.map(buildServiceLine).join('\n\n');
+  return `Bom dia, ${technician.nome || 'tecnico'}!\n\nSegue sua agenda de hoje, ${ymdToBr(date)}:\n\n${lines || 'Nenhum atendimento encontrado.'}\n\nPor favor, confirme o recebimento respondendo: OK`;
+}
+
+function buildCustomerConfirmationMessage(service, customer) {
+  return `Olá, ${customer?.nome || service.cliente || service.cl || 'cliente'}! Tudo bem?\n\nSeu atendimento com a Letec foi agendado:\n\nData: ${ymdToBr(serviceDateValue(service))}\nHorário/Período: ${serviceTimeValue(service)}\nServiço: ${serviceTypeValue(service)}\nEndereço: ${service.endereco || 'Endereco cadastrado'}\n\nPor favor, responda:\n1 - Confirmar\n2 - Reagendar\n3 - Falar com a equipe`;
+}
+
+function buildCustomerReminder24hMessage(service, customer) {
+  return `Olá, ${customer?.nome || service.cliente || service.cl || 'cliente'}!\n\nPassando para lembrar do atendimento da Letec agendado para amanhã:\n\nData: ${ymdToBr(serviceDateValue(service))}\nHorário/Período: ${serviceTimeValue(service)}\nServiço: ${serviceTypeValue(service)}\nEndereço: ${service.endereco || 'Endereco cadastrado'}\n\nPodemos manter confirmado?\n\nResponda:\n1 - Confirmar\n2 - Reagendar\n3 - Falar com a equipe`;
+}
+
+async function existingLogisticsWhatsappMessage(db, { agendamentoId, tipo, destinatarioTipo, dateKey }) {
+  let query = db
+    .from('logistica_whatsapp_mensagens')
+    .select('*')
+    .eq('agendamento_id', String(agendamentoId || ''))
+    .eq('tipo', tipo)
+    .eq('destinatario_tipo', destinatarioTipo)
+    .gte('created_at', `${dateKey}T00:00:00.000Z`)
+    .lt('created_at', `${dateKey}T23:59:59.999Z`)
+    .limit(1);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || [])[0] || null;
+}
+
+async function insertLogisticsWhatsappMessage(db, payload) {
+  const { data, error } = await db
+    .from('logistica_whatsapp_mensagens')
+    .insert([payload])
+    .select();
+  if (error) throw error;
+  return data?.[0] || payload;
+}
+
+async function updateLogisticsWhatsappMessage(db, id, payload) {
+  const { data, error } = await db
+    .from('logistica_whatsapp_mensagens')
+    .update(payload)
+    .eq('id', id)
+    .select();
+  if (error) throw error;
+  return data?.[0] || { id, ...payload };
+}
+
+async function sendAndRecordLogisticsMessage(db, payload, { force = false } = {}) {
+  const now = new Date();
+  const dateKey = now.toISOString().slice(0, 10);
+  if (!force && payload.agendamento_id) {
+    const existing = await existingLogisticsWhatsappMessage(db, {
+      agendamentoId: payload.agendamento_id,
+      tipo: payload.tipo,
+      destinatarioTipo: payload.destinatario_tipo,
+      dateKey
+    });
+    if (existing && existing.status === 'enviado') return { skipped: true, message: existing };
+  }
+
+  const phone = payload.telefone ? normalizeBrazilWhatsAppNumber(payload.telefone) : '';
+  if (!phone && !payload.grupo_jid) {
+    const errorRecord = await insertLogisticsWhatsappMessage(db, {
+      ...payload,
+      telefone: payload.telefone || null,
+      direcao: 'enviada',
+      status: 'erro',
+      erro: 'Destinatario sem telefone valido ou grupo_jid',
+      created_at: now.toISOString()
+    });
+    return { error: 'Destinatario sem telefone valido ou grupo_jid', message: errorRecord };
+  }
+
+  const pending = await insertLogisticsWhatsappMessage(db, {
+    ...payload,
+    telefone: phone || payload.telefone || null,
+    direcao: 'enviada',
+    status: 'pendente',
+    created_at: now.toISOString()
+  });
+
+  try {
+    const result = await sendEvolutionText({ number: phone || payload.grupo_jid, text: payload.mensagem });
+    const sent = await updateLogisticsWhatsappMessage(db, pending.id, {
+      status: 'enviado',
+      resposta_api: result.providerResponse,
+      enviado_em: new Date().toISOString(),
+      erro: null
+    });
+    return { message: sent, evolution: result };
+  } catch (error) {
+    const failed = await updateLogisticsWhatsappMessage(db, pending.id, {
+      status: 'erro',
+      resposta_api: error.payload || { message: error.message },
+      erro: error.message
+    });
+    return { error: error.message, message: failed };
+  }
 }
 
 function createDistanceClient() {
@@ -1596,6 +1820,215 @@ app.post('/api/customer-reminders/:id/send', strictLimiter, async (req, res) => 
   } catch (error) {
     console.error('[POST /api/customer-reminders/:id/send] Error:', error.message);
     res.status(500).json({ error: 'Falha ao enviar lembrete', detail: error.message });
+  }
+});
+
+app.post('/api/logistica/whatsapp/enviar-agenda-tecnico', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    const tecnicoId = String(req.body?.tecnico_id || '').trim();
+    const date = String(req.body?.data || '').trim();
+    if (!tecnicoId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'tecnico_id e data YYYY-MM-DD sao obrigatorios' });
+    }
+
+    const technician = await fetchTechnicianById(db, tecnicoId);
+    if (!technician) return res.status(404).json({ error: 'Tecnico nao encontrado' });
+    const phone = technicianPhone(technician);
+    if (!phone) return res.status(400).json({ error: 'Tecnico sem WhatsApp valido' });
+
+    const services = (await fetchServicesByDate(db, date))
+      .filter(service => serviceTechnicianIds(service).includes(tecnicoId));
+    const message = buildTechnicianAgendaMessage(technician, date, services);
+    const result = await sendAndRecordLogisticsMessage(db, {
+      agendamento_id: null,
+      tecnico_id: tecnicoId,
+      cliente_id: null,
+      destinatario_tipo: 'tecnico',
+      destinatario_nome: technician.nome || '',
+      telefone: phone,
+      tipo: 'agenda_tecnico',
+      mensagem: message
+    }, { force: req.body?.force === true });
+
+    res.status(result.error ? 502 : 200).json({ ...result, total_agendamentos: services.length });
+  } catch (error) {
+    console.error('[POST /api/logistica/whatsapp/enviar-agenda-tecnico] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao enviar agenda do tecnico', detail: error.message });
+  }
+});
+
+app.post('/api/logistica/whatsapp/enviar-agenda-dia-todos', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    const date = String(req.body?.data || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'data YYYY-MM-DD obrigatoria' });
+    }
+
+    const services = await fetchServicesByDate(db, date);
+    const technicianIds = [...new Set(services.flatMap(serviceTechnicianIds))];
+    const technicians = await fetchTechniciansByIds(db, technicianIds);
+    const results = [];
+
+    for (const technician of technicians) {
+      const tecnicoId = String(technician.id);
+      const phone = technicianPhone(technician);
+      const techServices = services.filter(service => serviceTechnicianIds(service).includes(tecnicoId));
+      if (!phone) {
+        results.push({ tecnico_id: tecnicoId, destinatario_nome: technician.nome, error: 'Tecnico sem WhatsApp valido', total_agendamentos: techServices.length });
+        continue;
+      }
+      const result = await sendAndRecordLogisticsMessage(db, {
+        agendamento_id: null,
+        tecnico_id: tecnicoId,
+        cliente_id: null,
+        destinatario_tipo: 'tecnico',
+        destinatario_nome: technician.nome || '',
+        telefone: phone,
+        tipo: 'agenda_tecnico',
+        mensagem: buildTechnicianAgendaMessage(technician, date, techServices)
+      }, { force: req.body?.force === true });
+      results.push({ tecnico_id: tecnicoId, destinatario_nome: technician.nome, total_agendamentos: techServices.length, ...result });
+    }
+
+    res.json({ data: date, total_tecnicos: technicians.length, results });
+  } catch (error) {
+    console.error('[POST /api/logistica/whatsapp/enviar-agenda-dia-todos] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao enviar agendas do dia', detail: error.message });
+  }
+});
+
+async function sendCustomerLogisticsMessageByService(db, serviceId, tipo, buildMessage, force = false) {
+  const service = await fetchServiceById(db, serviceId);
+  if (!service) {
+    const error = new Error('Agendamento nao encontrado');
+    error.status = 404;
+    throw error;
+  }
+  if (tipo === 'lembrete_24h' && isServiceCancelledOrDone(service)) {
+    const error = new Error('Agendamento cancelado ou concluido nao recebe lembrete');
+    error.status = 400;
+    throw error;
+  }
+  const customer = await fetchCustomerForService(db, service);
+  const phone = customerPhone(customer) || normalizeBrazilWhatsAppNumber(service.whatsapp || service.telefone || '');
+  if (!phone) {
+    const error = new Error('Cliente sem WhatsApp valido');
+    error.status = 400;
+    throw error;
+  }
+  return sendAndRecordLogisticsMessage(db, {
+    agendamento_id: String(service.id),
+    tecnico_id: null,
+    cliente_id: customer?.id ? String(customer.id) : null,
+    destinatario_tipo: 'cliente',
+    destinatario_nome: customer?.nome || service.cliente || service.cl || '',
+    telefone: phone,
+    tipo,
+    mensagem: buildMessage(service, customer)
+  }, { force });
+}
+
+app.post('/api/logistica/whatsapp/enviar-confirmacao-cliente', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    const serviceId = req.body?.agendamento_id;
+    if (!serviceId) return res.status(400).json({ error: 'agendamento_id obrigatorio' });
+    const result = await sendCustomerLogisticsMessageByService(db, serviceId, 'confirmacao_cliente', buildCustomerConfirmationMessage, req.body?.force === true);
+    res.status(result.error ? 502 : 200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || 'Falha ao enviar confirmacao' });
+  }
+});
+
+app.post('/api/logistica/whatsapp/enviar-lembrete-cliente', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    const serviceId = req.body?.agendamento_id;
+    if (!serviceId) return res.status(400).json({ error: 'agendamento_id obrigatorio' });
+    const result = await sendCustomerLogisticsMessageByService(db, serviceId, 'lembrete_24h', buildCustomerReminder24hMessage, req.body?.force === true);
+    res.status(result.error ? 502 : 200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || 'Falha ao enviar lembrete' });
+  }
+});
+
+app.post('/api/logistica/whatsapp/enviar-lembretes-24h', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    const baseDate = String(req.body?.data || new Date().toISOString().slice(0, 10)).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(baseDate)) return res.status(400).json({ error: 'data YYYY-MM-DD invalida' });
+    const tomorrow = new Date(`${baseDate}T12:00:00`);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const targetDate = tomorrow.toISOString().slice(0, 10);
+    const services = (await fetchServicesByDate(db, targetDate)).filter(service => !isServiceCancelledOrDone(service));
+    const results = [];
+    for (const service of services) {
+      try {
+        const result = await sendCustomerLogisticsMessageByService(db, service.id, 'lembrete_24h', buildCustomerReminder24hMessage, req.body?.force === true);
+        results.push({ agendamento_id: String(service.id), ...result });
+      } catch (error) {
+        results.push({ agendamento_id: String(service.id), error: error.message });
+      }
+    }
+    res.json({ data_base: baseDate, data_alvo: targetDate, total_agendamentos: services.length, results });
+  } catch (error) {
+    console.error('[POST /api/logistica/whatsapp/enviar-lembretes-24h] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao enviar lembretes 24h', detail: error.message });
+  }
+});
+
+app.get('/api/logistica/whatsapp/mensagens', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 80, 1), 300);
+    let query = db
+      .from('logistica_whatsapp_mensagens')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (req.query.data) {
+      const date = String(req.query.data).slice(0, 10);
+      query = query.gte('created_at', `${date}T00:00:00.000Z`).lt('created_at', `${date}T23:59:59.999Z`);
+    }
+    if (req.query.tipo) query = query.eq('tipo', String(req.query.tipo));
+    if (req.query.status) query = query.eq('status', String(req.query.status));
+    if (req.query.destinatario_tipo) query = query.eq('destinatario_tipo', String(req.query.destinatario_tipo));
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/logistica/whatsapp/mensagens] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar mensagens logisticas', detail: error.message });
+  }
+});
+
+app.post('/api/logistica/whatsapp/mensagens/:id/reenviar', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    const current = await maybeSingle(db.from('logistica_whatsapp_mensagens').select('*').eq('id', req.params.id));
+    if (!current) return res.status(404).json({ error: 'Mensagem nao encontrada' });
+    if (!['erro', 'pendente'].includes(String(current.status))) {
+      return res.status(400).json({ error: 'Apenas mensagens pendentes ou com erro podem ser reenviadas' });
+    }
+    const result = await sendAndRecordLogisticsMessage(db, {
+      agendamento_id: current.agendamento_id,
+      tecnico_id: current.tecnico_id,
+      cliente_id: current.cliente_id,
+      destinatario_tipo: current.destinatario_tipo,
+      destinatario_nome: current.destinatario_nome,
+      telefone: current.telefone,
+      grupo_jid: current.grupo_jid,
+      tipo: current.tipo,
+      mensagem: current.mensagem
+    }, { force: true });
+    res.status(result.error ? 502 : 200).json(result);
+  } catch (error) {
+    console.error('[POST /api/logistica/whatsapp/mensagens/:id/reenviar] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao reenviar mensagem', detail: error.message });
   }
 });
 
