@@ -26,12 +26,13 @@ function makeState() {
   };
 }
 
-function makeBuilder(state, table) {
+function makeBuilder(state, table, options = {}) {
   const builder = {
     _op: 'select',
     _payload: null,
     _filters: [],
     _limit: null,
+    _missing: !!options.missing,
     select() { return builder; },
     order() { return builder; },
     limit(n) { builder._limit = n; return builder; },
@@ -47,6 +48,9 @@ function makeBuilder(state, table) {
     delete() { builder._op = 'delete'; return builder; },
     then(resolve) { return builder._execute().then(resolve); },
     async _execute() {
+      if (builder._missing) {
+        return { data: null, error: { code: 'PGRST205', message: `Could not find the table '${table}' in the schema cache` } };
+      }
       if (builder._op === 'insert') return { data: builder._inserted, error: null };
       let rows = builder._rows();
       if (builder._op === 'update') {
@@ -78,9 +82,20 @@ function makeDb(state) {
   };
 }
 
-async function withServer(fn) {
+function makeDbWithOptions(state, options = {}) {
+  const missingTables = new Set(options.missingTables || []);
+  return {
+    from(table) {
+      if (missingTables.has(table)) return makeBuilder(state, table, { missing: true });
+      assert.ok(state[table], `unexpected table ${table}`);
+      return makeBuilder(state, table);
+    }
+  };
+}
+
+async function withServer(fn, options = {}) {
   const state = makeState();
-  app.locals.supabase = makeDb(state);
+  app.locals.supabase = options.missingTables ? makeDbWithOptions(state, options) : makeDb(state);
   const server = app.listen(0);
   try {
     const { port } = server.address();
@@ -114,6 +129,91 @@ test('POST /api/veiculos rejeita quilometragem negativa', async () => {
     });
     assert.equal(response.status, 400);
   });
+});
+
+test('POST /api/veiculos bloqueia nome duplicado e retorna cadastro existente', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/veiculos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: 'palio', placa: '', quilometragem_atual: 1 })
+    });
+    assert.equal(response.status, 409);
+    const payload = await response.json();
+    assert.equal(payload.duplicate, true);
+    assert.equal(payload.duplicate_reason, 'nome');
+    assert.equal(payload.existing_vehicle.id, 'veh-1');
+    assert.equal(state.vehicles.length, 2);
+  });
+});
+
+test('POST /api/veiculos bloqueia placa duplicada normalizada', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/veiculos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: 'Veiculo Novo', placa: 'abc-1234' })
+    });
+    assert.equal(response.status, 409);
+    const payload = await response.json();
+    assert.equal(payload.duplicate_reason, 'placa');
+    assert.equal(payload.existing_vehicle.id, 'veh-1');
+    assert.equal(state.vehicles.length, 2);
+  });
+});
+
+test('PUT /api/veiculos/:id completa placa e KM em veículo existente sem duplicar', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/veiculos/veh-2`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: 'Uno', placa: 'ghi-9j99', quilometragem_atual: 222, tecnico_responsavel_id: 'tec-1' })
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.placa, 'GHI9J99');
+    assert.equal(payload.quilometragem_atual, 222);
+    assert.equal(payload.tecnico_responsavel_id, 'tec-1');
+    assert.equal(state.vehicles.length, 2);
+  });
+});
+
+test('GET /api/veiculos/duplicados lista possíveis duplicados sem alterar dados', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.vehicles.push({ id: 'veh-3', nome: 'palio', placa: '', ativo: true, status: 'ativo' });
+    const response = await fetch(`${baseUrl}/api/veiculos/duplicados`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.ok(payload.some(group => group.type === 'nome' && group.vehicles.some(vehicle => vehicle.id === 'veh-1') && group.vehicles.some(vehicle => vehicle.id === 'veh-3')));
+    assert.equal(state.vehicles.length, 3);
+  });
+});
+
+test('GET /api/veiculos/setup/status retorna completo quando recursos existem', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/veiculos/setup/status`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.complete, true);
+    assert.equal(payload.features.documentos, true);
+    assert.equal(payload.features.manutencoes, true);
+    assert.equal(payload.features.historico, true);
+    assert.deepEqual(payload.missing_tables, []);
+  });
+});
+
+test('GET /api/veiculos/setup/status informa migration incompleta sem tabelas opcionais', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/veiculos/setup/status`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.complete, false);
+    assert.equal(payload.features.documentos, false);
+    assert.equal(payload.features.manutencoes, false);
+    assert.ok(payload.missing_tables.includes('veiculo_documentos'));
+    assert.ok(payload.missing_tables.includes('veiculo_manutencoes'));
+    assert.equal(payload.migration, 'migration-frota-v1.sql');
+  }, { missingTables: ['veiculo_documentos', 'veiculo_manutencoes', 'veiculo_historico', 'veiculo_alerta_envios'] });
 });
 
 test('GET /api/veiculos/alertas retorna documento vencido, manutencao por km e veiculo sem tecnico', async () => {

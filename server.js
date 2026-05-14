@@ -509,6 +509,70 @@ function normalizePlate(value) {
   return text ? text.toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
 }
 
+function normalizeVehicleName(value) {
+  return normalizeLooseText(value);
+}
+
+function addVehicleComputedFields(item) {
+  return { ...item, rodizio: rodizioInfo(item.placa) };
+}
+
+function findDuplicateVehicle(vehicles = [], payload = {}, ignoreId = null) {
+  const plate = normalizePlate(payload.placa);
+  const name = normalizeVehicleName(payload.nome);
+  const sameId = item => ignoreId !== null && ignoreId !== undefined && String(item.id) === String(ignoreId);
+
+  if (plate) {
+    const byPlate = vehicles.find(item => !sameId(item) && normalizePlate(item.placa) === plate);
+    if (byPlate) return { vehicle: byPlate, reason: 'placa' };
+  }
+
+  if (name) {
+    const byName = vehicles.find(item => !sameId(item) && normalizeVehicleName(item.nome) === name);
+    if (byName) return { vehicle: byName, reason: 'nome' };
+  }
+
+  return null;
+}
+
+function vehicleDuplicatePayload(duplicate) {
+  const reason = duplicate?.reason || 'cadastro';
+  const label = reason === 'placa' ? 'placa' : 'nome';
+  return {
+    error: `Ja existe um veiculo com este ${label}. Edite o cadastro existente em vez de criar outro.`,
+    duplicate: true,
+    duplicate_reason: reason,
+    existing_vehicle: duplicate?.vehicle || null,
+    existing: duplicate?.vehicle || null
+  };
+}
+
+function buildVehicleDuplicateGroups(vehicles = []) {
+  const groups = [];
+  const collect = (key, type, label, vehicle) => {
+    if (!key) return;
+    let group = groups.find(item => item.type === type && item.key === key);
+    if (!group) {
+      group = { type, key, label, vehicles: [] };
+      groups.push(group);
+    }
+    group.vehicles.push(vehicle);
+  };
+
+  vehicles.forEach(vehicle => {
+    collect(normalizeVehicleName(vehicle.nome), 'nome', vehicle.nome || 'Sem nome', vehicle);
+    collect(normalizePlate(vehicle.placa), 'placa', vehicle.placa || 'Sem placa', vehicle);
+  });
+
+  return groups
+    .filter(group => group.vehicles.length > 1)
+    .map(group => ({
+      ...group,
+      count: group.vehicles.length,
+      vehicles: group.vehicles.map(addVehicleComputedFields)
+    }));
+}
+
 function normalizeVehiclePayload(input = {}, options = {}) {
   const partial = !!options.partial;
   const payload = {};
@@ -840,6 +904,94 @@ async function fetchVehicleAlerts(db) {
     documents,
     maintenances
   });
+}
+
+const FLEET_MIGRATION_NAME = 'migration-frota-v1.sql';
+const FLEET_OPTIONAL_TABLES = [
+  'veiculo_documentos',
+  'veiculo_manutencoes',
+  'veiculo_historico',
+  'veiculo_alerta_envios'
+];
+
+function fleetMigrationPayload(resource = 'Recurso de frota') {
+  return {
+    error: `${resource} indisponivel. Execute ${FLEET_MIGRATION_NAME} no Supabase para liberar esta funcao.`,
+    setup_required: true,
+    migration: FLEET_MIGRATION_NAME
+  };
+}
+
+function sendFleetSetupError(res, error, resource) {
+  if (!isMissingSupabaseRelation(error)) return false;
+  res.status(503).json(fleetMigrationPayload(resource));
+  return true;
+}
+
+async function checkFleetTable(db, table) {
+  const { error } = await db.from(table).select('id').limit(1);
+  if (!error) return { table, available: true };
+  if (isMissingSupabaseRelation(error)) return { table, available: false, error: error.message };
+  throw error;
+}
+
+async function checkFleetVehicleColumns(db) {
+  const requiredColumns = [
+    'id',
+    'marca',
+    'modelo',
+    'ano',
+    'cor',
+    'renavam',
+    'chassi',
+    'combustivel',
+    'quilometragem_atual',
+    'tecnico_responsavel_id',
+    'status',
+    'observacoes'
+  ];
+  const { error } = await db.from('vehicles').select(requiredColumns.join(',')).limit(1);
+  if (!error) return { available: true, missing: [] };
+  if (!isMissingSupabaseRelation(error)) throw error;
+  return { available: false, missing: requiredColumns.slice(1), error: error.message };
+}
+
+async function getFleetSetupStatus(db) {
+  const [columnsStatus, ...tableStatuses] = await Promise.all([
+    checkFleetVehicleColumns(db),
+    ...FLEET_OPTIONAL_TABLES.map(table => checkFleetTable(db, table))
+  ]);
+
+  const tableMap = Object.fromEntries(tableStatuses.map(item => [item.table, item.available]));
+  const missingTables = tableStatuses.filter(item => !item.available).map(item => item.table);
+  const vehiclesRes = await db.from('vehicles').select('id,nome,placa').order('nome', { ascending: true });
+  if (vehiclesRes.error) throw vehiclesRes.error;
+
+  const plates = new Map();
+  (vehiclesRes.data || []).forEach(vehicle => {
+    const normalized = normalizePlate(vehicle.placa);
+    if (!normalized) return;
+    if (!plates.has(normalized)) plates.set(normalized, []);
+    plates.get(normalized).push({ id: vehicle.id, nome: vehicle.nome, placa: vehicle.placa });
+  });
+  const duplicatePlates = [...plates.values()].filter(items => items.length > 1);
+
+  return {
+    migration: FLEET_MIGRATION_NAME,
+    complete: columnsStatus.available && missingTables.length === 0,
+    vehicles_available: true,
+    vehicle_extended_fields: columnsStatus.available,
+    missing_tables: missingTables,
+    missing_columns: columnsStatus.missing || [],
+    duplicate_plates: duplicatePlates,
+    features: {
+      documentos: !!tableMap.veiculo_documentos,
+      manutencoes: !!tableMap.veiculo_manutencoes,
+      historico: !!tableMap.veiculo_historico,
+      alerta_envios: !!tableMap.veiculo_alerta_envios,
+      alertas: !!tableMap.veiculo_documentos && !!tableMap.veiculo_manutencoes
+    }
+  };
 }
 
 async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf, db }) {
@@ -1847,6 +1999,17 @@ app.post('/api/inventory/movements', strictLimiter, async (req, res) => {
   }
 });
 
+app.get('/api/veiculos/setup/status', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const status = await getFleetSetupStatus(db);
+    res.json(status);
+  } catch (error) {
+    console.error('[GET /api/veiculos/setup/status] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao verificar setup da frota' });
+  }
+});
+
 app.get('/api/veiculos/alertas', async (req, res) => {
   try {
     const db = getSupabaseClient();
@@ -1935,10 +2098,22 @@ app.get('/api/veiculos', async (req, res) => {
     if (req.query.ativo !== undefined) query = query.eq('ativo', cleanBoolean(req.query.ativo, true));
     const { data, error } = await query;
     if (error) throw error;
-    res.json((data || []).map(item => ({ ...item, rodizio: rodizioInfo(item.placa) })));
+    res.json((data || []).map(addVehicleComputedFields));
   } catch (error) {
     console.error('[GET /api/veiculos] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar veiculos' });
+  }
+});
+
+app.get('/api/veiculos/duplicados', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db.from('vehicles').select('*').order('nome', { ascending: true });
+    if (error) throw error;
+    res.json(buildVehicleDuplicateGroups(data || []));
+  } catch (error) {
+    console.error('[GET /api/veiculos/duplicados] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar duplicados de veiculos' });
   }
 });
 
@@ -1965,10 +2140,11 @@ app.post('/api/veiculos', strictLimiter, async (req, res) => {
     const db = getSupabaseClient();
     const payload = normalizeVehiclePayload(req.body);
     if (!payload.nome) return res.status(400).json({ error: 'Nome do veiculo e obrigatorio' });
-    if (payload.placa) {
-      const existingPlate = await maybeSingle(db.from('vehicles').select('id,placa').eq('placa', payload.placa));
-      if (existingPlate) return res.status(409).json({ error: 'Ja existe um veiculo com esta placa' });
-    }
+    const existingVehiclesRes = await db.from('vehicles').select('*');
+    if (existingVehiclesRes.error) throw existingVehiclesRes.error;
+    const duplicate = findDuplicateVehicle(existingVehiclesRes.data || [], payload);
+    if (duplicate) return res.status(409).json(vehicleDuplicatePayload(duplicate));
+
     const { data, error } = await db.from('vehicles').insert([payload]).select();
     if (error) {
       if (error.code === '23505') return res.status(409).json({ error: 'Ja existe um veiculo com este nome ou placa' });
@@ -1990,12 +2166,11 @@ app.put('/api/veiculos/:id', strictLimiter, async (req, res) => {
     if (!before) return res.status(404).json({ error: 'Veiculo nao encontrado' });
     const payload = normalizeVehiclePayload(req.body, { partial: true });
     if (!Object.keys(payload).length) return res.status(400).json({ error: 'Nenhum campo valido para atualizar' });
-    if (payload.placa) {
-      const existingPlate = await maybeSingle(db.from('vehicles').select('id,placa').eq('placa', payload.placa));
-      if (existingPlate && String(existingPlate.id) !== String(req.params.id)) {
-        return res.status(409).json({ error: 'Ja existe um veiculo com esta placa' });
-      }
-    }
+    const existingVehiclesRes = await db.from('vehicles').select('*');
+    if (existingVehiclesRes.error) throw existingVehiclesRes.error;
+    const duplicate = findDuplicateVehicle(existingVehiclesRes.data || [], payload, req.params.id);
+    if (duplicate) return res.status(409).json(vehicleDuplicatePayload(duplicate));
+
     const { data, error } = await db.from('vehicles').update(payload).eq('id', req.params.id).select();
     if (error) throw error;
     const updated = data?.[0] || null;
@@ -2033,6 +2208,7 @@ app.get('/api/veiculos/:id/documentos', async (req, res) => {
     res.json(data || []);
   } catch (error) {
     console.error('[GET /api/veiculos/:id/documentos] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Documentos do veiculo')) return;
     res.status(500).json({ error: 'Falha ao buscar documentos' });
   }
 });
@@ -2049,6 +2225,7 @@ app.post('/api/veiculos/:id/documentos', strictLimiter, async (req, res) => {
     res.status(201).json(doc);
   } catch (error) {
     console.error('[POST /api/veiculos/:id/documentos] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Documentos do veiculo')) return;
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar documento' });
   }
 });
@@ -2066,6 +2243,7 @@ app.put('/api/veiculos/documentos/:documento_id', strictLimiter, async (req, res
     res.json(updated);
   } catch (error) {
     console.error('[PUT /api/veiculos/documentos/:documento_id] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Documentos do veiculo')) return;
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar documento' });
   }
 });
@@ -2081,6 +2259,7 @@ app.delete('/api/veiculos/documentos/:documento_id', strictLimiter, async (req, 
     res.json({ ok: true, documento: deleted });
   } catch (error) {
     console.error('[DELETE /api/veiculos/documentos/:documento_id] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Documentos do veiculo')) return;
     res.status(500).json({ error: 'Falha ao excluir documento' });
   }
 });
@@ -2093,6 +2272,7 @@ app.get('/api/veiculos/:id/manutencoes', async (req, res) => {
     res.json(data || []);
   } catch (error) {
     console.error('[GET /api/veiculos/:id/manutencoes] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Manutencoes do veiculo')) return;
     res.status(500).json({ error: 'Falha ao buscar manutencoes' });
   }
 });
@@ -2109,6 +2289,7 @@ app.post('/api/veiculos/:id/manutencoes', strictLimiter, async (req, res) => {
     res.status(201).json(maintenance);
   } catch (error) {
     console.error('[POST /api/veiculos/:id/manutencoes] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Manutencoes do veiculo')) return;
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar manutencao' });
   }
 });
@@ -2126,6 +2307,7 @@ app.put('/api/veiculos/manutencoes/:manutencao_id', strictLimiter, async (req, r
     res.json(updated);
   } catch (error) {
     console.error('[PUT /api/veiculos/manutencoes/:manutencao_id] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Manutencoes do veiculo')) return;
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar manutencao' });
   }
 });
@@ -2148,6 +2330,7 @@ app.post('/api/veiculos/manutencoes/:manutencao_id/marcar-realizada', strictLimi
     res.json(updated);
   } catch (error) {
     console.error('[POST /api/veiculos/manutencoes/:manutencao_id/marcar-realizada] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Manutencoes do veiculo')) return;
     res.status(500).json({ error: 'Falha ao marcar manutencao como realizada' });
   }
 });
@@ -2163,6 +2346,7 @@ app.delete('/api/veiculos/manutencoes/:manutencao_id', strictLimiter, async (req
     res.json({ ok: true, manutencao: deleted });
   } catch (error) {
     console.error('[DELETE /api/veiculos/manutencoes/:manutencao_id] Error:', error.message);
+    if (sendFleetSetupError(res, error, 'Manutencoes do veiculo')) return;
     res.status(500).json({ error: 'Falha ao excluir manutencao' });
   }
 });
