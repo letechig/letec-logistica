@@ -420,6 +420,84 @@ function normalizeServicePayload(input = {}, options = {}) {
   return payload;
 }
 
+function normalizeChecklistPayload(input = {}) {
+  const kms = cleanNumber(input.kms);
+  const kmc = cleanNumber(input.kmc);
+  const kmd = input.kmd !== undefined ? cleanNumber(input.kmd) : (kms !== null && kmc !== null ? kmc - kms : null);
+  return {
+    id: input.id !== undefined ? input.id : Date.now(),
+    date: cleanDateText(input.date),
+    motorista: cleanText(input.motorista, 200),
+    assistente: cleanText(input.assistente, 200),
+    cartao: cleanText(input.cartao, 120),
+    vei: cleanText(input.vei, 120),
+    kms,
+    kmc,
+    kmd,
+    hrs: cleanText(input.hrs, 20),
+    hrc: cleanText(input.hrc, 20),
+    fuel: cleanText(input.fuel, 40),
+    hasav: input.hasav === true || String(input.hasav) === 'true',
+    avtxt: cleanText(input.avtxt, 1000),
+    obs: cleanText(input.obs, 2000),
+    equip: input.equip && typeof input.equip === 'object' ? input.equip : {},
+    importado: input.importado === true || String(input.importado) === 'true',
+    origem: cleanText(input.origem, 80) || 'admin',
+    saida_lat: cleanNumber(input.saida_lat),
+    saida_lng: cleanNumber(input.saida_lng),
+    retorno_lat: cleanNumber(input.retorno_lat),
+    retorno_lng: cleanNumber(input.retorno_lng)
+  };
+}
+
+function normalizeTechnicianEventPayload(input = {}, options = {}) {
+  const partial = !!options.partial;
+  const payload = {};
+  const set = (target, normalizer, defaultValue) => {
+    if (!hasOwnValue(input, target)) {
+      if (!partial && defaultValue !== undefined) payload[target] = defaultValue;
+      return;
+    }
+    payload[target] = normalizer ? normalizer(input[target]) : input[target];
+  };
+
+  if (!partial || hasOwnValue(input, 'id')) payload.id = input.id !== undefined ? input.id : Date.now();
+  set('date', cleanDateText);
+  set('tecnico', value => cleanText(value, 200));
+  set('equipe', value => cleanText(value, 200));
+  set('service_id', cleanNumber);
+  set('tipo', value => cleanText(value, 80));
+  set('titulo', value => cleanText(value, 200));
+  set('detalhes', value => cleanText(value, 4000));
+  set('lat', cleanNumber);
+  set('lng', cleanNumber);
+  set('prioridade', value => cleanText(value, 80) || 'normal', 'normal');
+  set('status', value => cleanText(value, 80) || 'pendente', 'pendente');
+  set('visto', value => value === true || String(value) === 'true', false);
+  set('visto_em', value => cleanNullableText(value, 80));
+  set('resolvido_em', value => cleanNullableText(value, 80));
+  set('operador_responsavel', value => cleanText(value, 200));
+  set('observacao_resolucao', value => cleanText(value, 2000));
+  set('whatsapp_escalado_em', value => cleanNullableText(value, 80));
+  set('whatsapp_escalado_para', value => cleanText(value, 80));
+  set('whatsapp_escalado_status', value => cleanText(value, 80) || 'nao_enviado', 'nao_enviado');
+  set('whatsapp_escalado_erro', value => cleanText(value, 2000));
+  return payload;
+}
+
+function normalizeTechnicianMessagePayload(input = {}) {
+  return {
+    id: input.id !== undefined ? input.id : Date.now(),
+    date: cleanDateText(input.date),
+    tecnico: cleanText(input.tecnico, 200),
+    equipe: cleanText(input.equipe, 200),
+    mensagem: cleanText(input.mensagem, 4000),
+    prioridade: cleanText(input.prioridade, 80) || 'normal',
+    lido: input.lido === true || String(input.lido) === 'true',
+    lido_em: cleanNullableText(input.lido_em, 80)
+  };
+}
+
 async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf, db }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
@@ -1032,6 +1110,7 @@ app.get('/api/services', async (req, res) => {
     const db = getSupabaseClient();
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
     const cliente = String(req.query.cliente || '').trim();
+    const date = cleanDateText(req.query.date);
 
     let query = db
       .from('services')
@@ -1041,6 +1120,9 @@ app.get('/api/services', async (req, res) => {
 
     if (cliente) {
       query = query.ilike('cliente', `%${cliente}%`);
+    }
+    if (date) {
+      query = query.or(`date.eq.${date},data.eq.${date}`);
     }
 
     const { data, error } = await query;
@@ -1112,6 +1194,183 @@ app.delete('/api/services/:id', async (req, res) => {
   } catch (error) {
     console.error('[DELETE /api/services/:id] Error:', error.message);
     res.status(500).json({ error: 'Falha ao excluir serviço' });
+  }
+});
+
+app.get('/api/checklists', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const date = cleanDateText(req.query.date);
+    let query = db
+      .from('checklists')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (date) query = query.eq('date', date);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/checklists] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar checklists' });
+  }
+});
+
+app.post('/api/checklists', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeChecklistPayload(req.body);
+    const { data, error } = await db
+      .from('checklists')
+      .insert([payload])
+      .select();
+
+    if (error) throw error;
+    res.status(201).json(data?.[0] || null);
+  } catch (error) {
+    console.error('[POST /api/checklists] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao criar checklist' });
+  }
+});
+
+app.delete('/api/checklists/:id', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db
+      .from('checklists')
+      .delete()
+      .eq('id', req.params.id)
+      .select();
+
+    if (error) throw error;
+    const deleted = data?.[0] || null;
+    if (!deleted) return res.status(404).json({ error: 'Checklist não encontrado' });
+    res.json({ ok: true, checklist: deleted });
+  } catch (error) {
+    console.error('[DELETE /api/checklists/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao excluir checklist' });
+  }
+});
+
+app.get('/api/technician-events', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const date = cleanDateText(req.query.date);
+    let query = db
+      .from('technician_events')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (date) query = query.eq('date', date);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/technician-events] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar eventos técnicos' });
+  }
+});
+
+app.post('/api/technician-events', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeTechnicianEventPayload(req.body);
+    const { data, error } = await db
+      .from('technician_events')
+      .insert([payload])
+      .select();
+
+    if (error) throw error;
+    res.status(201).json(data?.[0] || null);
+  } catch (error) {
+    console.error('[POST /api/technician-events] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao criar evento técnico' });
+  }
+});
+
+app.put('/api/technician-events/:id', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeTechnicianEventPayload(req.body, { partial: true });
+    delete payload.id;
+    const { data, error } = await db
+      .from('technician_events')
+      .update(payload)
+      .eq('id', req.params.id)
+      .select();
+
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Evento técnico não encontrado' });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/technician-events/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao atualizar evento técnico' });
+  }
+});
+
+app.get('/api/technician-messages', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const date = cleanDateText(req.query.date);
+    const unread = String(req.query.unread) === 'true';
+    let query = db
+      .from('technician_messages')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (date && unread) query = query.or(`date.eq.${date},lido.eq.false`);
+    else if (date) query = query.eq('date', date);
+    else if (unread) query = query.eq('lido', false);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/technician-messages] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar mensagens técnicas' });
+  }
+});
+
+app.post('/api/technician-messages', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeTechnicianMessagePayload(req.body);
+    const { data, error } = await db
+      .from('technician_messages')
+      .insert([payload])
+      .select();
+
+    if (error) throw error;
+    res.status(201).json(data?.[0] || null);
+  } catch (error) {
+    console.error('[POST /api/technician-messages] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao criar mensagem técnica' });
+  }
+});
+
+app.put('/api/technician-messages/:id/read', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = {
+      lido: true,
+      lido_em: cleanNullableText(req.body?.lido_em, 80) || new Date().toISOString()
+    };
+    const { data, error } = await db
+      .from('technician_messages')
+      .update(payload)
+      .eq('id', req.params.id)
+      .select();
+
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Mensagem técnica não encontrada' });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/technician-messages/:id/read] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao marcar mensagem como lida' });
   }
 });
 

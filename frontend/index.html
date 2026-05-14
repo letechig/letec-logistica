@@ -2595,6 +2595,40 @@ async function carregarVeiculos(){
     });
   }
 
+  async function createChecklistViaBackend(record) {
+    return await requestBackendJson('/api/checklists', {
+      method: 'POST',
+      body: JSON.stringify(record)
+    });
+  }
+
+  async function deleteChecklistViaBackend(id) {
+    return await requestBackendJson(`/api/checklists/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async function updateTechnicianEventViaBackend(id, payload) {
+    return await requestBackendJson(`/api/technician-events/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async function createTechnicianMessageViaBackend(record) {
+    return await requestBackendJson('/api/technician-messages', {
+      method: 'POST',
+      body: JSON.stringify(record)
+    });
+  }
+
+  async function markTechnicianMessageReadViaBackend(id, payload = {}) {
+    return await requestBackendJson(`/api/technician-messages/${encodeURIComponent(id)}/read`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
   window.cloneServiceState = function(servico) {
     if (!servico) return null;
     return {
@@ -6512,11 +6546,7 @@ let inventoryProductFilter = 'todos';
 
 async function carregarChecklistsDoSupabase() {
   try {
-    const { data, error } = await supabaseClient
-      .from('checklists')
-      .select('*')
-      .order('date', { ascending: false });
-    if (error) throw error;
+    const data = await requestBackendJson('/api/checklists');
     clRecords = (data || []).map(r => ({
       ...r,
       kmS: r.kms, kmC: r.kmc, kmD: r.kmd,
@@ -9751,8 +9781,7 @@ async function saveCL(){
   const kmc=parseInt(document.getElementById('cl-kmc')?.value)||null;
   const rec={id:Date.now(),date:dt,motorista:mot,assistente:document.getElementById('cl-assist')?.value.trim()||'',cartao:document.getElementById('cl-cartao')?.value.trim()||'',vei,kms:kms,kmc:kmc,kmd:kmc&&kms?kmc-kms:null,hrs:document.getElementById('cl-hs')?.value||'',hrc:document.getElementById('cl-hc')?.value||'',fuel:document.getElementById('cl-fuel')?.value||'',hasav:document.getElementById('cl-av-cb')?.checked||false,avtxt:document.getElementById('cl-av-txt')?.value.trim()||'',obs:document.getElementById('cl-obs')?.value.trim()||'',equip};
   try {
-    const { error } = await supabaseClient.from('checklists').insert([rec]);
-    if (error) throw error;
+    await createChecklistViaBackend(rec);
     toast('✅ Check list salvo!','ok');
     clearCL();
     await carregarChecklistsDoSupabase();
@@ -11641,8 +11670,7 @@ async function saveImp(){
   const kmc=parseInt(document.getElementById('imp-kmc')?.value)||null;
   const rec={id:Date.now(),date:dt,motorista:mot,assistente:document.getElementById('imp-ass')?.value.trim()||'',vei,kms:kms,kmc:kmc,kmd:kmc&&kms?kmc-kms:null,hrs:document.getElementById('imp-hs')?.value||'',hrc:document.getElementById('imp-hc')?.value||'',fuel:document.getElementById('imp-fuel')?.value||'',hasav:hasAv,avtxt:document.getElementById('imp-avt')?.value.trim()||'',obs:document.getElementById('imp-obs')?.value.trim()||'',equip:{},importado:true};
   try {
-    const { error } = await supabaseClient.from('checklists').insert([rec]);
-    if (error) throw error;
+    await createChecklistViaBackend(rec);
     toast(`✅ Histórico de ${dt.slice(8,10)}/${dt.slice(5,7)} salvo!`,'ok');
     clearImp();
     await carregarChecklistsDoSupabase();
@@ -12030,8 +12058,7 @@ async function delRecord(){
 
     if(USAR_SUPABASE){
       try {
-        const { error } = await supabaseClient.from('checklists').delete().eq('id', id);
-        if (error) throw error;
+        await deleteChecklistViaBackend(id);
       } catch(e) {
         if(oldRec){
           clRecords.unshift(oldRec);
@@ -13434,9 +13461,8 @@ async function registrarFieldOpsWhatsappAberto(id, target = '') {
     whatsapp_escalado_erro: null
   };
   try {
-    const { error } = await supabaseClient.from('technician_events').update(payload).eq('id', id);
-    if (error) throw error;
-    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, ...payload } : ev);
+    const saved = await updateTechnicianEventViaBackend(id, payload);
+    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, ...(saved || payload) } : ev);
     renderFieldOpsPanel();
     toast('Escalonamento WhatsApp registrado', 'ok');
   } catch(e) {
@@ -13637,13 +13663,8 @@ async function marcarEventoCampoVisto(id) {
   try {
     const vistoEm = new Date().toISOString();
     const payload = { visto:true, status:'visto', visto_em:vistoEm };
-    const result = await supabaseClient.from('technician_events').update(payload).eq('id', id);
-    if (result.error) {
-      if (!isFieldOpsSchemaColumnMissing(result.error)) throw result.error;
-      const fallback = await supabaseClient.from('technician_events').update({ visto:true }).eq('id', id);
-      if (fallback.error) throw fallback.error;
-    }
-    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, visto:true, status:'visto', visto_em:vistoEm } : ev);
+    const saved = await updateTechnicianEventViaBackend(id, payload);
+    technicianEvents = technicianEvents.map(ev => String(ev.id) === String(id) ? { ...ev, ...(saved || payload) } : ev);
     renderFieldOpsPanel();
   } catch(e) { toast('Erro ao marcar evento como visto', 'err'); }
 }
@@ -13651,9 +13672,8 @@ async function marcarEventoCampoVisto(id) {
 async function marcarRecadoTecnicoLido(id) {
   try {
     const lidoEm = new Date().toISOString();
-    const { error } = await supabaseClient.from('technician_messages').update({ lido:true, lido_em:lidoEm }).eq('id', id);
-    if (error) throw error;
-    technicianMessages = technicianMessages.map(msg => String(msg.id) === String(id) ? { ...msg, lido:true, lido_em:lidoEm } : msg);
+    const saved = await markTechnicianMessageReadViaBackend(id, { lido_em:lidoEm });
+    technicianMessages = technicianMessages.map(msg => String(msg.id) === String(id) ? { ...msg, ...(saved || { lido:true, lido_em:lidoEm }) } : msg);
     renderFieldOpsPanel();
   } catch(e) { toast('Erro ao marcar recado como lido', 'err'); }
 }
@@ -13671,9 +13691,8 @@ async function salvarRecadoTecnico() {
   if (!date || !mensagem) { toast('Preencha data e mensagem do recado', 'err'); return; }
   const rec = { id:Date.now(), date, tecnico:equipe || '', equipe:equipe || '', mensagem, prioridade, lido:false };
   try {
-    const { error } = await supabaseClient.from('technician_messages').insert([rec]);
-    if (error) throw error;
-    technicianMessages.unshift(rec);
+    const saved = await createTechnicianMessageViaBackend(rec);
+    technicianMessages.unshift(saved || rec);
     toast('Recado enviado para o portal', 'ok');
     renderFieldOpsPanel(date);
   } catch(e) {

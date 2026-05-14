@@ -17,7 +17,13 @@ function makeState() {
     contracts: [{ id: 20, customer_id: 2, tipo_servico: 'Controle de pragas' }],
     customer_service_history: [{ id: 30, customer_id: 2, servico: 'DS' }],
     data_reviews: [{ id: 40, customer_id: 2, tipo_problema: 'possivel_duplicidade' }],
-    customer_reminders: [{ id: 'rem-1', customer_id: 2, mensagem: 'x' }]
+    customer_reminders: [{ id: 'rem-1', customer_id: 2, mensagem: 'x' }],
+    checklists: [
+      { id: 50, date: '2026-05-14', motorista: 'Joao', origem: 'admin' },
+      { id: 51, date: '2026-05-15', motorista: 'Maria', origem: 'portal_tecnico' }
+    ],
+    technician_events: [],
+    technician_messages: [{ id: 70, date: '2026-05-14', tecnico: 'Joao', mensagem: 'Recado', lido: false }]
   };
 }
 
@@ -69,8 +75,15 @@ function makeBuilder(state, table) {
       for (const filter of builder._filters) rows = rows.filter(row => String(row[filter.key]) === String(filter.value));
       for (const filter of builder._in) rows = rows.filter(row => filter.values.includes(String(row[filter.key])));
       if (builder._or) {
-        const terms = builder._or.split(',').map(part => part.match(/^([^.]+)\.ilike\.%(.+)%$/)).filter(Boolean);
-        rows = rows.filter(row => terms.some(([, key, value]) => String(row[key] || '').toLowerCase().includes(value.toLowerCase())));
+        const terms = builder._or.split(',').map(part => {
+          return part.match(/^([^.]+)\.ilike\.%(.+)%$/)
+            || part.match(/^([^.]+)\.eq\.(.+)$/);
+        }).filter(Boolean);
+        rows = rows.filter(row => terms.some(match => {
+          const [, key, value] = match;
+          if (match[0].includes('.ilike.')) return String(row[key] || '').toLowerCase().includes(value.toLowerCase());
+          return String(row[key]) === String(value);
+        }));
       }
       return rows;
     }
@@ -154,6 +167,89 @@ test('DELETE /api/services/:id exclui serviço e retorna registro removido', asy
     assert.equal(payload.ok, true);
     assert.equal(payload.service.id, 10);
     assert.equal(state.services.some(service => service.id === 10), false);
+  });
+});
+
+test('POST e GET /api/checklists criam e filtram por data', async () => {
+  await withServer(async (baseUrl, state) => {
+    const created = await fetch(`${baseUrl}/api/checklists`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 99, date: '2026-05-14', motorista: 'Joao', vei: 'Palio', origem: 'portal_tecnico' })
+    });
+    assert.equal(created.status, 201);
+    const payload = await created.json();
+    assert.equal(payload.origem, 'portal_tecnico');
+    assert.equal(state.checklists.some(item => item.id === 99), true);
+
+    const list = await fetch(`${baseUrl}/api/checklists?date=2026-05-14`);
+    assert.equal(list.status, 200);
+    const rows = await list.json();
+    assert.equal(rows.every(item => item.date === '2026-05-14'), true);
+  });
+});
+
+test('DELETE /api/checklists/:id remove checklist', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/checklists/50`, { method: 'DELETE' });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.ok, true);
+    assert.equal(payload.checklist.id, 50);
+    assert.equal(state.checklists.some(item => item.id === 50), false);
+  });
+});
+
+test('POST /api/technician-events salva evento do portal', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/technician-events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 88, date: '2026-05-14', tecnico: 'Joao', tipo: 'chegada', titulo: 'Chegada registrada' })
+    });
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.tipo, 'chegada');
+    assert.equal(state.technician_events.some(item => item.id === 88), true);
+  });
+});
+
+test('PUT /api/technician-events/:id atualiza evento sem apagar campos existentes', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.technician_events.push({
+      id: 89,
+      date: '2026-05-14',
+      tecnico: 'Joao',
+      tipo: 'ajuda',
+      titulo: 'Pedido de ajuda',
+      detalhes: 'Detalhe original',
+      visto: false
+    });
+
+    const response = await fetch(`${baseUrl}/api/technician-events/89`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visto: true, status: 'visto' })
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.visto, true);
+    assert.equal(payload.status, 'visto');
+    assert.equal(payload.titulo, 'Pedido de ajuda');
+  });
+});
+
+test('PUT /api/technician-messages/:id/read marca mensagem como lida', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/technician-messages/70/read`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lido_em: '2026-05-14T10:00:00.000Z' })
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.lido, true);
+    assert.equal(state.technician_messages[0].lido, true);
   });
 });
 

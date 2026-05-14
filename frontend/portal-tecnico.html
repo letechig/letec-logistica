@@ -641,6 +641,10 @@
     const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const API_BASE_URL = window.LETEC_API_BASE_URL || localStorage.getItem('letec_api_base_url') || (function() {
+      if (window.location.protocol === 'file:') return 'http://localhost:8000';
+      return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+    })();
 
     const params = new URLSearchParams(window.location.search);
     const portal = {
@@ -733,6 +737,52 @@
       renderHistory();
     }
 
+    async function requestBackendJson(path, options = {}) {
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const error = new Error(payload?.error || `HTTP ${response.status}`);
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+      }
+      return payload;
+    }
+
+    function updateServiceViaBackend(id, payload) {
+      return requestBackendJson(`/api/services/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    }
+
+    function createChecklistViaBackend(record) {
+      return requestBackendJson('/api/checklists', {
+        method: 'POST',
+        body: JSON.stringify(record)
+      });
+    }
+
+    function createEventViaBackend(record) {
+      return requestBackendJson('/api/technician-events', {
+        method: 'POST',
+        body: JSON.stringify(record)
+      });
+    }
+
+    function markMessageReadViaBackend(id, payload) {
+      return requestBackendJson(`/api/technician-messages/${encodeURIComponent(id)}/read`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    }
+
     async function processQueue() {
       if (!navigator.onLine) return;
       const queue = loadQueue();
@@ -741,17 +791,13 @@
       for (const item of queue) {
         try {
           if (item.type === 'service-update') {
-            const { error } = await supabaseClient.from('services').update(item.payload).eq('id', item.id);
-            if (error) throw error;
+            await updateServiceViaBackend(item.id, item.payload);
           } else if (item.type === 'checklist-insert') {
-            const { error } = await supabaseClient.from('checklists').insert([item.record]);
-            if (error) throw error;
+            await createChecklistViaBackend(item.record);
           } else if (item.type === 'event-insert') {
-            const { error } = await supabaseClient.from('technician_events').insert([item.record]);
-            if (error) throw error;
+            await createEventViaBackend(item.record);
           } else if (item.type === 'message-read') {
-            const { error } = await supabaseClient.from('technician_messages').update(item.payload).eq('id', item.id);
-            if (error) throw error;
+            await markMessageReadViaBackend(item.id, item.payload);
           }
         } catch(e) {
           remaining.push(item);
@@ -811,9 +857,8 @@
         visto: false,
       };
       try {
-        const { error } = await supabaseClient.from('technician_events').insert([rec]);
-        if (error) throw error;
-        state.events.unshift(rec);
+        const saved = await createEventViaBackend(rec);
+        state.events.unshift(saved || rec);
         renderHistory();
       } catch(e) {
         addQueue({ type:'event-insert', record:rec });
@@ -860,24 +905,20 @@
         const [tecRes, veiRes, svcRes, clRes, msgRes, evRes] = await Promise.all([
           supabaseClient.from('technicians').select('*').order('nome'),
           supabaseClient.from('vehicles').select('*').order('nome'),
-          supabaseClient.from('services').select('*').or(`date.eq.${portal.data},data.eq.${portal.data}`).order('horario', { ascending:true }),
-          supabaseClient.from('checklists').select('*').eq('date', portal.data).order('created_at', { ascending:false }),
-          supabaseClient.from('technician_messages').select('*').or(`date.eq.${portal.data},lido.eq.false`).order('created_at', { ascending:false }),
-          supabaseClient.from('technician_events').select('*').eq('date', portal.data).order('created_at', { ascending:false })
+          requestBackendJson(`/api/services?date=${encodeURIComponent(portal.data)}&limit=500`),
+          requestBackendJson(`/api/checklists?date=${encodeURIComponent(portal.data)}`),
+          requestBackendJson(`/api/technician-messages?date=${encodeURIComponent(portal.data)}&unread=true`),
+          requestBackendJson(`/api/technician-events?date=${encodeURIComponent(portal.data)}`)
         ]);
         if (tecRes.error) throw tecRes.error;
         if (veiRes.error) throw veiRes.error;
-        if (svcRes.error) throw svcRes.error;
-        if (clRes.error) throw clRes.error;
-        if (msgRes.error) console.warn('Recados indisponíveis:', msgRes.error.message || msgRes.error);
         state.technicians = tecRes.data || [];
         state.vehicles = (veiRes.data || []).filter(v => v.ativo !== false);
-        if (evRes.error) console.warn('Historico indisponivel:', evRes.error.message || evRes.error);
-        state.checklists = clRes.data || [];
-        state.messages = msgRes.error ? [] : (msgRes.data || []).filter(messageMatchesPortal);
-        state.events = evRes.error ? [] : (evRes.data || []).filter(messageMatchesPortal);
+        state.checklists = clRes || [];
+        state.messages = (msgRes || []).filter(messageMatchesPortal);
+        state.events = (evRes || []).filter(messageMatchesPortal);
         matchTechnician();
-        state.services = (svcRes.data || []).filter(serviceMatchesPortal);
+        state.services = (svcRes || []).filter(serviceMatchesPortal);
         renderAll();
       } catch(e) {
         console.error(e);
@@ -979,8 +1020,8 @@
 
     async function persistService(id, payload, successMessage) {
       try {
-        const { error } = await supabaseClient.from('services').update(payload).eq('id', id);
-        if (error) throw error;
+        const saved = await updateServiceViaBackend(id, payload);
+        if (saved) updateLocalService(id, saved);
         toast(successMessage, 'ok');
       } catch(e) {
         console.error(e);
@@ -1132,8 +1173,7 @@ Portal: ${currentPortalLink()}${location}`;
       state.messages = state.messages.map(m => String(m.id) === String(id) ? { ...m, ...payload } : m);
       renderMessages();
       try {
-        const { error } = await supabaseClient.from('technician_messages').update(payload).eq('id', id);
-        if (error) throw error;
+        await markMessageReadViaBackend(id, payload);
       } catch(e) {
         addQueue({ type:'message-read', id, payload });
         toast('Leitura salva neste celular para sincronizar.', 'warn');
@@ -1257,12 +1297,11 @@ Portal: ${currentPortalLink()}${location}`;
       };
 
       try {
-        const { error } = await supabaseClient.from('checklists').insert([rec]);
-        if (error) throw error;
+        const saved = await createChecklistViaBackend(rec);
         toast('Checklist salvo com sucesso.', 'ok');
         await recordEvent('checklist', 'Checklist diário salvo', `${vei} - ${motorista}`, null, null);
         addHistory('Checklist diario salvo.');
-        state.checklists.unshift(rec);
+        state.checklists.unshift(saved || rec);
         renderHistory();
       } catch(e) {
         console.error(e);
