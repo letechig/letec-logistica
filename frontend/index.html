@@ -13314,6 +13314,7 @@ function rotMontarLinkPortal(eq, data) {
   params.set('data', data || document.getElementById('rot-data')?.value || new Date().toISOString().split('T')[0]);
   if (eq.veiculo && eq.veiculo !== '—') params.set('veiculo', eq.veiculo);
   params.set('equipe', rotPortalTecnicoNome(eq));
+  if (API_BASE_URL) params.set('api_base', String(API_BASE_URL).replace(/\/$/, ''));
   const suporte = rotSuporteWhatsApp();
   if (suporte) params.set('suporte', suporte);
   return `${rotPortalBaseUrl()}?${params.toString()}`;
@@ -13439,6 +13440,8 @@ async function carregarEvolutionStatus(force = false) {
       configured: !!payload.configured,
       connected: response.ok && !!payload.connected,
       instance: payload.instance || '',
+      available_instances: payload.available_instances || [],
+      matched_instance: payload.matched_instance || null,
       state: payload.state || '',
       error: payload.error || ''
     };
@@ -13550,7 +13553,13 @@ function evolutionStatusAlertHtml() {
     return `<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(22,163,74,.25);border-radius:var(--r2);background:var(--green-bg);color:var(--green);font-size:11px;font-weight:700">Evolution API conectada${evolutionStatus.instance ? ` · instância ${sanitize(evolutionStatus.instance)}` : ''}</div>`;
   }
   const msg = evolutionStatus.configured
-    ? `Evolution configurada, mas instância desconectada${evolutionStatus.state ? ` (${sanitize(evolutionStatus.state)})` : ''}.`
+    ? (() => {
+        const connectedAvailable = (evolutionStatus.available_instances || []).find(item => item.connected);
+        if (connectedAvailable?.name && connectedAvailable.name !== evolutionStatus.instance) {
+          return `Evolution configurada para "${sanitize(evolutionStatus.instance)}", mas a instância conectada parece ser "${sanitize(connectedAvailable.name)}". Ajuste EVOLUTION_INSTANCE_NAME no Render.`;
+        }
+        return `Evolution configurada, mas instância desconectada${evolutionStatus.state ? ` (${sanitize(evolutionStatus.state)})` : ''}.`;
+      })()
     : 'Evolution API ainda não configurada no backend.';
   return `<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(234,88,12,.25);border-radius:var(--r2);background:var(--orange-bg);color:var(--orange);font-size:11px;font-weight:700">${msg} Use copiar texto como fallback.</div>`;
 }

@@ -269,6 +269,23 @@ test('POST /api/services salva cliente_id no agendamento', async () => {
   });
 });
 
+test('POST /api/services cria cliente automaticamente quando agenda usa cliente novo', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/services`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 101, date: '2026-05-13', cliente: 'Cliente Novo Agenda', endereco: 'Rua Nova, 123' })
+    });
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    const created = state.customers.find(customer => customer.nome === 'Cliente Novo Agenda');
+    assert.ok(created);
+    assert.equal(created.origem, 'agenda');
+    assert.equal(payload.cliente_id, created.id);
+    assert.equal(state.services.find(service => service.id === 101).cliente_id, created.id);
+  });
+});
+
 test('POST /api/customers/merge reaponta histórico sem alterar texto do serviço', async () => {
   await withServer(async (baseUrl, state) => {
     const response = await fetch(`${baseUrl}/api/customers/merge`, {

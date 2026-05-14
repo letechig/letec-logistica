@@ -1088,7 +1088,7 @@ function getSupabaseClient() {
 function getEvolutionConfig() {
   const apiUrl = String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL || '').replace(/\/$/, '');
   const apiKey = String(process.env.EVOLUTION_API_KEY || '');
-  const instance = String(process.env.EVOLUTION_INSTANCE_NAME || process.env.EVOLUTION_INSTANCE || 'Letec').trim();
+  const instance = String(process.env.EVOLUTION_INSTANCE_NAME || process.env.EVOLUTION_INSTANCE || 'letec-higienizacao').trim();
   return {
     apiUrl,
     apiKey,
@@ -1133,6 +1133,52 @@ async function evolutionFetch(pathname, options = {}) {
     return payload;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+function extractEvolutionState(payload = {}) {
+  const state = payload.instance?.state
+    || payload.instance?.connectionStatus
+    || payload.instance?.status
+    || payload.connectionStatus
+    || payload.state
+    || payload.status
+    || payload.qrcode?.status
+    || '';
+  return String(state || '');
+}
+
+function isEvolutionConnectedState(state) {
+  return ['open', 'connected', 'online', 'connection_open'].includes(String(state || '').toLowerCase());
+}
+
+function normalizeEvolutionInstanceName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function flattenEvolutionInstances(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.instances)) return payload.instances;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.instance)) return payload.instance;
+  return [];
+}
+
+function evolutionInstanceName(item = {}) {
+  return item.name
+    || item.instanceName
+    || item.instance_name
+    || item.instance?.instanceName
+    || item.instance?.name
+    || '';
+}
+
+async function fetchEvolutionInstanceListSafe() {
+  try {
+    const payload = await evolutionFetch('/instance/fetchInstances');
+    return { payload, instances: flattenEvolutionInstances(payload) };
+  } catch (error) {
+    return { error };
   }
 }
 
@@ -1302,6 +1348,42 @@ async function fetchCustomerForService(db, service = {}) {
   if (error) throw error;
   const matches = (data || []).filter(customer => normalizeLooseForMatch(customer.nome_normalizado || customer.nome) === serviceName);
   return matches.length === 1 ? matches[0] : null;
+}
+
+async function ensureCustomerForServicePayload(db, servicePayload = {}) {
+  if (servicePayload.cliente_id || !String(servicePayload.cliente || '').trim()) {
+    return { payload: servicePayload, customer: null, created: false };
+  }
+
+  const existing = await fetchCustomerForService(db, servicePayload);
+  if (existing?.id) {
+    servicePayload.cliente_id = Number(existing.id);
+    return { payload: servicePayload, customer: existing, created: false };
+  }
+
+  const name = String(servicePayload.cliente || '').trim();
+  const address = String(servicePayload.endereco || '').trim();
+  const insertPayload = {
+    nome: name,
+    nome_normalizado: normalizeCustomerName(name),
+    endereco: address || null,
+    endereco_completo: address || null,
+    tipo: 'PF',
+    tipo_cliente: 'Eventual',
+    origem: 'agenda',
+    ativo: true
+  };
+
+  const { data, error } = await runCustomerWriteWithSchemaFallback(
+    payload => db.from('customers').insert([payload]).select(),
+    insertPayload,
+    'POST /api/services ensure customer'
+  );
+  if (error) throw error;
+
+  const created = data?.[0] || null;
+  if (created?.id) servicePayload.cliente_id = Number(created.id);
+  return { payload: servicePayload, customer: created, created: true };
 }
 
 function customerPhone(customer = {}) {
@@ -1635,13 +1717,26 @@ app.post('/api/services', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const payload = normalizeServicePayload(req.body, { includeId: true });
+    let customerLink = null;
+    try {
+      customerLink = await ensureCustomerForServicePayload(db, payload);
+    } catch (customerError) {
+      console.warn('[POST /api/services] Falha ao criar/vincular cliente automaticamente:', customerError.message);
+    }
     const { data, error } = await db
       .from('services')
       .insert([payload])
       .select();
 
     if (error) throw error;
-    res.status(201).json(data?.[0] || null);
+    const saved = data?.[0] || null;
+    res.status(201).json(saved ? {
+      ...saved,
+      customer_auto_link: customerLink ? {
+        created: !!customerLink.created,
+        customer_id: payload.cliente_id || null
+      } : null
+    } : null);
   } catch (error) {
     console.error('[POST /api/services] Error:', error.message);
     res.status(500).json({ error: 'Falha ao criar serviço' });
@@ -3171,19 +3266,50 @@ app.get('/api/evolution/status', async (req, res) => {
 
   try {
     const payload = await evolutionFetch(`/instance/connectionState/${encodeURIComponent(config.instance)}`);
-    const state = payload.instance?.state || payload.state || payload.status || '';
+    let state = extractEvolutionState(payload);
+    let connected = isEvolutionConnectedState(state);
+    let matchedInstance = null;
+    let availableInstances = [];
+
+    if (!connected) {
+      const instanceList = await fetchEvolutionInstanceListSafe();
+      availableInstances = (instanceList.instances || []).map(item => ({
+        name: evolutionInstanceName(item),
+        state: extractEvolutionState(item),
+        connected: isEvolutionConnectedState(extractEvolutionState(item))
+      })).filter(item => item.name || item.state);
+      matchedInstance = availableInstances.find(item => normalizeEvolutionInstanceName(item.name) === normalizeEvolutionInstanceName(config.instance)) || null;
+      if (matchedInstance) {
+        state = matchedInstance.state || state;
+        connected = matchedInstance.connected;
+      }
+    }
+
     res.json({
       configured: true,
-      connected: String(state).toLowerCase() === 'open',
+      connected,
       instance: config.instance,
+      matched_instance: matchedInstance,
+      available_instances: availableInstances,
       state,
       details: payload
     });
   } catch (error) {
-    res.status(error.status === 404 ? 404 : 502).json({
+    const instanceList = await fetchEvolutionInstanceListSafe();
+    const availableInstances = (instanceList.instances || []).map(item => ({
+      name: evolutionInstanceName(item),
+      state: extractEvolutionState(item),
+      connected: isEvolutionConnectedState(extractEvolutionState(item))
+    })).filter(item => item.name || item.state);
+    const matchedInstance = availableInstances.find(item => normalizeEvolutionInstanceName(item.name) === normalizeEvolutionInstanceName(config.instance)) || null;
+    const connected = !!matchedInstance?.connected;
+    res.status(connected ? 200 : (error.status === 404 ? 404 : 502)).json({
       configured: true,
-      connected: false,
+      connected,
       instance: config.instance,
+      matched_instance: matchedInstance,
+      available_instances: availableInstances,
+      state: matchedInstance?.state || '',
       error: error.message,
       details: error.payload || null
     });

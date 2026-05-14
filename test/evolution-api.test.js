@@ -143,3 +143,38 @@ test('GET /api/evolution/status retorna 503 sem env vars', async () => {
     assert.equal(payload.configured, false);
   });
 });
+
+test('GET /api/evolution/status aceita estados conectados alem de open', async () => {
+  await withServer({
+    evolutionFetch: async (url) => {
+      assert.equal(url, 'https://evolution.example.test/instance/connectionState/letec');
+      return new Response(JSON.stringify({ instance: { state: 'connected' } }), { status: 200 });
+    }
+  }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/evolution/status`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.connected, true);
+    assert.equal(payload.state, 'connected');
+  });
+});
+
+test('GET /api/evolution/status usa fetchInstances para diagnosticar instancia', async () => {
+  await withServer({
+    evolutionFetch: async (url) => {
+      if (url.endsWith('/instance/connectionState/letec')) {
+        return new Response(JSON.stringify({ instance: { state: 'close' } }), { status: 200 });
+      }
+      if (url.endsWith('/instance/fetchInstances')) {
+        return new Response(JSON.stringify([{ instanceName: 'letec', connectionStatus: 'open' }]), { status: 200 });
+      }
+      throw new Error(`unexpected url ${url}`);
+    }
+  }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/evolution/status`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.connected, true);
+    assert.equal(payload.matched_instance.name, 'letec');
+  });
+});

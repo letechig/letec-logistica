@@ -638,15 +638,24 @@
   </div>
 
   <script>
+    const params = new URLSearchParams(window.location.search);
     const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    const API_BASE_URL = window.LETEC_API_BASE_URL || localStorage.getItem('letec_api_base_url') || (function() {
+
+    function normalizeApiBaseUrl(value) {
+      const url = String(value || '').trim();
+      if (!url || url.startsWith('javascript:') || url.startsWith('data:')) return '';
+      return url.replace(/\/$/, '');
+    }
+
+    const apiBaseFromUrl = normalizeApiBaseUrl(params.get('api_base'));
+    if (apiBaseFromUrl) localStorage.setItem('letec_api_base_url', apiBaseFromUrl);
+    const API_BASE_URL = window.LETEC_API_BASE_URL || apiBaseFromUrl || localStorage.getItem('letec_api_base_url') || (function() {
       if (window.location.protocol === 'file:') return 'http://localhost:8000';
       return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
     })();
 
-    const params = new URLSearchParams(window.location.search);
     const portal = {
       tecnico: params.get('tecnico') || params.get('motorista') || 'Tecnico',
       data: params.get('data') || new Date().toISOString().slice(0, 10),
@@ -899,32 +908,56 @@
       return !tech && !equipe;
     }
 
+    async function fetchPortalServices() {
+      try {
+        return await requestBackendJson(`/api/services?date=${encodeURIComponent(portal.data)}&limit=500`);
+      } catch (backendError) {
+        console.warn('[Portal] Backend de servicos indisponivel, tentando leitura direta do Supabase:', backendError.message || backendError);
+        const { data, error } = await supabaseClient
+          .from('services')
+          .select('*')
+          .or(`date.eq.${portal.data},data.eq.${portal.data}`)
+          .limit(500);
+        if (error) throw backendError;
+        return data || [];
+      }
+    }
+
+    function settledData(result, fallback = []) {
+      if (result.status !== 'fulfilled') return fallback;
+      const value = result.value;
+      if (value && typeof value === 'object' && 'error' in value && value.error) return fallback;
+      return value?.data || value || fallback;
+    }
+
     async function loadData() {
       setSyncState();
-      try {
-        const [tecRes, veiRes, svcRes, clRes, msgRes, evRes] = await Promise.all([
-          supabaseClient.from('technicians').select('*').order('nome'),
-          supabaseClient.from('vehicles').select('*').order('nome'),
-          requestBackendJson(`/api/services?date=${encodeURIComponent(portal.data)}&limit=500`),
-          requestBackendJson(`/api/checklists?date=${encodeURIComponent(portal.data)}`),
-          requestBackendJson(`/api/technician-messages?date=${encodeURIComponent(portal.data)}&unread=true`),
-          requestBackendJson(`/api/technician-events?date=${encodeURIComponent(portal.data)}`)
-        ]);
-        if (tecRes.error) throw tecRes.error;
-        if (veiRes.error) throw veiRes.error;
-        state.technicians = tecRes.data || [];
-        state.vehicles = (veiRes.data || []).filter(v => v.ativo !== false);
-        state.checklists = clRes || [];
-        state.messages = (msgRes || []).filter(messageMatchesPortal);
-        state.events = (evRes || []).filter(messageMatchesPortal);
-        matchTechnician();
-        state.services = (svcRes || []).filter(serviceMatchesPortal);
-        renderAll();
-      } catch(e) {
-        console.error(e);
-        toast('Nao foi possivel carregar tudo agora. Use offline se necessario.', 'warn');
-        renderAll();
+      const [tecRes, veiRes, svcRes, clRes, msgRes, evRes] = await Promise.allSettled([
+        supabaseClient.from('technicians').select('*').order('nome'),
+        supabaseClient.from('vehicles').select('*').order('nome'),
+        fetchPortalServices(),
+        requestBackendJson(`/api/checklists?date=${encodeURIComponent(portal.data)}`),
+        requestBackendJson(`/api/technician-messages?date=${encodeURIComponent(portal.data)}&unread=true`),
+        requestBackendJson(`/api/technician-events?date=${encodeURIComponent(portal.data)}`)
+      ]);
+
+      state.technicians = settledData(tecRes, state.technicians || []);
+      state.vehicles = settledData(veiRes, state.vehicles || []).filter(v => v.ativo !== false);
+      state.checklists = settledData(clRes, state.checklists || []);
+      state.messages = settledData(msgRes, state.messages || []).filter(messageMatchesPortal);
+      state.events = settledData(evRes, state.events || []).filter(messageMatchesPortal);
+      matchTechnician();
+      state.services = settledData(svcRes, state.services || []).filter(serviceMatchesPortal);
+
+      const failed = [tecRes, veiRes, svcRes, clRes, msgRes, evRes].filter(result => result.status === 'rejected');
+      if (failed.length && !state.services.length) {
+        console.warn('[Portal] Falha ao carregar dados principais:', failed.map(item => item.reason?.message || item.reason));
+        toast('Nao foi possivel carregar a agenda agora. Confira internet/backend.', 'warn');
+      } else if (failed.length) {
+        console.warn('[Portal] Carregamento parcial:', failed.map(item => item.reason?.message || item.reason));
+        toast('Agenda carregada. Alguns dados auxiliares ficaram offline.', 'warn');
       }
+      renderAll();
     }
 
     function renderAll() {
