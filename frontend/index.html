@@ -6516,6 +6516,7 @@ let clRecords = [];      // check list records
 let technicianEvents = [];
 let technicianMessages = [];
 let fieldOpsSchemaReady = true;
+const CURRENT_PAGE_PREF_KEY = 'letec_current_page';
 const FIELD_OPS_SOUND_PREF_KEY = 'letec_field_ops_sound_enabled';
 const FIELD_OPS_ALERTED_IDS_KEY = 'letec_field_ops_alerted_ids';
 const FIELD_OPS_POLL_INTERVAL_MS = 15000;
@@ -6533,6 +6534,7 @@ let fieldOpsAlertedEventIds = (() => {
 })();
 let fieldOpsAudioContext = null;
 let fieldOpsPollingInFlight = false;
+let fieldOpsAudioAwaitingGesture = false;
 let inventoryProducts = [];
 let inventoryMovements = [];
 let inventorySchemaReady = true;
@@ -6563,7 +6565,15 @@ async function carregarChecklistsDoSupabase() {
   }
 }
 
-let currentPage = 'dashboard';
+let currentPage = (() => {
+  try {
+    const saved = localStorage.getItem(CURRENT_PAGE_PREF_KEY);
+    const allowed = ['dashboard','agenda','roteiro','comunicacao','rotas','checklist','frota','estoque','equipes','clientes','revisao','historico','hoje','config'];
+    return allowed.includes(saved) ? saved : 'dashboard';
+  } catch(e) {
+    return 'dashboard';
+  }
+})();
 let currentDelId = null;
 let mesFilter = 'all';
 const SUPABASE_READY_KEY = 'letec_supabase_ready';
@@ -7056,6 +7066,7 @@ window.nav = function(page, btn) {
   document.getElementById('page-title').textContent = meta.title || page;
   document.getElementById('page-sub').textContent   = meta.sub   || '';
   currentPage = page;
+  try { localStorage.setItem(CURRENT_PAGE_PREF_KEY, page); } catch(e) {}
   // Para agenda: carrega dados do Supabase antes de renderizar
   const renderAgendaComDados = async () => { await getServices(); renderAgenda(); };
   const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, clientes: renderClientes, revisao: renderRevisaoDados, historico: renderHist, roteiro: rotGerarDoSistema, comunicacao: renderComunicacaoLogistica, config: renderConfig };
@@ -13486,9 +13497,11 @@ function setFieldOpsSoundEnabled(enabled) {
   fieldOpsSoundEnabled = !!enabled;
   try { localStorage.setItem(FIELD_OPS_SOUND_PREF_KEY, fieldOpsSoundEnabled ? '1' : '0'); } catch(e) {}
   if (fieldOpsSoundEnabled) {
-    unlockFieldOpsAudio();
-    toast('Alertas sonoros ativados para novos pedidos urgentes', 'ok');
+    const ctx = unlockFieldOpsAudio();
+    fieldOpsAudioAwaitingGesture = !ctx || ctx.state !== 'running';
+    toast(fieldOpsAudioAwaitingGesture ? 'Som ativado. Clique/toque na tela para liberar o áudio.' : 'Alertas sonoros ativados para novos pedidos urgentes', 'ok');
   } else {
+    fieldOpsAudioAwaitingGesture = false;
     toast('Alertas sonoros desativados', 'warn');
   }
   renderFieldOpsPanel();
@@ -13500,13 +13513,35 @@ function unlockFieldOpsAudio() {
     if (!AudioCtx) return null;
     if (!fieldOpsAudioContext) fieldOpsAudioContext = new AudioCtx();
     if (fieldOpsAudioContext.state === 'suspended') fieldOpsAudioContext.resume();
+    fieldOpsAudioAwaitingGesture = fieldOpsAudioContext.state !== 'running';
     return fieldOpsAudioContext;
   } catch(e) { return null; }
+}
+
+function prepareFieldOpsAudioAfterReload() {
+  if (!fieldOpsSoundEnabled) return;
+  fieldOpsAudioAwaitingGesture = true;
+  const unlockOnce = () => {
+    const ctx = unlockFieldOpsAudio();
+    if (ctx && ctx.state === 'running') {
+      fieldOpsAudioAwaitingGesture = false;
+      renderFieldOpsPanel();
+      document.removeEventListener('pointerdown', unlockOnce);
+      document.removeEventListener('keydown', unlockOnce);
+    }
+  };
+  document.addEventListener('pointerdown', unlockOnce, { passive: true });
+  document.addEventListener('keydown', unlockOnce);
 }
 
 function playFieldOpsAlertSound() {
   const ctx = unlockFieldOpsAudio();
   if (!ctx || !fieldOpsSoundEnabled) return;
+  if (ctx.state !== 'running') {
+    fieldOpsAudioAwaitingGesture = true;
+    renderFieldOpsPanel();
+    return;
+  }
   try {
     const now = ctx.currentTime;
     [0, 0.18].forEach(offset => {
@@ -13591,7 +13626,7 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
             <div class="section-sub" style="font-size:11px">Chegadas, problemas, ajuda e checklists do portal nesta data.</div>
           </div>
           <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-            <button class="btn btn-ghost btn-sm" onclick="setFieldOpsSoundEnabled(${fieldOpsSoundEnabled ? 'false' : 'true'})">${fieldOpsSoundEnabled ? 'Som ligado' : 'Ativar som'}</button>
+            <button class="btn btn-ghost btn-sm" onclick="setFieldOpsSoundEnabled(${fieldOpsSoundEnabled ? 'false' : 'true'})">${fieldOpsSoundEnabled ? (fieldOpsAudioAwaitingGesture ? 'Som ligado · clique na tela' : 'Som ligado') : 'Ativar som'}</button>
             <button class="btn btn-ghost btn-sm" onclick="carregarEventosCampoDoSupabase()">Atualizar</button>
           </div>
         </div>
@@ -15452,6 +15487,8 @@ window.addEventListener('load', async () => {
     await carregarEventosCampoDoSupabase();
     await carregarRecadosTecnicosDoSupabase();
     await carregarEstoqueDoSupabase();
+    prepareFieldOpsAudioAfterReload();
+    nav(currentPage, null);
     if (!window._fieldOpsPolling) {
       window._fieldOpsPolling = setInterval(pollFieldOpsUpdates, FIELD_OPS_POLL_INTERVAL_MS);
     }
