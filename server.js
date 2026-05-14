@@ -318,6 +318,108 @@ async function runCustomerWriteWithSchemaFallback(buildQuery, payload, context) 
   return buildQuery(workingPayload);
 }
 
+function hasOwnValue(source, key) {
+  return Object.prototype.hasOwnProperty.call(source, key) && source[key] !== undefined;
+}
+
+function firstDefined(source, keys) {
+  for (const key of keys) {
+    if (hasOwnValue(source, key)) return source[key];
+  }
+  return undefined;
+}
+
+function cleanText(value, maxLength = 500) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const text = String(value).trim();
+  return text ? text.slice(0, maxLength) : '';
+}
+
+function cleanNullableText(value, maxLength = 500) {
+  const text = cleanText(value, maxLength);
+  return text === '' ? null : text;
+}
+
+function cleanDateText(value) {
+  const text = cleanText(value, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text || '') ? text : null;
+}
+
+function cleanNumber(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function cleanArray(value) {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    return value.map(item => String(item || '').trim()).filter(Boolean);
+  }
+  if (value === null || value === '') return [];
+  return String(value)
+    .split(/[,+/|]/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeServicePayload(input = {}, options = {}) {
+  const partial = !!options.partial;
+  const includeId = !!options.includeId;
+  const payload = {};
+
+  const set = (target, keys, normalizer, defaultValue) => {
+    const value = firstDefined(input, Array.isArray(keys) ? keys : [keys]);
+    if (value === undefined) {
+      if (!partial && defaultValue !== undefined) payload[target] = defaultValue;
+      return;
+    }
+    payload[target] = normalizer ? normalizer(value) : value;
+  };
+
+  if (includeId && hasOwnValue(input, 'id')) {
+    payload.id = input.id;
+  }
+
+  const dateValue = firstDefined(input, ['date', 'data', 'dt']);
+  if (dateValue !== undefined || !partial) {
+    const normalizedDate = cleanDateText(dateValue);
+    payload.date = normalizedDate;
+    payload.data = normalizedDate;
+  }
+
+  set('cliente_id', ['cliente_id', 'clienteId', 'customer_id', 'client_id'], cleanNumber, null);
+  set('cliente', ['cliente', 'cl'], value => cleanText(value, 300), '');
+  set('endereco', 'endereco', value => cleanText(value, 500), '');
+  set('horario', ['horario', 'hr'], value => cleanText(value, 20), '');
+  set('tiposervico', ['tiposervico', 'tipoServico', 'sc'], value => cleanText(value, 200), '');
+  set('tipos', 'tipos', cleanArray, []);
+  set('equipe', ['equipe', 'eq'], value => cleanText(value, 300), '');
+  set('veiculo', 'veiculo', value => cleanText(value, 120), '');
+  set('os', ['os', 'OS'], value => cleanText(value, 120), '');
+  set('observacoes', ['observacoes', 'obs'], value => cleanText(value, 2000), '');
+  set('status', ['status', 'st'], value => cleanText(value, 80) || 'agendado', 'agendado');
+  set('exec_status', 'exec_status', value => cleanText(value, 80) || 'agendado', 'agendado');
+  set('tecnicos_ids', 'tecnicos_ids', cleanArray, []);
+  set('chegada_hora', 'chegada_hora', value => cleanNullableText(value, 80));
+  set('chegada_lat', 'chegada_lat', cleanNumber);
+  set('chegada_lng', 'chegada_lng', cleanNumber);
+  set('inicio_hora', 'inicio_hora', value => cleanNullableText(value, 80));
+  set('fim_hora', 'fim_hora', value => cleanNullableText(value, 80));
+  set('tempo_espera', 'tempo_espera', cleanNumber);
+  set('tempo_execucao', 'tempo_execucao', cleanNumber);
+  set('checklist_servico', 'checklist_servico', value => value || null);
+  set('problema_descricao', 'problema_descricao', value => cleanText(value, 1000), '');
+  set('confirmado_cliente', 'confirmado_cliente', value => value === true || String(value) === 'true');
+  set('confirmado_cliente_em', 'confirmado_cliente_em', value => cleanNullableText(value, 80));
+  set('agenda_confirmada_tecnico', 'agenda_confirmada_tecnico', value => value === true || String(value) === 'true');
+  set('agenda_confirmada_tecnico_em', 'agenda_confirmada_tecnico_em', value => cleanNullableText(value, 80));
+
+  return payload;
+}
+
 async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf, db }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
@@ -953,15 +1055,63 @@ app.get('/api/services', async (req, res) => {
 app.post('/api/services', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const payload = normalizeServicePayload(req.body, { includeId: true });
     const { data, error } = await db
       .from('services')
-      .insert(req.body)
+      .insert([payload])
       .select();
 
     if (error) throw error;
-    res.json(data);
+    res.status(201).json(data?.[0] || null);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[POST /api/services] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao criar serviço' });
+  }
+});
+
+app.put('/api/services/:id', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const id = req.params.id;
+    const payload = normalizeServicePayload(req.body, { partial: true });
+    delete payload.id;
+
+    if (!Object.keys(payload).length) {
+      return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
+    }
+
+    const { data, error } = await db
+      .from('services')
+      .update(payload)
+      .eq('id', id)
+      .select();
+
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Serviço não encontrado' });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/services/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao atualizar serviço' });
+  }
+});
+
+app.delete('/api/services/:id', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db
+      .from('services')
+      .delete()
+      .eq('id', req.params.id)
+      .select();
+
+    if (error) throw error;
+    const deleted = data?.[0] || null;
+    if (!deleted) return res.status(404).json({ error: 'Serviço não encontrado' });
+    res.json({ ok: true, service: deleted });
+  } catch (error) {
+    console.error('[DELETE /api/services/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao excluir serviço' });
   }
 });
 

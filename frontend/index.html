@@ -2538,6 +2538,63 @@ async function carregarVeiculos(){
     return payload;
   };
 
+  async function requestBackendJson(path, options = {}) {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = new Error(payload?.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
+  }
+
+  function mergeServiceFromBackend(record, fallbackService) {
+    if (!record) return fallbackService || null;
+    const merged = migrarServicoSupabase({ ...(fallbackService || {}), ...record }, fallbackService || {});
+    const idx = services.findIndex(s => sameId(s.id, merged.id));
+    if (idx === -1) services.unshift(merged);
+    else services[idx] = { ...services[idx], ...merged };
+    if (typeof dedupeServicesById === 'function') {
+      services = dedupeServicesById(services);
+    }
+    if (typeof saveSvcs === 'function') saveSvcs();
+    if (typeof refreshPages === 'function') refreshPages();
+    if (typeof updateBadges === 'function') updateBadges();
+    return merged;
+  }
+
+  function serviceBackendPayload(servico, omitId = false) {
+    return prepararParaSupabase(servico, omitId);
+  }
+
+  async function createServiceViaBackend(servico) {
+    return await requestBackendJson('/api/services', {
+      method: 'POST',
+      body: JSON.stringify(serviceBackendPayload(servico))
+    });
+  }
+
+  async function updateServiceViaBackend(servico) {
+    return await requestBackendJson(`/api/services/${encodeURIComponent(servico.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(serviceBackendPayload(servico, true))
+    });
+  }
+
+  async function deleteServiceViaBackend(id) {
+    return await requestBackendJson(`/api/services/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+
   window.cloneServiceState = function(servico) {
     if (!servico) return null;
     return {
@@ -2573,14 +2630,15 @@ async function carregarVeiculos(){
   window.salvarServicoSupabase = async function(servico) {
     const queuedService = cloneServiceState(servico);
     const result = await safeSupabaseAction(
-      () => supabaseClient.from('services').insert([prepararParaSupabase(queuedService)]),
+      async () => {
+        const saved = await createServiceViaBackend(queuedService);
+        mergeServiceFromBackend(saved, queuedService);
+        return saved;
+      },
       { op: 'insert', service: queuedService },
       () => rollbackInsertedService(queuedService?.id),
       { rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true }
     );
-    if (typeof carregarServicesDoSupabase === 'function') {
-      await carregarServicesDoSupabase();
-    }
     return result;
   };
 
@@ -2589,7 +2647,11 @@ async function carregarVeiculos(){
     const queuedService = cloneServiceState(servico);
     const rollbackSnapshot = cloneServiceState(previousService);
     return await safeSupabaseAction(
-      () => supabaseClient.from('services').upsert([prepararParaSupabase(queuedService)], { onConflict: 'id' }),
+      async () => {
+        const saved = await updateServiceViaBackend(queuedService);
+        mergeServiceFromBackend(saved, queuedService);
+        return saved;
+      },
       { op: 'update', service: queuedService },
       rollbackSnapshot ? () => rollbackUpdatedService(rollbackSnapshot) : null,
       { rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true }
@@ -11949,7 +12011,7 @@ async function delRecord(){
 
     if(USAR_SUPABASE){
       await safeSupabaseAction(
-        () => supabaseClient.from('services').delete().eq('id', id),
+        () => deleteServiceViaBackend(id),
         { op: 'delete', id },
         () => {
           if(oldSvc){ services.unshift(oldSvc); saveSvcs(); refreshPages(); updateBadges(); }
@@ -14394,11 +14456,19 @@ async function processOfflineQueue() {
     try {
       let ok = false;
       if (item.op === 'insert') {
-        ok = await safeSupabaseAction(() => supabaseClient.from('services').insert([prepararParaSupabase(item.service)]), item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
+        ok = await safeSupabaseAction(async () => {
+          const saved = await createServiceViaBackend(item.service);
+          mergeServiceFromBackend(saved, item.service);
+          return saved;
+        }, item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
       } else if (item.op === 'update') {
-        ok = await safeSupabaseAction(() => supabaseClient.from('services').upsert([prepararParaSupabase(item.service)], { onConflict: 'id' }), item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
+        ok = await safeSupabaseAction(async () => {
+          const saved = await updateServiceViaBackend(item.service);
+          mergeServiceFromBackend(saved, item.service);
+          return saved;
+        }, item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
       } else if (item.op === 'delete') {
-        ok = await safeSupabaseAction(() => supabaseClient.from('services').delete().eq('id', item.id), item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
+        ok = await safeSupabaseAction(() => deleteServiceViaBackend(item.id), item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
       }
       if (!ok) break;
       offlineQueue.shift();

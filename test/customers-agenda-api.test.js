@@ -116,6 +116,47 @@ test('GET /api/customers suporta autocomplete limitado e paginação com total',
   });
 });
 
+test('PUT /api/services/:id atualiza agenda preservando campos operacionais', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services[0].tipos = ['DS'];
+    state.services[0].tecnicos_ids = ['tec-1'];
+    state.services[0].status = 'agendado';
+
+    const response = await fetch(`${baseUrl}/api/services/10`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cliente_id: 1,
+        cliente: 'Alpha Cliente',
+        tipos: ['DS', 'DR'],
+        tecnicos_ids: ['tec-2'],
+        status: 'executado',
+        exec_status: 'finalizado'
+      })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.cliente_id, 1);
+    assert.equal(payload.cliente, 'Alpha Cliente');
+    assert.deepEqual(payload.tipos, ['DS', 'DR']);
+    assert.deepEqual(payload.tecnicos_ids, ['tec-2']);
+    assert.equal(payload.status, 'executado');
+    assert.equal(payload.exec_status, 'finalizado');
+  });
+});
+
+test('DELETE /api/services/:id exclui serviço e retorna registro removido', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/services/10`, { method: 'DELETE' });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.ok, true);
+    assert.equal(payload.service.id, 10);
+    assert.equal(state.services.some(service => service.id === 10), false);
+  });
+});
+
 test('POST /api/services salva cliente_id no agendamento', async () => {
   await withServer(async (baseUrl, state) => {
     const response = await fetch(`${baseUrl}/api/services`, {
@@ -123,8 +164,12 @@ test('POST /api/services salva cliente_id no agendamento', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: 99, date: '2026-05-13', cliente_id: 1, cliente: 'Alpha Cliente' })
     });
-    assert.equal(response.status, 200);
-    assert.equal(state.services.some(service => service.id === 99 && service.cliente_id === 1), true);
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.id, 99);
+    assert.equal(payload.cliente_id, 1);
+    assert.equal(payload.cliente, 'Alpha Cliente');
+    assert.equal(payload.data, '2026-05-13');
   });
 });
 
