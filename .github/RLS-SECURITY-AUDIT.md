@@ -89,14 +89,14 @@ ON service_types FOR SELECT USING (TRUE);
 ### ✅ Correct Setup
 - `.env.local` (Frontend - Development)
   ```
-  SUPABASE_URL=https://zqrztixmrpnpehppylyr.supabase.co
-  SUPABASE_KEY=sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq  (PUBLIC KEY - OK)
-  GOOGLE_MAPS_API_KEY=AIzaSyCiblls0PJ8xwc8tZogLVeJ3zMzshbtEQY  (RESTRICTED KEY - OK)
+  SUPABASE_URL=https://<supabase-project>.supabase.co
+  SUPABASE_KEY=sb_publishable_<redacted>  (PUBLIC KEY - OK)
+  GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY_REDACTED  (RESTRICTED KEY - OK)
   ```
 
 - `.env` (Backend - Production)
   ```
-  SUPABASE_URL=https://zqrztixmrpnpehppylyr.supabase.co
+  SUPABASE_URL=https://<supabase-project>.supabase.co
   SUPABASE_SERVICE_ROLE_KEY=***NEVER SHARE***  (STORED IN RENDER - OK)
   GOOGLE_MAPS_API_KEY=***                      (IF NEEDED - RESTRICTED)
   ALLOWED_ORIGINS=https://letec.vercel.app,https://letec-staging.vercel.app

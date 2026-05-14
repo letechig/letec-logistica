@@ -503,6 +503,23 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS prioridade TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS origem TEXT;
 ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_telefone_key;
 
+-- Mantem services.cliente_id alinhado com migration-clientes-agenda-ux.sql.
+-- NOT VALID evita falha em bases antigas que ainda tenham registros orfaos;
+-- novos registros passam a respeitar a FK.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'services_cliente_id_fkey'
+  ) THEN
+    ALTER TABLE services
+      ADD CONSTRAINT services_cliente_id_fkey
+      FOREIGN KEY (cliente_id) REFERENCES customers(id) ON DELETE SET NULL
+      NOT VALID;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS contracts (
   id BIGSERIAL PRIMARY KEY,
   customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,

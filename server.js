@@ -357,6 +357,8 @@ async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, c
 
 // Middleware - ORDER IS CRITICAL FOR SECURITY
 // 1. Security headers first
+const supabaseConnectSrc = process.env.SUPABASE_URL || "https://*.supabase.co";
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -368,7 +370,7 @@ app.use(helmet({
       styleSrcElem: ["'self'", "'unsafe-inline'", "https:", "fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "https:"],
       fontSrc: ["'self'", "https:", "data:", "fonts.gstatic.com"],
-      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", "https://zqrztixmrpnpehppylyr.supabase.co", "https://cdn.jsdelivr.net"],
+      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", supabaseConnectSrc, "https://cdn.jsdelivr.net"],
       frameSrc: ["maps.google.com"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
