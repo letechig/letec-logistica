@@ -33,9 +33,9 @@ services:
       - key: EVOLUTION_API_KEY
         sync: false
       - key: EVOLUTION_INSTANCE_NAME
-        value: LETEC
+        value: Letec
       - key: EVOLUTION_INSTANCE
-        value: LETEC
+        value: Letec
       - key: EVOLUTION_SEND_DELAY_MS
         value: 1200
 
