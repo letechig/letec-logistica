@@ -2415,14 +2415,7 @@ gap: 6px;
 
 async function carregarTecnicos(){
   try {
-    const { data, error } = await supabaseClient
-      .from('technicians')
-      .select('id, nome')
-        .eq('ativo', true)
-        .order('nome');
-
-    if(error) throw error;
-
+    const data = await requestBackendJson('/api/technicians?active=true');
     window._tecnicos = data || [];
     console.log('Técnicos carregados:', window._tecnicos);
   } catch(e){
@@ -2433,14 +2426,7 @@ async function carregarTecnicos(){
 
 async function carregarVeiculos(){
   try {
-    const { data, error } = await supabaseClient
-      .from('vehicles')
-      .select('id, nome, placa, ativo')
-      .eq('ativo', true)
-      .order('nome');
-
-    if(error) throw error;
-
+    const data = await requestBackendJson('/api/veiculos?ativo=true');
     window._veiculos = data || [];
     console.log('Veículos carregados:', window._veiculos);
   } catch(e){
@@ -3306,7 +3292,10 @@ async function carregarVeiculos(){
     <!-- ═══ FROTA ═══ -->
     <div id="page-frota" class="page">
       <div class="section-title">Controle de Frota</div>
-      <div class="section-sub">KPIs extraídos dos check lists diários</div>
+      <div class="section-sub">Veículos, documentos, manutenções, alertas e KPIs extraídos dos check lists diários</div>
+      <div id="frota-alertas-v1" class="mb4"></div>
+      <div id="frota-veiculos-v1" class="mb4"></div>
+      <div id="frota-detalhe-v1" class="mb4"></div>
       <div class="grid-kpi mb4" id="frota-kpis"></div>
       <div class="grid-2 mb4">
         <div class="card">
@@ -6545,6 +6534,9 @@ let logisticaWhatsappMensagens = [];
 let inventoryModalMode = null;
 let inventoryEditingProductId = null;
 let inventoryProductFilter = 'todos';
+let fleetVehicles = [];
+let fleetAlerts = [];
+let fleetSelectedVehicle = null;
 
 async function carregarChecklistsDoSupabase() {
   try {
@@ -7834,13 +7826,11 @@ async function pollFieldOpsUpdates() {
 async function carregarEstoqueDoSupabase() {
   try {
     const [prodRes, movRes] = await Promise.all([
-      supabaseClient.from('inventory_products').select('*').order('nome', { ascending: true }),
-      supabaseClient.from('inventory_movements').select('*').order('data', { ascending: false }).order('created_at', { ascending: false })
+      requestBackendJson('/api/inventory/products'),
+      requestBackendJson('/api/inventory/movements')
     ]);
-    if (prodRes.error) throw prodRes.error;
-    if (movRes.error) throw movRes.error;
-    inventoryProducts = prodRes.data || [];
-    inventoryMovements = movRes.data || [];
+    inventoryProducts = prodRes || [];
+    inventoryMovements = movRes || [];
     inventorySchemaReady = true;
     if (currentPage === 'estoque') renderInventory();
   } catch(e) {
@@ -8793,9 +8783,6 @@ async function salvarEdicaoSvc(id) {
     const novoCl    = document.getElementById('ed-cl')?.value.trim();
     const novoEnd   = document.getElementById('ed-end')?.value.trim();
     let cliente_id = document.getElementById('ed-cl')?.dataset.clientId || document.getElementById('ed-end')?.dataset.clientId || document.getElementById('ed-client-select')?.value || '';
-    if (!cliente_id && novoCl) {
-      cliente_id = await garantirClienteDoServico('ed');
-    }
     const novoSt    = document.getElementById('ed-st')?.value;
     const tecnicos_ids = Array.from(
       document.querySelectorAll('#ed-tecnicos-container input:checked')
@@ -9819,7 +9806,300 @@ function clearCL(){
 // ════════════════════════════════════════════════
 // FROTA
 // ════════════════════════════════════════════════
+async function carregarFrotaV1() {
+  try {
+    const vehicles = await requestBackendJson('/api/veiculos');
+    fleetVehicles = vehicles || [];
+    try {
+      fleetAlerts = await requestBackendJson('/api/veiculos/alertas') || [];
+    } catch(alertError) {
+      console.warn('Alertas de frota indisponíveis:', alertError.message || alertError);
+      fleetAlerts = [];
+    }
+    if (currentPage === 'frota') renderFrotaV1();
+  } catch(e) {
+    console.warn('Frota V1 indisponível:', e.message || e);
+    fleetVehicles = [];
+    fleetAlerts = [];
+    if (currentPage === 'frota') renderFrotaV1();
+  }
+}
+
+function fleetPriorityChip(priority) {
+  const key = String(priority || '').toLowerCase();
+  if (key === 'critica') return '<span class="chip chip-red">Crítica</span>';
+  if (key === 'alta') return '<span class="chip chip-orange">Alta</span>';
+  if (key === 'media') return '<span class="chip chip-blue">Média</span>';
+  return '<span class="chip chip-gray">Baixa</span>';
+}
+
+function fleetVehicleAlert(vehicleId) {
+  return (fleetAlerts || []).find(a => String(a.veiculo_id) === String(vehicleId));
+}
+
+function renderFrotaV1() {
+  const alertsEl = document.getElementById('frota-alertas-v1');
+  const vehiclesEl = document.getElementById('frota-veiculos-v1');
+  const detailEl = document.getElementById('frota-detalhe-v1');
+  if (!alertsEl || !vehiclesEl || !detailEl) return;
+
+  const counts = fleetAlerts.reduce((acc, a) => {
+    acc[a.prioridade] = (acc[a.prioridade] || 0) + 1;
+    return acc;
+  }, {});
+
+  alertsEl.innerHTML = `
+    <div class="card" style="padding:16px">
+      <div class="flex ic sb mb3" style="gap:12px;flex-wrap:wrap">
+        <div>
+          <div class="card-label">Alertas de Frota</div>
+          <div class="section-sub" style="font-size:12px">Documentos, manutenção, rodízio e pendências operacionais.</div>
+        </div>
+        <div class="flex gap2" style="flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="carregarFrotaV1()">Atualizar</button>
+          <button class="btn btn-primary btn-sm" onclick="enviarResumoFrotaWhatsApp()">Enviar resumo WhatsApp</button>
+        </div>
+      </div>
+      <div class="grid-kpi mb3">
+        <div class="card card-red"><div class="card-label">Críticos</div><div class="card-value cv-red">${counts.critica || 0}</div></div>
+        <div class="card card-orange"><div class="card-label">Altos</div><div class="card-value cv-orange">${counts.alta || 0}</div></div>
+        <div class="card"><div class="card-label">Médios</div><div class="card-value cv-blue">${counts.media || 0}</div></div>
+        <div class="card"><div class="card-label">Total</div><div class="card-value">${fleetAlerts.length}</div></div>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Veículo</th><th>Placa</th><th>Alerta</th><th>Prioridade</th><th>Prazo/KM</th><th>Ações</th></tr></thead>
+        <tbody>${fleetAlerts.length ? fleetAlerts.slice(0, 12).map(a => `<tr>
+          <td class="bold">${sanitize(a.veiculo || '—')}</td>
+          <td class="mono">${sanitize(a.placa || '—')}</td>
+          <td>${sanitize(a.mensagem || a.tipo_alerta || '—')}</td>
+          <td>${fleetPriorityChip(a.prioridade)}</td>
+          <td class="mono">${sanitize(a.data_limite || a.proxima_quilometragem || a.km_restante || '—')}</td>
+          <td style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-xs" onclick="abrirDetalheVeiculo(${jsArg(a.veiculo_id)})">Ver veículo</button>
+            <button class="btn btn-ghost btn-xs" onclick="enviarAlertaFrotaWhatsApp(${jsArg(a.alerta_chave)})">WhatsApp</button>
+          </td>
+        </tr>`).join('') : '<tr><td colspan="6" class="text-muted">Nenhum alerta de frota no momento.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+
+  vehiclesEl.innerHTML = `
+    <div class="card" style="padding:16px">
+      <div class="flex ic sb mb3" style="gap:12px;flex-wrap:wrap">
+        <div>
+          <div class="card-label">Veículos cadastrados (${fleetVehicles.length})</div>
+          <div class="section-sub" style="font-size:12px">Cadastro principal, KM atual, técnico responsável e rodízio.</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="abrirCadastroVeiculoFrota()">Novo veículo</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Placa</th><th>Veículo</th><th>Técnico</th><th>KM atual</th><th>Status</th><th>Rodízio</th><th>Próximo alerta</th><th>Ações</th></tr></thead>
+        <tbody>${fleetVehicles.length ? fleetVehicles.map(v => {
+          const alert = fleetVehicleAlert(v.id);
+          return `<tr>
+            <td class="mono">${sanitize(v.placa || '—')}</td>
+            <td class="bold">${sanitize(v.nome || [v.marca, v.modelo].filter(Boolean).join(' ') || '—')}</td>
+            <td>${sanitize((window._tecnicos || []).find(t => String(t.id) === String(v.tecnico_responsavel_id))?.nome || '—')}</td>
+            <td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td>
+            <td><span class="chip ${v.status === 'manutencao' ? 'chip-orange' : v.status === 'inativo' || v.ativo === false ? 'chip-gray' : 'chip-green'}">${sanitize(v.status || (v.ativo === false ? 'inativo' : 'ativo'))}</span></td>
+            <td>${v.rodizio?.status_rodizio_hoje ? '<span class="chip chip-orange">Hoje</span>' : sanitize(v.rodizio?.dia_rodizio || '—')}</td>
+            <td>${alert ? `${fleetPriorityChip(alert.prioridade)} ${sanitize(alert.mensagem || '')}` : '<span class="chip chip-green">Em dia</span>'}</td>
+            <td><button class="btn btn-ghost btn-xs" onclick="abrirDetalheVeiculo(${jsArg(v.id)})">Detalhes</button></td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="8" class="text-muted">Nenhum veículo cadastrado.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+
+  if (!fleetSelectedVehicle) {
+    detailEl.innerHTML = '';
+    return;
+  }
+  renderDetalheVeiculo(fleetSelectedVehicle);
+}
+
+async function abrirDetalheVeiculo(id) {
+  try {
+    fleetSelectedVehicle = await requestBackendJson(`/api/veiculos/${encodeURIComponent(id)}`);
+    renderFrotaV1();
+  } catch(e) {
+    toast('Erro ao carregar veículo: ' + e.message, 'err');
+  }
+}
+
+function renderDetalheVeiculo(v) {
+  const detailEl = document.getElementById('frota-detalhe-v1');
+  if (!detailEl || !v) return;
+  detailEl.innerHTML = `
+    <div class="card" style="padding:16px">
+      <div class="flex ic sb mb3" style="gap:12px;flex-wrap:wrap">
+        <div>
+          <div class="card-label">${sanitize(v.nome || 'Veículo')} ${v.placa ? `<span class="mono">· ${sanitize(v.placa)}</span>` : ''}</div>
+          <div class="section-sub" style="font-size:12px">${sanitize(v.marca || '')} ${sanitize(v.modelo || '')} · KM ${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</div>
+        </div>
+        <div class="flex gap2" style="flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="atualizarKmVeiculo(${jsArg(v.id)})">Atualizar KM</button>
+          <button class="btn btn-ghost btn-sm" onclick="novoDocumentoVeiculo(${jsArg(v.id)})">Novo documento</button>
+          <button class="btn btn-ghost btn-sm" onclick="novaManutencaoVeiculo(${jsArg(v.id)})">Nova manutenção</button>
+          <button class="btn btn-ghost btn-sm" onclick="fecharDetalheVeiculo()">Fechar</button>
+        </div>
+      </div>
+      <div class="grid-2 mb3">
+        <div>
+          <div class="card-label mb2">Documentos</div>
+          <div class="tbl-wrap"><table><thead><tr><th>Tipo</th><th>Vencimento</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>${(v.documentos || []).length ? v.documentos.map(d => `<tr><td>${sanitize(d.tipo_documento)}</td><td class="mono">${sanitize(d.data_vencimento || '—')}</td><td>${sanitize(d.status || '—')}</td><td><button class="btn btn-ghost btn-xs" onclick="marcarDocumentoPago(${jsArg(d.id)})">Pago</button></td></tr>`).join('') : '<tr><td colspan="4" class="text-muted">Sem documentos.</td></tr>'}</tbody>
+          </table></div>
+        </div>
+        <div>
+          <div class="card-label mb2">Manutenções</div>
+          <div class="tbl-wrap"><table><thead><tr><th>Tipo</th><th>Próx. data</th><th>Próx. KM</th><th>Ações</th></tr></thead>
+            <tbody>${(v.manutencoes || []).length ? v.manutencoes.map(m => `<tr><td>${sanitize(m.tipo_manutencao)}</td><td class="mono">${sanitize(m.proxima_data || '—')}</td><td class="mono">${m.proxima_quilometragem || '—'}</td><td><button class="btn btn-ghost btn-xs" onclick="marcarManutencaoRealizada(${jsArg(m.id)})">Realizada</button></td></tr>`).join('') : '<tr><td colspan="4" class="text-muted">Sem manutenções.</td></tr>'}</tbody>
+          </table></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="card-label mb2">Alertas</div>
+          ${(v.alertas || []).length ? v.alertas.map(a => `<div class="note mb2">${fleetPriorityChip(a.prioridade)} ${sanitize(a.mensagem || a.tipo_alerta)}</div>`).join('') : '<div class="text-muted">Sem alertas para este veículo.</div>'}
+        </div>
+        <div>
+          <div class="card-label mb2">Histórico</div>
+          <div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Descrição</th></tr></thead>
+            <tbody>${(v.historico || []).length ? v.historico.slice(0, 8).map(h => `<tr><td class="mono">${String(h.created_at || '').slice(0,10)}</td><td>${sanitize(h.tipo_evento || '—')}</td><td>${sanitize(h.descricao || '—')}</td></tr>`).join('') : '<tr><td colspan="3" class="text-muted">Sem histórico.</td></tr>'}</tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function fecharDetalheVeiculo() {
+  fleetSelectedVehicle = null;
+  renderFrotaV1();
+}
+
+async function abrirCadastroVeiculoFrota() {
+  const nome = prompt('Nome do veículo');
+  if (!nome) return;
+  const placa = prompt('Placa do veículo') || '';
+  const km = Number(prompt('Quilometragem atual') || 0);
+  try {
+    const vehicle = await requestBackendJson('/api/veiculos', {
+      method:'POST',
+      body: JSON.stringify({ nome, placa, quilometragem_atual: km, status:'ativo', ativo:true })
+    });
+    toast('Veículo cadastrado', 'ok');
+    await carregarVeiculos();
+    await carregarFrotaV1();
+    await abrirDetalheVeiculo(vehicle.id);
+  } catch(e) {
+    toast('Erro ao cadastrar veículo: ' + e.message, 'err');
+  }
+}
+
+async function atualizarKmVeiculo(id) {
+  const km = Number(prompt('Nova quilometragem atual') || '');
+  if (!Number.isFinite(km) || km < 0) { toast('Quilometragem inválida', 'err'); return; }
+  try {
+    await requestBackendJson(`/api/veiculos/${encodeURIComponent(id)}/quilometragem`, {
+      method:'POST',
+      body: JSON.stringify({ quilometragem_atual: km })
+    });
+    toast('Quilometragem atualizada', 'ok');
+    await carregarFrotaV1();
+    await abrirDetalheVeiculo(id);
+  } catch(e) {
+    toast('Erro ao atualizar KM: ' + e.message, 'err');
+  }
+}
+
+async function novoDocumentoVeiculo(id) {
+  const tipo_documento = prompt('Tipo do documento (ipva, licenciamento, seguro, crlv, vistoria, multa, outro)');
+  if (!tipo_documento) return;
+  const data_vencimento = prompt('Data de vencimento (YYYY-MM-DD)');
+  if (!data_vencimento) return;
+  try {
+    await requestBackendJson(`/api/veiculos/${encodeURIComponent(id)}/documentos`, {
+      method:'POST',
+      body: JSON.stringify({ tipo_documento, data_vencimento, status:'em_dia' })
+    });
+    toast('Documento cadastrado', 'ok');
+    await carregarFrotaV1();
+    await abrirDetalheVeiculo(id);
+  } catch(e) {
+    toast('Erro ao salvar documento: ' + e.message, 'err');
+  }
+}
+
+async function marcarDocumentoPago(id) {
+  try {
+    await requestBackendJson(`/api/veiculos/documentos/${encodeURIComponent(id)}`, {
+      method:'PUT',
+      body: JSON.stringify({ status:'pago', data_pagamento: new Date().toISOString().slice(0,10) })
+    });
+    toast('Documento marcado como pago', 'ok');
+    await carregarFrotaV1();
+    if (fleetSelectedVehicle?.id) await abrirDetalheVeiculo(fleetSelectedVehicle.id);
+  } catch(e) {
+    toast('Erro ao atualizar documento: ' + e.message, 'err');
+  }
+}
+
+async function novaManutencaoVeiculo(id) {
+  const tipo_manutencao = prompt('Tipo da manutenção (troca_oleo, pneus, freios, revisao_geral, corretiva...)');
+  if (!tipo_manutencao) return;
+  const proxima_data = prompt('Próxima data (YYYY-MM-DD), opcional') || null;
+  const proxima_quilometragem = prompt('Próxima quilometragem, opcional') || null;
+  try {
+    await requestBackendJson(`/api/veiculos/${encodeURIComponent(id)}/manutencoes`, {
+      method:'POST',
+      body: JSON.stringify({ tipo_manutencao, proxima_data, proxima_quilometragem, status:'programada' })
+    });
+    toast('Manutenção cadastrada', 'ok');
+    await carregarFrotaV1();
+    await abrirDetalheVeiculo(id);
+  } catch(e) {
+    toast('Erro ao salvar manutenção: ' + e.message, 'err');
+  }
+}
+
+async function marcarManutencaoRealizada(id) {
+  try {
+    await requestBackendJson(`/api/veiculos/manutencoes/${encodeURIComponent(id)}/marcar-realizada`, {
+      method:'POST',
+      body: JSON.stringify({ data_realizada: new Date().toISOString().slice(0,10) })
+    });
+    toast('Manutenção marcada como realizada', 'ok');
+    await carregarFrotaV1();
+    if (fleetSelectedVehicle?.id) await abrirDetalheVeiculo(fleetSelectedVehicle.id);
+  } catch(e) {
+    toast('Erro ao atualizar manutenção: ' + e.message, 'err');
+  }
+}
+
+async function enviarAlertaFrotaWhatsApp(alertaChave) {
+  if (!confirmAction('Enviar este alerta por WhatsApp?')) return;
+  try {
+    await requestBackendJson('/api/veiculos/alertas/enviar-whatsapp', {
+      method:'POST',
+      body: JSON.stringify({ alerta_chave: alertaChave })
+    });
+    toast('Alerta enviado por WhatsApp', 'ok');
+  } catch(e) {
+    toast('Erro ao enviar alerta: ' + e.message, 'err');
+  }
+}
+
+async function enviarResumoFrotaWhatsApp() {
+  if (!confirmAction('Enviar resumo de alertas da frota por WhatsApp?')) return;
+  try {
+    await requestBackendJson('/api/veiculos/alertas/enviar-resumo-whatsapp', { method:'POST', body: JSON.stringify({}) });
+    toast('Resumo enviado por WhatsApp', 'ok');
+  } catch(e) {
+    toast('Erro ao enviar resumo: ' + e.message, 'err');
+  }
+}
+
 function renderFrota(){
+  renderFrotaV1();
   const recs=clRecords;
   const totalKm=recs.reduce((s,r)=>s+(r.kmD>0?r.kmD:0),0);
   const avgKm=recs.filter(r=>r.kmD>0).length?Math.round(totalKm/recs.filter(r=>r.kmD>0).length):0;
@@ -11141,28 +11421,6 @@ function buildServiceAddressFromClient(cliente = {}) {
   return `${enderecoBase} - CEP: ${cep}`;
 }
 
-async function ensureClientesDataForService() {
-  if (Array.isArray(clientesData) && clientesData.length) return clientesData;
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/customers`);
-    if (!response.ok) throw new Error(`Erro ${response.status}`);
-    clientesData = await response.json();
-  } catch (error) {
-    console.error('Erro ao carregar clientes para novo serviço:', error);
-    toast('Não foi possível carregar clientes cadastrados', 'warn');
-  }
-
-  return Array.isArray(clientesData) ? clientesData : [];
-}
-
-function getClienteIdPorNomeServico(nome) {
-  const nomeNorm = normalizarNome(nome || '');
-  if (!nomeNorm) return '';
-  const match = (clientesData || []).find(c => normalizarNome(c.nome || '') === nomeNorm);
-  return match?.id ? String(match.id) : '';
-}
-
 function renderServicoClientesSelect(prefix = 'ns', selectedClientId = '') {
   const select = document.getElementById(`${prefix}-client-select`);
   if (!select) return;
@@ -11190,32 +11448,6 @@ function preencherServicoPorCliente(prefix = 'ns', cliente) {
     hint.textContent = 'Cliente sem endereço cadastrado.';
     hint.style.color = 'var(--orange)';
   }
-}
-
-function onServicoClienteSelect(prefix = 'ns') {
-  const select = document.getElementById(`${prefix}-client-select`);
-  const nomeInput = document.getElementById(`${prefix}-cl`);
-  const enderecoInput = document.getElementById(`${prefix}-end`);
-  const hint = document.getElementById(`${prefix}-client-hint`);
-  const clientId = String(select?.value || '');
-
-  if (!clientId) {
-    if (nomeInput) nomeInput.dataset.clientId = '';
-    if (enderecoInput) enderecoInput.dataset.clientId = '';
-    if (hint) {
-      hint.textContent = 'Selecione um cliente cadastrado para preencher o endereço automaticamente.';
-      hint.style.color = 'var(--text3)';
-    }
-    return;
-  }
-
-  const cliente = (clientesData || []).find(c => String(c.id) === clientId);
-  if (!cliente) {
-    toast('Cliente não encontrado', 'err');
-    return;
-  }
-
-  preencherServicoPorCliente(prefix, cliente);
 }
 
 async function buscarClientesServicoRemoto(term) {
@@ -11305,24 +11537,17 @@ function onServicoClienteManualInput(prefix = 'ns') {
 
 function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentName = '') {
   renderServicoClientesSelect(prefix, selectedClientId);
-  ensureClientesDataForService().then(() => {
-    const resolvedClientId = String(selectedClientId || getClienteIdPorNomeServico(currentName) || '');
-    renderServicoClientesSelect(prefix, resolvedClientId);
-    if (resolvedClientId) {
-      const cliente = (clientesData || []).find(c => String(c.id) === resolvedClientId);
-      const select = document.getElementById(`${prefix}-client-select`);
-      const search = document.getElementById(`${prefix}-client-search`);
-      if (select) select.value = resolvedClientId;
-      if (search && cliente) search.value = cliente.nome || currentName || '';
-      const nomeInput = document.getElementById(`${prefix}-cl`);
-      const enderecoInput = document.getElementById(`${prefix}-end`);
-      if (nomeInput) nomeInput.dataset.clientId = resolvedClientId;
-      if (enderecoInput) enderecoInput.dataset.clientId = resolvedClientId;
-    }
-  });
+  const resolvedClientId = String(selectedClientId || '');
+  const select = document.getElementById(`${prefix}-client-select`);
+  const search = document.getElementById(`${prefix}-client-search`);
+  const nomeInput = document.getElementById(`${prefix}-cl`);
+  const enderecoInput = document.getElementById(`${prefix}-end`);
+  if (select) select.value = resolvedClientId;
+  if (search && currentName) search.value = currentName;
+  if (nomeInput) nomeInput.dataset.clientId = resolvedClientId;
+  if (enderecoInput) enderecoInput.dataset.clientId = resolvedClientId;
 }
 
-function onNovoServicoClienteSelect() { onServicoClienteSelect('ns'); }
 function onNovoServicoClienteManualInput() { onServicoClienteManualInput('ns'); }
 
 async function garantirClienteDoServico(prefix = 'ns') {
@@ -11788,8 +12013,9 @@ async function confirmNewSvc(){
   try {
     cliente_id = await garantirClienteDoServico('ns');
   } catch(e) {
-    toast('Não foi possível cadastrar/vincular o cliente: ' + (e.message || e), 'err');
-    return;
+    console.warn('Não foi possível cadastrar/vincular cliente antes do serviço:', e);
+    toast('Cliente não vinculado agora; o serviço será salvo mesmo assim.', 'warn');
+    cliente_id = '';
   }
 
   // Gerar ID único (timestamp numérico compatível com BIGINT PK do Supabase)
@@ -15055,11 +15281,17 @@ async function saveInventoryProduct() {
     updated_at: new Date().toISOString()
   };
   try {
-    const query = inventoryEditingProductId
-      ? supabaseClient.from('inventory_products').update(payload).eq('id', inventoryEditingProductId)
-      : supabaseClient.from('inventory_products').insert([payload]);
-    const { error } = await query;
-    if (error) throw error;
+    if (inventoryEditingProductId) {
+      await requestBackendJson(`/api/inventory/products/${encodeURIComponent(inventoryEditingProductId)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    } else {
+      await requestBackendJson('/api/inventory/products', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
     toast('Produto salvo', 'ok');
     closeInventoryModal();
     await carregarEstoqueDoSupabase();
@@ -15095,8 +15327,10 @@ async function saveInventoryMovement() {
   };
   const before = inventoryCalcProduct(product).atual;
   try {
-    const { error } = await supabaseClient.from('inventory_movements').insert([payload]);
-    if (error) throw error;
+    await requestBackendJson('/api/inventory/movements', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
     closeInventoryModal();
     await carregarEstoqueDoSupabase();
     const future = tipo === 'saida' ? before - quantity : tipo === 'entrada' ? before + quantity : before + quantity;
@@ -15152,8 +15386,7 @@ async function carregarTecnicosConfig() {
   const container = document.getElementById('config-tecnicos');
   container.innerHTML = '<div class="text-muted">Carregando...</div>';
   try {
-    const { data, error } = await supabaseClient.from('technicians').select('*').order('nome');
-    if (error) throw error;
+    const data = await requestBackendJson('/api/technicians');
     const items = data || [];
     container.innerHTML = `
       <div class="card" style="margin-bottom:16px;padding:16px">
@@ -15191,14 +15424,19 @@ async function salvarTecnico() {
   const telefone = document.getElementById('cfg-tec-telefone')?.value.trim() || null;
   const whatsapp = document.getElementById('cfg-tec-whatsapp')?.value.trim() || null;
   if (!nome) { toast('Preencha o nome do técnico', 'err'); return; }
-  try { const { error } = await supabaseClient.from('technicians').insert([{ nome, telefone, whatsapp, ativo: true }]); if (error) throw error; toast('✅ Técnico salvo!', 'ok'); document.getElementById('form-novo-tecnico').style.display = 'none'; await carregarTecnicosConfig(); await carregarTecnicos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
+  try {
+    await requestBackendJson('/api/technicians', { method:'POST', body: JSON.stringify({ nome, telefone, whatsapp, ativo: true }) });
+    toast('✅ Técnico salvo!', 'ok');
+    document.getElementById('form-novo-tecnico').style.display = 'none';
+    await carregarTecnicosConfig();
+    await carregarTecnicos();
+  } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
 }
 async function toggleTecnico(id, ativo) {
   const msg = ativo ? 'Ativar este técnico?' : 'Desativar este técnico? Ele sairá das novas seleções, mas o histórico será mantido.';
   if (!confirmAction(msg)) return;
   try {
-    const { error } = await supabaseClient.from('technicians').update({ ativo }).eq('id', id);
-    if (error) throw error;
+    await requestBackendJson(`/api/technicians/${encodeURIComponent(id)}`, { method:'PUT', body: JSON.stringify({ ativo }) });
     toast(ativo ? '✅ Técnico ativado' : '⚠️ Técnico desativado', 'ok');
     await carregarTecnicosConfig();
     await carregarTecnicos();
@@ -15210,8 +15448,7 @@ async function carregarVeiculosConfig() {
   const container = document.getElementById('config-veiculos');
   container.innerHTML = '<div class="text-muted">Carregando...</div>';
   try {
-    const { data, error } = await supabaseClient.from('vehicles').select('*').order('nome');
-    if (error) throw error;
+    const data = await requestBackendJson('/api/veiculos');
     const items = data || [];
     container.innerHTML = `
       <div class="card" style="margin-bottom:16px;padding:16px">
@@ -15220,9 +15457,10 @@ async function carregarVeiculosConfig() {
           <button class="btn btn-primary btn-sm" onclick="formNovoVeiculo()">+ Novo Veículo</button>
         </div>
         <div id="form-novo-veiculo" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg2);border-radius:var(--r2)">
-          <div class="form-row fr-2 mb3">
+          <div class="form-row fr-3 mb3">
             <div class="field"><label>Nome</label><input type="text" id="cfg-vei-nome" placeholder="Nome do veículo"></div>
             <div class="field"><label>Placa</label><input type="text" id="cfg-vei-placa" placeholder="ABC-1234"></div>
+            <div class="field"><label>Quilometragem atual</label><input type="number" min="0" id="cfg-vei-km" placeholder="0"></div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onclick="salvarVeiculo()">Salvar</button>
@@ -15230,28 +15468,36 @@ async function carregarVeiculosConfig() {
           </div>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>ID</th><th>Nome</th><th>Placa</th><th>Ativo</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(v => `<tr><td class="mono">${sanitize(v.id)}</td><td class="bold">${sanitize(v.nome)}</td><td class="mono">${sanitize(v.placa || '—')}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${jsArg(v.id)}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</tbody>
+          <thead><tr><th>ID</th><th>Nome</th><th>Placa</th><th>KM</th><th>Rodízio</th><th>Ativo</th><th>Ações</th></tr></thead>
+          <tbody>${items.map(v => `<tr><td class="mono">${sanitize(v.id)}</td><td class="bold">${sanitize(v.nome)}</td><td class="mono">${sanitize(v.placa || '—')}</td><td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td><td>${sanitize(v.rodizio?.dia_rodizio || '—')}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${jsArg(v.id)}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</tbody>
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
 }
-function formNovoVeiculo() { document.getElementById('form-novo-veiculo').style.display = ''; document.getElementById('cfg-vei-nome').value = ''; document.getElementById('cfg-vei-placa').value = ''; document.getElementById('cfg-vei-nome').focus(); }
+function formNovoVeiculo() { document.getElementById('form-novo-veiculo').style.display = ''; document.getElementById('cfg-vei-nome').value = ''; document.getElementById('cfg-vei-placa').value = ''; document.getElementById('cfg-vei-km').value = ''; document.getElementById('cfg-vei-nome').focus(); }
 async function salvarVeiculo() {
   const nome = document.getElementById('cfg-vei-nome')?.value.trim();
   const placa = document.getElementById('cfg-vei-placa')?.value.trim();
+  const quilometragem_atual = Number(document.getElementById('cfg-vei-km')?.value || 0);
   if (!nome) { toast('Preencha o nome do veículo', 'err'); return; }
-  try { const { error } = await supabaseClient.from('vehicles').insert([{ nome, placa, ativo: true }]); if (error) throw error; toast('✅ Veículo salvo!', 'ok'); document.getElementById('form-novo-veiculo').style.display = 'none'; await carregarVeiculosConfig(); await carregarVeiculos(); } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
+  try {
+    await requestBackendJson('/api/veiculos', { method:'POST', body: JSON.stringify({ nome, placa, quilometragem_atual, ativo: true, status: 'ativo' }) });
+    toast('✅ Veículo salvo!', 'ok');
+    document.getElementById('form-novo-veiculo').style.display = 'none';
+    await carregarVeiculosConfig();
+    await carregarVeiculos();
+    await carregarFrotaV1();
+  } catch(e) { toast('❌ Erro: ' + e.message, 'err'); }
 }
 async function toggleVeiculo(id, ativo) {
   const msg = ativo ? 'Ativar este veículo?' : 'Desativar este veículo? Ele sairá das novas seleções, mas o histórico será mantido.';
   if (!confirmAction(msg)) return;
   try {
-    const { error } = await supabaseClient.from('vehicles').update({ ativo }).eq('id', id);
-    if (error) throw error;
+    await requestBackendJson(`/api/veiculos/${encodeURIComponent(id)}`, { method:'PUT', body: JSON.stringify({ ativo, status: ativo ? 'ativo' : 'inativo' }) });
     toast(ativo ? '✅ Veículo ativado' : '⚠️ Veículo desativado', 'ok');
     await carregarVeiculosConfig();
     await carregarVeiculos();
+    await carregarFrotaV1();
   } catch(e) {
     toast('❌ Erro: ' + e.message, 'err');
   }
@@ -15487,6 +15733,7 @@ window.addEventListener('load', async () => {
     await carregarEventosCampoDoSupabase();
     await carregarRecadosTecnicosDoSupabase();
     await carregarEstoqueDoSupabase();
+    await carregarFrotaV1();
     prepareFieldOpsAudioAfterReload();
     nav(currentPage, null);
     if (!window._fieldOpsPolling) {

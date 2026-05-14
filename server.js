@@ -498,6 +498,350 @@ function normalizeTechnicianMessagePayload(input = {}) {
   };
 }
 
+function cleanBoolean(value, defaultValue = true) {
+  if (value === undefined) return defaultValue;
+  if (typeof value === 'boolean') return value;
+  return !['false', '0', 'nao', 'não', 'inativo'].includes(String(value || '').trim().toLowerCase());
+}
+
+function normalizePlate(value) {
+  const text = cleanNullableText(value, 20);
+  return text ? text.toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+}
+
+function normalizeVehiclePayload(input = {}, options = {}) {
+  const partial = !!options.partial;
+  const payload = {};
+  const set = (target, keys, normalizer, defaultValue) => {
+    const value = firstDefined(input, Array.isArray(keys) ? keys : [keys]);
+    if (value === undefined) {
+      if (!partial && defaultValue !== undefined) payload[target] = defaultValue;
+      return;
+    }
+    payload[target] = normalizer ? normalizer(value) : value;
+  };
+
+  set('nome', 'nome', value => cleanText(value, 160), '');
+  set('placa', 'placa', normalizePlate, null);
+  set('marca', 'marca', value => cleanNullableText(value, 120));
+  set('modelo', 'modelo', value => cleanNullableText(value, 120));
+  set('ano', 'ano', value => {
+    const year = Number.parseInt(value, 10);
+    return Number.isFinite(year) && year > 1900 ? year : null;
+  });
+  set('cor', 'cor', value => cleanNullableText(value, 80));
+  set('renavam', 'renavam', value => cleanNullableText(value, 80));
+  set('chassi', 'chassi', value => cleanNullableText(value, 80));
+  set('combustivel', 'combustivel', value => cleanNullableText(value, 80));
+  set('quilometragem_atual', ['quilometragem_atual', 'km_atual'], value => {
+    const number = cleanNumber(value);
+    if (number === null || number === undefined) return null;
+    if (number < 0) {
+      const error = new Error('Quilometragem nao pode ser negativa');
+      error.status = 400;
+      throw error;
+    }
+    return number;
+  }, 0);
+  set('tecnico_responsavel_id', ['tecnico_responsavel_id', 'tecnico_id'], value => cleanNullableText(value, 80));
+  set('status', 'status', value => {
+    const status = String(value || 'ativo').trim().toLowerCase();
+    if (!['ativo', 'manutencao', 'inativo'].includes(status)) {
+      const error = new Error('Status de veiculo invalido');
+      error.status = 400;
+      throw error;
+    }
+    return status;
+  }, 'ativo');
+  set('observacoes', 'observacoes', value => cleanText(value, 2000), '');
+  set('ativo', 'ativo', value => cleanBoolean(value, true), true);
+
+  if (!payload.nome && !partial) {
+    payload.nome = [payload.marca, payload.modelo, payload.placa].filter(Boolean).join(' ').trim();
+  }
+  if (payload.status) payload.ativo = payload.status !== 'inativo';
+  payload.updated_at = new Date().toISOString();
+  return payload;
+}
+
+function normalizeTechnicianPayload(input = {}, options = {}) {
+  const partial = !!options.partial;
+  const payload = {};
+  const set = (target, keys, normalizer, defaultValue) => {
+    const value = firstDefined(input, Array.isArray(keys) ? keys : [keys]);
+    if (value === undefined) {
+      if (!partial && defaultValue !== undefined) payload[target] = defaultValue;
+      return;
+    }
+    payload[target] = normalizer ? normalizer(value) : value;
+  };
+  set('nome', 'nome', value => cleanText(value, 160), '');
+  set('telefone', 'telefone', value => cleanNullableText(normalizePhone(value), 20));
+  set('whatsapp', 'whatsapp', value => cleanNullableText(normalizePhone(value), 20));
+  set('ativo', 'ativo', value => cleanBoolean(value, true), true);
+  return payload;
+}
+
+function normalizeInventoryProductPayload(input = {}, options = {}) {
+  const partial = !!options.partial;
+  const payload = {};
+  const set = (target, keys, normalizer, defaultValue) => {
+    const value = firstDefined(input, Array.isArray(keys) ? keys : [keys]);
+    if (value === undefined) {
+      if (!partial && defaultValue !== undefined) payload[target] = defaultValue;
+      return;
+    }
+    payload[target] = normalizer ? normalizer(value) : value;
+  };
+  set('nome', 'nome', value => cleanText(value, 180), '');
+  set('unidade', 'unidade', value => cleanText(value, 20) || 'un', 'un');
+  set('categoria', 'categoria', value => cleanText(value, 80) || 'outros', 'outros');
+  set('estoque_inicial', 'estoque_inicial', cleanNumber, 0);
+  set('estoque_minimo', 'estoque_minimo', cleanNumber, 0);
+  set('ativo', 'ativo', value => cleanBoolean(value, true), true);
+  set('observacoes', 'observacoes', value => cleanText(value, 2000), '');
+  payload.updated_at = new Date().toISOString();
+  return payload;
+}
+
+function normalizeInventoryMovementPayload(input = {}) {
+  const tipo = String(input.tipo || '').trim().toLowerCase();
+  if (!['entrada', 'saida', 'ajuste'].includes(tipo)) {
+    const error = new Error('Tipo de movimentacao invalido');
+    error.status = 400;
+    throw error;
+  }
+  const quantidade = cleanNumber(input.quantidade);
+  if (quantidade === null || quantidade === undefined || (tipo !== 'ajuste' && quantidade <= 0)) {
+    const error = new Error('Quantidade invalida');
+    error.status = 400;
+    throw error;
+  }
+  return {
+    data: cleanDateText(input.data) || new Date().toISOString().slice(0, 10),
+    tipo,
+    product_id: cleanNumber(input.product_id),
+    produto_nome: cleanText(input.produto_nome, 180),
+    quantidade,
+    vehicle_id: cleanNullableText(input.vehicle_id, 80),
+    veiculo_nome: cleanText(input.veiculo_nome, 160),
+    motivo_os: cleanText(input.motivo_os, 160),
+    observacoes: cleanText(input.observacoes, 2000),
+    operador: cleanText(input.operador, 160)
+  };
+}
+
+function normalizeVehicleDocumentPayload(input = {}, options = {}) {
+  const partial = !!options.partial;
+  const payload = {};
+  const set = (target, normalizer, defaultValue) => {
+    if (!hasOwnValue(input, target)) {
+      if (!partial && defaultValue !== undefined) payload[target] = defaultValue;
+      return;
+    }
+    payload[target] = normalizer ? normalizer(input[target]) : input[target];
+  };
+  set('tipo_documento', value => cleanText(value, 80));
+  set('descricao', value => cleanText(value, 300), '');
+  set('data_vencimento', cleanDateText);
+  set('data_pagamento', cleanDateText);
+  set('valor', cleanNumber);
+  set('status', value => cleanText(value, 80) || 'em_dia', 'em_dia');
+  set('observacoes', value => cleanText(value, 2000), '');
+  set('arquivo_url', value => cleanNullableText(value, 1000));
+  payload.updated_at = new Date().toISOString();
+  return payload;
+}
+
+function normalizeVehicleMaintenancePayload(input = {}, options = {}) {
+  const partial = !!options.partial;
+  const payload = {};
+  const set = (target, normalizer, defaultValue) => {
+    if (!hasOwnValue(input, target)) {
+      if (!partial && defaultValue !== undefined) payload[target] = defaultValue;
+      return;
+    }
+    payload[target] = normalizer ? normalizer(input[target]) : input[target];
+  };
+  set('tipo_manutencao', value => cleanText(value, 100));
+  set('descricao', value => cleanText(value, 400), '');
+  set('data_realizada', cleanDateText);
+  set('quilometragem_realizada', cleanNumber);
+  set('proxima_data', cleanDateText);
+  set('proxima_quilometragem', cleanNumber);
+  set('valor', cleanNumber);
+  set('oficina_fornecedor', value => cleanText(value, 200), '');
+  set('status', value => cleanText(value, 80) || 'programada', 'programada');
+  set('observacoes', value => cleanText(value, 2000), '');
+  set('comprovante_url', value => cleanNullableText(value, 1000));
+  if (payload.proxima_quilometragem !== undefined && payload.quilometragem_realizada !== undefined
+    && payload.proxima_quilometragem !== null && payload.quilometragem_realizada !== null
+    && payload.proxima_quilometragem < payload.quilometragem_realizada) {
+    const error = new Error('Proxima quilometragem nao pode ser menor que a realizada');
+    error.status = 400;
+    throw error;
+  }
+  payload.updated_at = new Date().toISOString();
+  return payload;
+}
+
+function vehicleDisplayName(vehicle = {}) {
+  return vehicle.nome || [vehicle.marca, vehicle.modelo].filter(Boolean).join(' ') || vehicle.placa || 'Veiculo';
+}
+
+function plateLastDigit(plate) {
+  const digits = String(plate || '').replace(/\D/g, '');
+  return digits ? digits[digits.length - 1] : '';
+}
+
+function rodizioInfo(plate, date = new Date()) {
+  const final = plateLastDigit(plate);
+  const map = { '1': 1, '2': 1, '3': 2, '4': 2, '5': 3, '6': 3, '7': 4, '8': 4, '9': 5, '0': 5 };
+  const labels = { 1: 'segunda-feira', 2: 'terca-feira', 3: 'quarta-feira', 4: 'quinta-feira', 5: 'sexta-feira' };
+  const day = map[final] || null;
+  return {
+    final_placa: final || null,
+    dia_rodizio: day ? labels[day] : null,
+    horario_restricao: day ? '07:00-10:00 e 17:00-20:00' : null,
+    status_rodizio_hoje: !!day && date.getDay() === day
+  };
+}
+
+function daysUntil(dateText, today = new Date()) {
+  const date = cleanDateText(dateText);
+  if (!date) return null;
+  const base = new Date(`${today.toISOString().slice(0, 10)}T12:00:00Z`);
+  const target = new Date(`${date}T12:00:00Z`);
+  return Math.round((target - base) / 86400000);
+}
+
+function buildVehicleAlerts({ vehicles = [], documents = [], maintenances = [] } = {}) {
+  const alerts = [];
+  const docsByVehicle = new Map();
+  const maintByVehicle = new Map();
+  documents.forEach(item => {
+    const key = String(item.veiculo_id || item.vehicle_id || '');
+    if (!docsByVehicle.has(key)) docsByVehicle.set(key, []);
+    docsByVehicle.get(key).push(item);
+  });
+  maintenances.forEach(item => {
+    const key = String(item.veiculo_id || item.vehicle_id || '');
+    if (!maintByVehicle.has(key)) maintByVehicle.set(key, []);
+    maintByVehicle.get(key).push(item);
+  });
+
+  const addAlert = (vehicle, type, message, priority, extra = {}) => {
+    const alertaChave = [
+      type,
+      vehicle.id,
+      extra.item_id || '',
+      extra.data_limite || '',
+      extra.proxima_quilometragem || ''
+    ].join(':');
+    alerts.push({
+      alerta_chave: alertaChave,
+      veiculo_id: vehicle.id,
+      veiculo: vehicleDisplayName(vehicle),
+      placa: vehicle.placa || '',
+      tipo_alerta: type,
+      mensagem: message,
+      prioridade: priority,
+      status: 'aberto',
+      ...extra
+    });
+  };
+
+  vehicles.forEach(vehicle => {
+    const active = vehicle.ativo !== false && String(vehicle.status || 'ativo') !== 'inativo';
+    if (active && !vehicle.tecnico_responsavel_id) addAlert(vehicle, 'veiculo_sem_tecnico', 'Veiculo ativo sem tecnico responsavel', 'media');
+    if (active && (vehicle.quilometragem_atual === null || vehicle.quilometragem_atual === undefined || vehicle.quilometragem_atual === '')) {
+      addAlert(vehicle, 'quilometragem_nao_atualizada', 'Veiculo sem quilometragem atualizada', 'media');
+    }
+    const rodizio = rodizioInfo(vehicle.placa);
+    if (rodizio.status_rodizio_hoje) addAlert(vehicle, 'rodizio_hoje', 'Hoje e dia de rodizio deste veiculo', 'alta', rodizio);
+
+    (docsByVehicle.get(String(vehicle.id)) || []).forEach(doc => {
+      const paid = ['pago', 'cancelado'].includes(String(doc.status || '').toLowerCase()) || doc.data_pagamento;
+      if (paid) return;
+      const diff = daysUntil(doc.data_vencimento);
+      if (diff === null) return;
+      const label = cleanText(doc.tipo_documento, 80) || 'documento';
+      if (diff < 0) addAlert(vehicle, `${label}_vencido`, `${label} vencido`, 'critica', { item_id: doc.id, data_limite: doc.data_vencimento });
+      else if (diff <= 7) addAlert(vehicle, `${label}_vence_7_dias`, `${label} vence em ate 7 dias`, 'alta', { item_id: doc.id, data_limite: doc.data_vencimento });
+      else if (diff <= 15) addAlert(vehicle, `${label}_vence_15_dias`, `${label} vence em ate 15 dias`, 'media', { item_id: doc.id, data_limite: doc.data_vencimento });
+      else if (diff <= 30) addAlert(vehicle, `${label}_vence_30_dias`, `${label} vence em ate 30 dias`, 'baixa', { item_id: doc.id, data_limite: doc.data_vencimento });
+    });
+
+    (maintByVehicle.get(String(vehicle.id)) || []).forEach(maintenance => {
+      if (['realizada', 'cancelada'].includes(String(maintenance.status || '').toLowerCase())) return;
+      const label = cleanText(maintenance.tipo_manutencao, 100) || 'manutencao';
+      const diff = daysUntil(maintenance.proxima_data);
+      if (diff !== null) {
+        if (diff < 0) addAlert(vehicle, `${label}_data_vencida`, `${label} vencida por data`, 'critica', { item_id: maintenance.id, data_limite: maintenance.proxima_data });
+        else if (diff <= 7) addAlert(vehicle, `${label}_data_proxima`, `${label} proxima por data`, 'alta', { item_id: maintenance.id, data_limite: maintenance.proxima_data });
+        else if (diff <= 30) addAlert(vehicle, `${label}_data_30_dias`, `${label} programada em ate 30 dias`, 'media', { item_id: maintenance.id, data_limite: maintenance.proxima_data });
+      }
+      const currentKm = Number(vehicle.quilometragem_atual);
+      const nextKm = Number(maintenance.proxima_quilometragem);
+      if (Number.isFinite(currentKm) && Number.isFinite(nextKm) && nextKm > 0) {
+        const remaining = nextKm - currentKm;
+        if (remaining < 0) addAlert(vehicle, `${label}_km_vencida`, `${label} vencida por quilometragem`, 'critica', { item_id: maintenance.id, proxima_quilometragem: nextKm });
+        else if (remaining <= 500) addAlert(vehicle, `${label}_km_proxima`, `${label} proxima por quilometragem`, 'alta', { item_id: maintenance.id, proxima_quilometragem: nextKm, km_restante: remaining });
+      }
+    });
+  });
+
+  const priorityOrder = { critica: 0, alta: 1, media: 2, baixa: 3 };
+  return alerts.sort((a, b) => (priorityOrder[a.prioridade] ?? 9) - (priorityOrder[b.prioridade] ?? 9));
+}
+
+async function insertVehicleHistory(db, payload) {
+  const { error } = await db.from('veiculo_historico').insert([{
+    veiculo_id: payload.veiculo_id || null,
+    tipo_evento: payload.tipo_evento,
+    descricao: payload.descricao || '',
+    dados_anteriores: payload.dados_anteriores || null,
+    dados_novos: payload.dados_novos || null,
+    usuario_id: payload.usuario_id || null
+  }]);
+  if (error) console.warn('[veiculo_historico] Falha ao registrar historico:', error.message);
+}
+
+function isMissingSupabaseRelation(error) {
+  const text = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return text.includes('pgrst205')
+    || text.includes('42p01')
+    || text.includes('could not find')
+    || text.includes('does not exist')
+    || text.includes('schema cache');
+}
+
+async function safeFleetRows(builder, label) {
+  const { data, error } = await builder;
+  if (error) {
+    if (isMissingSupabaseRelation(error)) {
+      console.warn(`[${label}] Tabela opcional ainda nao existe. Execute migration-frota-v1.sql.`);
+      return [];
+    }
+    throw error;
+  }
+  return data || [];
+}
+
+async function fetchVehicleAlerts(db) {
+  const [vehiclesRes, documents, maintenances] = await Promise.all([
+    db.from('vehicles').select('*').order('nome', { ascending: true }),
+    safeFleetRows(db.from('veiculo_documentos').select('*'), 'veiculo_documentos'),
+    safeFleetRows(db.from('veiculo_manutencoes').select('*'), 'veiculo_manutencoes')
+  ]);
+  if (vehiclesRes.error) throw vehiclesRes.error;
+  return buildVehicleAlerts({
+    vehicles: vehiclesRes.data || [],
+    documents,
+    maintenances
+  });
+}
+
 async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, cep, endereco, endereco_completo, rua, numero, bairro, cidade, uf, db }) {
   const nomeNormalizado = normalizeCustomerName(nome);
   const telefoneNormalizado = normalizePhone(telefone);
@@ -649,7 +993,8 @@ function extractEvolutionMessageId(payload = {}) {
 
 async function sendEvolutionText({ number, text }) {
   const config = getEvolutionConfig();
-  const normalized = normalizeBrazilWhatsAppNumber(number);
+  const rawDestination = String(number || '').trim();
+  const normalized = rawDestination.endsWith('@g.us') ? rawDestination : normalizeBrazilWhatsAppNumber(rawDestination);
   if (!normalized) {
     const error = new Error('Numero de WhatsApp invalido. Use DDD + numero ou 55 + DDD + numero.');
     error.status = 400;
@@ -1376,14 +1721,449 @@ app.put('/api/technician-messages/:id/read', async (req, res) => {
 
 app.get('/api/technicians', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const db = getSupabaseClient();
+    const active = req.query.active ?? req.query.ativo;
+    let query = db
       .from('technicians')
-      .select('*');
+      .select('*')
+      .order('nome', { ascending: true });
 
+    if (active !== undefined) query = query.eq('ativo', cleanBoolean(active, true));
+
+    const { data, error } = await query;
     if (error) throw error;
-    res.json(data);
+    res.json(data || []);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[GET /api/technicians] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar tecnicos' });
+  }
+});
+
+app.post('/api/technicians', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeTechnicianPayload(req.body);
+    if (!payload.nome) return res.status(400).json({ error: 'Nome do tecnico e obrigatorio' });
+    const { data, error } = await db.from('technicians').insert([payload]).select();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Ja existe um tecnico com este nome' });
+      throw error;
+    }
+    res.status(201).json(data?.[0] || null);
+  } catch (error) {
+    console.error('[POST /api/technicians] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar tecnico' });
+  }
+});
+
+app.put('/api/technicians/:id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeTechnicianPayload(req.body, { partial: true });
+    if (!Object.keys(payload).length) return res.status(400).json({ error: 'Nenhum campo valido para atualizar' });
+    const { data, error } = await db.from('technicians').update(payload).eq('id', req.params.id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Tecnico nao encontrado' });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/technicians/:id] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar tecnico' });
+  }
+});
+
+app.get('/api/inventory/products', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db.from('inventory_products').select('*').order('nome', { ascending: true });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/inventory/products] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar produtos do estoque' });
+  }
+});
+
+app.post('/api/inventory/products', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeInventoryProductPayload(req.body);
+    if (!payload.nome) return res.status(400).json({ error: 'Nome do produto e obrigatorio' });
+    const { data, error } = await db.from('inventory_products').insert([payload]).select();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Ja existe um produto com este nome' });
+      throw error;
+    }
+    res.status(201).json(data?.[0] || null);
+  } catch (error) {
+    console.error('[POST /api/inventory/products] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar produto' });
+  }
+});
+
+app.put('/api/inventory/products/:id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeInventoryProductPayload(req.body, { partial: true });
+    if (!Object.keys(payload).length) return res.status(400).json({ error: 'Nenhum campo valido para atualizar' });
+    const { data, error } = await db.from('inventory_products').update(payload).eq('id', req.params.id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Produto nao encontrado' });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/inventory/products/:id] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar produto' });
+  }
+});
+
+app.get('/api/inventory/movements', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    let query = db.from('inventory_movements').select('*').order('data', { ascending: false }).order('created_at', { ascending: false });
+    if (req.query.data) query = query.eq('data', cleanDateText(req.query.data));
+    if (req.query.tipo) query = query.eq('tipo', String(req.query.tipo));
+    if (req.query.product_id) query = query.eq('product_id', req.query.product_id);
+    if (req.query.vehicle_id) query = query.eq('vehicle_id', req.query.vehicle_id);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/inventory/movements] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar movimentacoes do estoque' });
+  }
+});
+
+app.post('/api/inventory/movements', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeInventoryMovementPayload(req.body);
+    const { data, error } = await db.from('inventory_movements').insert([payload]).select();
+    if (error) throw error;
+    res.status(201).json(data?.[0] || null);
+  } catch (error) {
+    console.error('[POST /api/inventory/movements] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar movimentacao' });
+  }
+});
+
+app.get('/api/veiculos/alertas', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const alerts = await fetchVehicleAlerts(db);
+    res.json(alerts);
+  } catch (error) {
+    console.error('[GET /api/veiculos/alertas] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar alertas de frota' });
+  }
+});
+
+app.post('/api/veiculos/alertas/enviar-whatsapp', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    const alerts = await fetchVehicleAlerts(db);
+    const alert = alerts.find(item => item.alerta_chave === req.body.alerta_chave) || req.body.alerta;
+    if (!alert) return res.status(404).json({ error: 'Alerta nao encontrado' });
+    const destination = cleanNullableText(req.body.telefone, 30) || process.env.GESTOR_WHATSAPP_NUMBER;
+    if (!destination && !process.env.GRUPO_OPERACIONAL_JID) {
+      return res.status(503).json({ error: 'Configure GESTOR_WHATSAPP_NUMBER ou GRUPO_OPERACIONAL_JID para envio de alertas' });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const force = req.body.force === true || String(req.body.force) === 'true';
+    const duplicate = await maybeSingle(db
+      .from('veiculo_alerta_envios')
+      .select('*')
+      .eq('alerta_chave', alert.alerta_chave)
+      .eq('data_envio', today));
+    if (duplicate && !force) return res.status(409).json({ error: 'Alerta ja enviado hoje', envio: duplicate });
+
+    const message = `Alerta de veiculo - Letec\n\nVeiculo: ${alert.veiculo}\nPlaca: ${alert.placa || '-'}\nAlerta: ${alert.mensagem || alert.tipo_alerta}\nPrazo: ${alert.data_limite || alert.proxima_quilometragem || '-'}\nPrioridade: ${alert.prioridade}\n\nVerifique no sistema.`;
+    const sendResult = await sendEvolutionText({ number: destination || process.env.GRUPO_OPERACIONAL_JID, text: message });
+    const { data, error } = await db.from('veiculo_alerta_envios').insert([{
+      veiculo_id: alert.veiculo_id || null,
+      alerta_chave: alert.alerta_chave,
+      tipo_alerta: alert.tipo_alerta,
+      destino: destination || process.env.GRUPO_OPERACIONAL_JID,
+      data_envio: today,
+      resposta_api: sendResult.providerResponse,
+      status: 'enviado'
+    }]).select();
+    if (error) throw error;
+    await insertVehicleHistory(db, {
+      veiculo_id: alert.veiculo_id,
+      tipo_evento: 'whatsapp',
+      descricao: `Alerta enviado por WhatsApp: ${alert.tipo_alerta}`,
+      dados_novos: { alert, sendResult }
+    });
+    res.json({ ok: true, envio: data?.[0] || null, provider: sendResult });
+  } catch (error) {
+    console.error('[POST /api/veiculos/alertas/enviar-whatsapp] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.message || 'Falha ao enviar alerta por WhatsApp', detail: error.payload || undefined });
+  }
+});
+
+app.post('/api/veiculos/alertas/enviar-resumo-whatsapp', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const alerts = await fetchVehicleAlerts(db);
+    const destination = cleanNullableText(req.body.telefone, 30) || process.env.GESTOR_WHATSAPP_NUMBER || process.env.GRUPO_OPERACIONAL_JID;
+    if (!destination) return res.status(503).json({ error: 'Configure GESTOR_WHATSAPP_NUMBER ou GRUPO_OPERACIONAL_JID para envio do resumo' });
+    const counts = alerts.reduce((acc, item) => {
+      acc[item.prioridade] = (acc[item.prioridade] || 0) + 1;
+      return acc;
+    }, {});
+    const top = alerts.slice(0, 8).map((item, index) => `${index + 1}. ${item.veiculo} - ${item.placa || '-'} - ${item.mensagem || item.tipo_alerta}`).join('\n');
+    const message = `Resumo de alertas da frota - Letec\n\nCriticos: ${counts.critica || 0}\nAltos: ${counts.alta || 0}\nMedios: ${counts.media || 0}\nBaixos: ${counts.baixa || 0}\n\nPrincipais pendencias:\n${top || 'Sem pendencias no momento.'}`;
+    const sendResult = await sendEvolutionText({ number: destination, text: message });
+    await insertVehicleHistory(db, {
+      tipo_evento: 'whatsapp',
+      descricao: 'Resumo de alertas da frota enviado por WhatsApp',
+      dados_novos: { quantidade_alertas: alerts.length, sendResult }
+    });
+    res.json({ ok: true, total_alertas: alerts.length, provider: sendResult });
+  } catch (error) {
+    console.error('[POST /api/veiculos/alertas/enviar-resumo-whatsapp] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.message || 'Falha ao enviar resumo por WhatsApp', detail: error.payload || undefined });
+  }
+});
+
+app.get('/api/veiculos', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    let query = db.from('vehicles').select('*').order('nome', { ascending: true });
+    if (req.query.ativo !== undefined) query = query.eq('ativo', cleanBoolean(req.query.ativo, true));
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json((data || []).map(item => ({ ...item, rodizio: rodizioInfo(item.placa) })));
+  } catch (error) {
+    console.error('[GET /api/veiculos] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar veiculos' });
+  }
+});
+
+app.get('/api/veiculos/:id', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const vehicle = await maybeSingle(db.from('vehicles').select('*').eq('id', req.params.id));
+    if (!vehicle) return res.status(404).json({ error: 'Veiculo nao encontrado' });
+    const [documentos, manutencoes, historico] = await Promise.all([
+      safeFleetRows(db.from('veiculo_documentos').select('*').eq('veiculo_id', req.params.id).order('data_vencimento', { ascending: true }), 'veiculo_documentos'),
+      safeFleetRows(db.from('veiculo_manutencoes').select('*').eq('veiculo_id', req.params.id).order('created_at', { ascending: false }), 'veiculo_manutencoes'),
+      safeFleetRows(db.from('veiculo_historico').select('*').eq('veiculo_id', req.params.id).order('created_at', { ascending: false }).limit(80), 'veiculo_historico')
+    ]);
+    const alerts = buildVehicleAlerts({ vehicles: [vehicle], documents: documentos, maintenances: manutencoes });
+    res.json({ ...vehicle, rodizio: rodizioInfo(vehicle.placa), documentos, manutencoes, historico, alertas: alerts });
+  } catch (error) {
+    console.error('[GET /api/veiculos/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar veiculo' });
+  }
+});
+
+app.post('/api/veiculos', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = normalizeVehiclePayload(req.body);
+    if (!payload.nome) return res.status(400).json({ error: 'Nome do veiculo e obrigatorio' });
+    if (payload.placa) {
+      const existingPlate = await maybeSingle(db.from('vehicles').select('id,placa').eq('placa', payload.placa));
+      if (existingPlate) return res.status(409).json({ error: 'Ja existe um veiculo com esta placa' });
+    }
+    const { data, error } = await db.from('vehicles').insert([payload]).select();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Ja existe um veiculo com este nome ou placa' });
+      throw error;
+    }
+    const vehicle = data?.[0] || null;
+    if (vehicle) await insertVehicleHistory(db, { veiculo_id: vehicle.id, tipo_evento: 'cadastro', descricao: 'Veiculo cadastrado', dados_novos: vehicle });
+    res.status(201).json(vehicle);
+  } catch (error) {
+    console.error('[POST /api/veiculos] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar veiculo' });
+  }
+});
+
+app.put('/api/veiculos/:id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const before = await maybeSingle(db.from('vehicles').select('*').eq('id', req.params.id));
+    if (!before) return res.status(404).json({ error: 'Veiculo nao encontrado' });
+    const payload = normalizeVehiclePayload(req.body, { partial: true });
+    if (!Object.keys(payload).length) return res.status(400).json({ error: 'Nenhum campo valido para atualizar' });
+    if (payload.placa) {
+      const existingPlate = await maybeSingle(db.from('vehicles').select('id,placa').eq('placa', payload.placa));
+      if (existingPlate && String(existingPlate.id) !== String(req.params.id)) {
+        return res.status(409).json({ error: 'Ja existe um veiculo com esta placa' });
+      }
+    }
+    const { data, error } = await db.from('vehicles').update(payload).eq('id', req.params.id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    await insertVehicleHistory(db, { veiculo_id: req.params.id, tipo_evento: 'edicao', descricao: 'Veiculo atualizado', dados_anteriores: before, dados_novos: updated });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/veiculos/:id] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar veiculo' });
+  }
+});
+
+app.post('/api/veiculos/:id/quilometragem', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const km = cleanNumber(req.body.quilometragem_atual ?? req.body.km);
+    if (km === null || km === undefined || km < 0) return res.status(400).json({ error: 'Quilometragem invalida' });
+    const before = await maybeSingle(db.from('vehicles').select('*').eq('id', req.params.id));
+    if (!before) return res.status(404).json({ error: 'Veiculo nao encontrado' });
+    const { data, error } = await db.from('vehicles').update({ quilometragem_atual: km, updated_at: new Date().toISOString() }).eq('id', req.params.id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    await insertVehicleHistory(db, { veiculo_id: req.params.id, tipo_evento: 'status', descricao: 'Quilometragem atualizada', dados_anteriores: { quilometragem_atual: before.quilometragem_atual }, dados_novos: { quilometragem_atual: km } });
+    res.json(updated);
+  } catch (error) {
+    console.error('[POST /api/veiculos/:id/quilometragem] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao atualizar quilometragem' });
+  }
+});
+
+app.get('/api/veiculos/:id/documentos', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db.from('veiculo_documentos').select('*').eq('veiculo_id', req.params.id).order('data_vencimento', { ascending: true });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/veiculos/:id/documentos] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar documentos' });
+  }
+});
+
+app.post('/api/veiculos/:id/documentos', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = { ...normalizeVehicleDocumentPayload(req.body), veiculo_id: req.params.id };
+    if (!payload.tipo_documento || !payload.data_vencimento) return res.status(400).json({ error: 'Tipo e vencimento do documento sao obrigatorios' });
+    const { data, error } = await db.from('veiculo_documentos').insert([payload]).select();
+    if (error) throw error;
+    const doc = data?.[0] || null;
+    await insertVehicleHistory(db, { veiculo_id: req.params.id, tipo_evento: 'documento', descricao: 'Documento criado', dados_novos: doc });
+    res.status(201).json(doc);
+  } catch (error) {
+    console.error('[POST /api/veiculos/:id/documentos] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar documento' });
+  }
+});
+
+app.put('/api/veiculos/documentos/:documento_id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const before = await maybeSingle(db.from('veiculo_documentos').select('*').eq('id', req.params.documento_id));
+    if (!before) return res.status(404).json({ error: 'Documento nao encontrado' });
+    const payload = normalizeVehicleDocumentPayload(req.body, { partial: true });
+    const { data, error } = await db.from('veiculo_documentos').update(payload).eq('id', req.params.documento_id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    await insertVehicleHistory(db, { veiculo_id: updated?.veiculo_id || before.veiculo_id, tipo_evento: 'documento', descricao: 'Documento atualizado', dados_anteriores: before, dados_novos: updated });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/veiculos/documentos/:documento_id] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar documento' });
+  }
+});
+
+app.delete('/api/veiculos/documentos/:documento_id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db.from('veiculo_documentos').delete().eq('id', req.params.documento_id).select();
+    if (error) throw error;
+    const deleted = data?.[0] || null;
+    if (!deleted) return res.status(404).json({ error: 'Documento nao encontrado' });
+    await insertVehicleHistory(db, { veiculo_id: deleted.veiculo_id, tipo_evento: 'documento', descricao: 'Documento excluido', dados_anteriores: deleted });
+    res.json({ ok: true, documento: deleted });
+  } catch (error) {
+    console.error('[DELETE /api/veiculos/documentos/:documento_id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao excluir documento' });
+  }
+});
+
+app.get('/api/veiculos/:id/manutencoes', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db.from('veiculo_manutencoes').select('*').eq('veiculo_id', req.params.id).order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/veiculos/:id/manutencoes] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar manutencoes' });
+  }
+});
+
+app.post('/api/veiculos/:id/manutencoes', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const payload = { ...normalizeVehicleMaintenancePayload(req.body), veiculo_id: req.params.id };
+    if (!payload.tipo_manutencao) return res.status(400).json({ error: 'Tipo de manutencao e obrigatorio' });
+    const { data, error } = await db.from('veiculo_manutencoes').insert([payload]).select();
+    if (error) throw error;
+    const maintenance = data?.[0] || null;
+    await insertVehicleHistory(db, { veiculo_id: req.params.id, tipo_evento: 'manutencao', descricao: 'Manutencao criada', dados_novos: maintenance });
+    res.status(201).json(maintenance);
+  } catch (error) {
+    console.error('[POST /api/veiculos/:id/manutencoes] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar manutencao' });
+  }
+});
+
+app.put('/api/veiculos/manutencoes/:manutencao_id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const before = await maybeSingle(db.from('veiculo_manutencoes').select('*').eq('id', req.params.manutencao_id));
+    if (!before) return res.status(404).json({ error: 'Manutencao nao encontrada' });
+    const payload = normalizeVehicleMaintenancePayload(req.body, { partial: true });
+    const { data, error } = await db.from('veiculo_manutencoes').update(payload).eq('id', req.params.manutencao_id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    await insertVehicleHistory(db, { veiculo_id: updated?.veiculo_id || before.veiculo_id, tipo_evento: 'manutencao', descricao: 'Manutencao atualizada', dados_anteriores: before, dados_novos: updated });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/veiculos/manutencoes/:manutencao_id] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar manutencao' });
+  }
+});
+
+app.post('/api/veiculos/manutencoes/:manutencao_id/marcar-realizada', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const before = await maybeSingle(db.from('veiculo_manutencoes').select('*').eq('id', req.params.manutencao_id));
+    if (!before) return res.status(404).json({ error: 'Manutencao nao encontrada' });
+    const payload = {
+      status: 'realizada',
+      data_realizada: cleanDateText(req.body.data_realizada) || new Date().toISOString().slice(0, 10),
+      quilometragem_realizada: cleanNumber(req.body.quilometragem_realizada),
+      updated_at: new Date().toISOString()
+    };
+    const { data, error } = await db.from('veiculo_manutencoes').update(payload).eq('id', req.params.manutencao_id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    await insertVehicleHistory(db, { veiculo_id: updated?.veiculo_id || before.veiculo_id, tipo_evento: 'manutencao', descricao: 'Manutencao marcada como realizada', dados_anteriores: before, dados_novos: updated });
+    res.json(updated);
+  } catch (error) {
+    console.error('[POST /api/veiculos/manutencoes/:manutencao_id/marcar-realizada] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao marcar manutencao como realizada' });
+  }
+});
+
+app.delete('/api/veiculos/manutencoes/:manutencao_id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data, error } = await db.from('veiculo_manutencoes').delete().eq('id', req.params.manutencao_id).select();
+    if (error) throw error;
+    const deleted = data?.[0] || null;
+    if (!deleted) return res.status(404).json({ error: 'Manutencao nao encontrada' });
+    await insertVehicleHistory(db, { veiculo_id: deleted.veiculo_id, tipo_evento: 'manutencao', descricao: 'Manutencao excluida', dados_anteriores: deleted });
+    res.json({ ok: true, manutencao: deleted });
+  } catch (error) {
+    console.error('[DELETE /api/veiculos/manutencoes/:manutencao_id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao excluir manutencao' });
   }
 });
 
