@@ -1088,7 +1088,7 @@ function getSupabaseClient() {
 function getEvolutionConfig() {
   const apiUrl = String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL || '').replace(/\/$/, '');
   const apiKey = String(process.env.EVOLUTION_API_KEY || '');
-  const instance = String(process.env.EVOLUTION_INSTANCE_NAME || process.env.EVOLUTION_INSTANCE || 'letec-higienizacao').trim();
+  const instance = String(process.env.EVOLUTION_INSTANCE_NAME || process.env.EVOLUTION_INSTANCE || 'LETEC').trim();
   return {
     apiUrl,
     apiKey,
