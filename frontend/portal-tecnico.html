@@ -643,16 +643,38 @@
     const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    const LETEC_DEFAULT_API_BASE_URL = 'https://letec-api.onrender.com';
     function normalizeApiBaseUrl(value) {
       const url = String(value || '').trim();
       if (!url || url.startsWith('javascript:') || url.startsWith('data:')) return '';
       return url.replace(/\/$/, '');
     }
+    function isSameVercelOriginApiBase(url) {
+      try {
+        const parsed = new URL(url);
+        return window.location.hostname.includes('vercel.app') && parsed.hostname === window.location.hostname;
+      } catch(e) {
+        return false;
+      }
+    }
+    function isKnownInvalidApiBase(url) {
+      try {
+        return new URL(url).hostname === 'letec-log-api.onrender.com';
+      } catch(e) {
+        return false;
+      }
+    }
 
     const apiBaseFromUrl = normalizeApiBaseUrl(params.get('api_base'));
     if (apiBaseFromUrl) localStorage.setItem('letec_api_base_url', apiBaseFromUrl);
-    const API_BASE_URL = window.LETEC_API_BASE_URL || apiBaseFromUrl || localStorage.getItem('letec_api_base_url') || (function() {
+    const API_BASE_URL = (function() {
+      const explicit = normalizeApiBaseUrl(window.LETEC_API_BASE_URL);
+      if (explicit) return explicit;
+      if (apiBaseFromUrl) return apiBaseFromUrl;
+      const stored = normalizeApiBaseUrl(localStorage.getItem('letec_api_base_url'));
+      if (stored && !isSameVercelOriginApiBase(stored) && !isKnownInvalidApiBase(stored)) return stored;
       if (window.location.protocol === 'file:') return 'http://localhost:8000';
+      if (window.location.hostname.includes('vercel.app')) return LETEC_DEFAULT_API_BASE_URL;
       return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
     })();
 
