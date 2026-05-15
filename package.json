@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "import:clients": "node scripts/import-client-base.js",
     "audit:frontend": "node scripts/audit-frontend.js",
+    "smoke:operacional": "node scripts/smoke-operacional.js",
     "test": "node --test test/*.test.js",
     "audit": "npm audit"
   },

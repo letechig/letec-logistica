@@ -15689,6 +15689,45 @@ function renderOperationalDiagnosticsPanel() {
   const cacheRows = snapshot.caches.map(item => `
     <tr><td class="mono">${sanitize(item.key)}</td><td>${item.exists ? diagnosticsChip('ok', 'existe') : diagnosticsChip('warn', 'vazio')}</td><td class="mono">${item.count}</td><td class="mono">${item.bytes} bytes</td></tr>
   `).join('');
+  const apiInvalid = !snapshot.apiBaseUrl
+    || isKnownInvalidApiBase(snapshot.apiBaseUrl)
+    || isSameVercelOriginApiBase(snapshot.apiBaseUrl);
+  const moduleErrors = snapshot.modules.filter(item => item.status === 'error');
+  const blockedQueue = snapshot.queue.filter(item => item.status === 'bloqueada');
+  const checklistItems = [
+    {
+      label: 'API correta em uso',
+      status: apiInvalid ? 'err' : 'ok',
+      detail: apiInvalid ? 'API inválida para este ambiente. Confira LETEC_API_BASE_URL.' : snapshot.apiBaseUrl
+    },
+    {
+      label: 'Backend responde',
+      status: operationalDiagnosticsLastError ? 'err' : (remote ? (backendOk ? 'ok' : 'warn') : 'warn'),
+      detail: operationalDiagnosticsLastError ? 'Rode npm run smoke:operacional e envie o diagnóstico.' : (remote ? 'Diagnóstico consultado.' : 'Clique em Testar conexão.')
+    },
+    {
+      label: 'Fila offline',
+      status: blockedQueue.length ? 'err' : (snapshot.queue.length ? 'warn' : 'ok'),
+      detail: blockedQueue.length ? `${blockedQueue.length} erro(s) permanente(s).` : (snapshot.queue.length ? `${snapshot.queue.length} pendência(s) aguardando sync.` : 'Sem pendências.')
+    },
+    {
+      label: 'Agenda via backend/cache',
+      status: snapshot.agendaLoadedFromCache ? 'warn' : 'ok',
+      detail: snapshot.agendaLoadedFromCache ? 'Usando cache local porque a API falhou no último carregamento.' : 'Backend/cache operacional.'
+    },
+    {
+      label: 'Módulos da tela',
+      status: moduleErrors.length ? 'err' : 'ok',
+      detail: moduleErrors.length ? `${moduleErrors.length} módulo(s) com erro.` : 'Nenhum módulo em erro.'
+    }
+  ];
+  const checklistRows = checklistItems.map(item => `
+    <tr>
+      <td>${sanitize(item.label)}</td>
+      <td>${diagnosticsChip(item.status, item.status === 'ok' ? 'ok' : item.status === 'warn' ? 'atenção' : 'ação necessária')}</td>
+      <td>${sanitize(item.detail)}</td>
+    </tr>
+  `).join('');
   const warningsHtml = [
     ...(remoteWarnings || []),
     ...(operationalDiagnosticsLastError ? ['API indisponível: tentando usar cache local quando existir.'] : []),
@@ -15728,6 +15767,12 @@ function renderOperationalDiagnosticsPanel() {
         </div>
 
         ${warningsHtml.length ? `<div class="diagnostics-card" style="border-color:rgba(234,88,12,.28);background:var(--orange-bg)"><div class="diagnostics-label" style="color:var(--orange)">Avisos</div>${warningsHtml.map(w => `<div style="font-size:12px;color:var(--orange);font-weight:700;margin-top:4px">${sanitize(w)}</div>`).join('')}</div>` : ''}
+
+        <div class="diagnostics-card">
+          <div class="diagnostics-label">Checklist de suporte</div>
+          <div class="tbl-wrap"><table class="diagnostics-table"><thead><tr><th>Item</th><th>Status</th><th>Orientação</th></tr></thead><tbody>${checklistRows}</tbody></table></div>
+          <div class="text-muted" style="font-size:11px;margin-top:8px">Se a API aparecer com erro neste painel, rode <span class="mono">npm run smoke:operacional</span> no projeto e copie o resultado para suporte.</div>
+        </div>
 
         <div class="diagnostics-card">
           <div class="diagnostics-label">Fila offline</div>
