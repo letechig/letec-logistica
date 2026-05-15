@@ -688,6 +688,7 @@
 
     const QUEUE_KEY = 'letec_portal_tecnico_queue';
     const HISTORY_KEY = 'letec_portal_tecnico_history';
+    const DATA_CACHE_KEY = 'letec_portal_tecnico_data_cache_v1';
     const EQUIPAMENTOS = ['EPIs', 'Pulverizador', 'Iscas', 'Produtos', 'Ferramentas', 'Prancheta', 'Celular carregado', 'Documentos'];
     const FUEL = ['Cheio', '3/4', 'Metade', '1/4', 'Reserva'];
 
@@ -724,8 +725,9 @@
       const pill = document.getElementById('sync-pill');
       const text = document.getElementById('sync-text');
       const offline = !navigator.onLine;
+      const pending = loadQueue().length;
       pill.classList.toggle('offline', offline);
-      text.textContent = offline ? 'Offline' : 'Online';
+      text.textContent = `${offline ? 'Offline' : 'Online'}${pending ? ` · ${pending} pendente(s)` : ''}`;
     }
 
     function formatDateLabel(dateStr) {
@@ -754,6 +756,7 @@
       const queue = loadQueue();
       queue.push({ ...item, queued_at: nowIso() });
       saveQueue(queue);
+      setSyncState();
       addHistory(item.type === 'checklist-insert' ? 'Checklist salvo localmente para sincronizar.' : 'Acao do servico salva localmente para sincronizar.');
     }
 
@@ -766,6 +769,35 @@
       all.unshift({ id: Date.now(), date: portal.data, tecnico: portal.tecnico, text, at: nowIso() });
       localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, 80)));
       renderHistory();
+    }
+
+    function portalCacheId() {
+      return `${portal.data}|${normalizeText(portal.tecnico)}|${normalizeText(portal.equipe)}`;
+    }
+
+    function loadPortalCache() {
+      try {
+        const all = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || '{}') || {};
+        return all[portalCacheId()] || null;
+      } catch(e) {
+        return null;
+      }
+    }
+
+    function savePortalCache() {
+      try {
+        const all = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || '{}') || {};
+        all[portalCacheId()] = {
+          updated_at: nowIso(),
+          services: state.services || [],
+          technicians: state.technicians || [],
+          vehicles: state.vehicles || [],
+          checklists: state.checklists || [],
+          messages: state.messages || [],
+          events: state.events || []
+        };
+        localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(all));
+      } catch(e) {}
     }
 
     async function requestBackendJson(path, options = {}) {
@@ -835,6 +867,7 @@
         }
       }
       saveQueue(remaining);
+      setSyncState();
       if (remaining.length !== queue.length) {
         toast('Pendencias sincronizadas.', 'ok');
         await loadData();
@@ -893,6 +926,9 @@
         renderHistory();
       } catch(e) {
         addQueue({ type:'event-insert', record:rec });
+        state.events.unshift(rec);
+        savePortalCache();
+        renderHistory();
       }
     }
 
@@ -931,18 +967,15 @@
     }
 
     async function fetchPortalServices() {
-      try {
-        return await requestBackendJson(`/api/services?date=${encodeURIComponent(portal.data)}&limit=500`);
-      } catch (backendError) {
-        console.warn('[Portal] Backend de servicos indisponivel, tentando leitura direta do Supabase:', backendError.message || backendError);
-        const { data, error } = await supabaseClient
-          .from('services')
-          .select('*')
-          .or(`date.eq.${portal.data},data.eq.${portal.data}`)
-          .limit(500);
-        if (error) throw backendError;
-        return data || [];
-      }
+      return await requestBackendJson(`/api/services?date=${encodeURIComponent(portal.data)}&limit=500`);
+    }
+
+    async function fetchPortalTechnicians() {
+      return await requestBackendJson('/api/technicians?active=true');
+    }
+
+    async function fetchPortalVehicles() {
+      return await requestBackendJson('/api/veiculos?ativo=true');
     }
 
     function settledData(result, fallback = []) {
@@ -954,9 +987,18 @@
 
     async function loadData() {
       setSyncState();
+      const cached = loadPortalCache();
+      if (cached) {
+        state.technicians = cached.technicians || state.technicians || [];
+        state.vehicles = cached.vehicles || state.vehicles || [];
+        state.checklists = cached.checklists || state.checklists || [];
+        state.messages = cached.messages || state.messages || [];
+        state.events = cached.events || state.events || [];
+        state.services = cached.services || state.services || [];
+      }
       const [tecRes, veiRes, svcRes, clRes, msgRes, evRes] = await Promise.allSettled([
-        supabaseClient.from('technicians').select('*').order('nome'),
-        supabaseClient.from('vehicles').select('*').order('nome'),
+        fetchPortalTechnicians(),
+        fetchPortalVehicles(),
         fetchPortalServices(),
         requestBackendJson(`/api/checklists?date=${encodeURIComponent(portal.data)}`),
         requestBackendJson(`/api/technician-messages?date=${encodeURIComponent(portal.data)}&unread=true`),
@@ -977,8 +1019,9 @@
         toast('Nao foi possivel carregar a agenda agora. Confira internet/backend.', 'warn');
       } else if (failed.length) {
         console.warn('[Portal] Carregamento parcial:', failed.map(item => item.reason?.message || item.reason));
-        toast('Agenda carregada. Alguns dados auxiliares ficaram offline.', 'warn');
+        toast(cached ? 'Agenda carregada com apoio do cache local.' : 'Agenda carregada. Alguns dados auxiliares ficaram offline.', 'warn');
       }
+      if (!failed.length || state.services.length || state.checklists.length) savePortalCache();
       renderAll();
     }
 
@@ -1068,6 +1111,7 @@
 
     function updateLocalService(id, patch) {
       state.services = state.services.map(s => String(s.id) === String(id) ? { ...s, ...patch } : s);
+      savePortalCache();
       renderSummary();
       renderServices();
       renderHistory();
@@ -1226,6 +1270,7 @@ Portal: ${currentPortalLink()}${location}`;
     async function markMessageRead(id) {
       const payload = { lido:true, lido_em:nowIso() };
       state.messages = state.messages.map(m => String(m.id) === String(id) ? { ...m, ...payload } : m);
+      savePortalCache();
       renderMessages();
       try {
         await markMessageReadViaBackend(id, payload);
@@ -1357,10 +1402,13 @@ Portal: ${currentPortalLink()}${location}`;
         await recordEvent('checklist', 'Checklist diário salvo', `${vei} - ${motorista}`, null, null);
         addHistory('Checklist diario salvo.');
         state.checklists.unshift(saved || rec);
+        savePortalCache();
         renderHistory();
       } catch(e) {
         console.error(e);
         addQueue({ type:'checklist-insert', record:rec });
+        state.checklists.unshift(rec);
+        savePortalCache();
         toast('Checklist salvo neste celular para sincronizar.', 'warn');
       } finally {
         btn.disabled = false;

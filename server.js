@@ -1687,7 +1687,7 @@ app.get('/api/maps/distance-matrix', async (req, res) => {
 app.get('/api/services', async (req, res) => {
   try {
     const db = getSupabaseClient();
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 1000, 1), 5000);
     const cliente = String(req.query.cliente || '').trim();
     const date = cleanDateText(req.query.date);
 
@@ -1728,7 +1728,13 @@ app.post('/api/services', async (req, res) => {
       .insert([payload])
       .select();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505' && payload.id !== undefined && payload.id !== null) {
+        const existing = await maybeSingle(db.from('services').select('*').eq('id', payload.id));
+        if (existing) return res.status(200).json(existing);
+      }
+      throw error;
+    }
     const saved = data?.[0] || null;
     res.status(201).json(saved ? {
       ...saved,

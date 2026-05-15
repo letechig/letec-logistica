@@ -2386,7 +2386,7 @@ gap: 6px;
     if (window.location.hostname.includes('vercel.app')) return LETEC_DEFAULT_API_BASE_URL;
     return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
   })();
-  const LETEC_BACKEND_CAPABILITIES = { checked: false, mapsProxy: false };
+  const LETEC_BACKEND_CAPABILITIES = { checked: false, available: false, mapsProxy: false };
 
   async function refreshBackendCapabilities() {
     try {
@@ -2394,12 +2394,15 @@ gap: 6px;
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       LETEC_BACKEND_CAPABILITIES.checked = true;
+      LETEC_BACKEND_CAPABILITIES.available = true;
       LETEC_BACKEND_CAPABILITIES.mapsProxy = !!data.mapsProxy;
       return LETEC_BACKEND_CAPABILITIES;
     } catch (e) {
       LETEC_BACKEND_CAPABILITIES.checked = true;
+      LETEC_BACKEND_CAPABILITIES.available = false;
       LETEC_BACKEND_CAPABILITIES.mapsProxy = false;
       console.warn('[Backend] Nao foi possivel consultar /api/health:', e.message || e);
+      if (typeof setSyncStatus === 'function') setSyncStatus('⚠️ API indisponível');
       return LETEC_BACKEND_CAPABILITIES;
     }
   }
@@ -2438,37 +2441,59 @@ gap: 6px;
   window._veiculos = [];
   window._tiposServico = [];
   let _catalogosServicoPromise = null;
+  const CATALOG_CACHE_KEY = 'letec_catalogos_cache_v1';
+  const SERVICE_SYNC_LIMIT = 5000;
   const VEICULOS_FALLBACK = ['Palio','Gol','Uno','Saveiro','Fox','Moto','Outro'];
 
+  function loadCatalogCache() {
+    try { return JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || '{}') || {}; }
+    catch(e) { return {}; }
+  }
+
+  function saveCatalogCachePatch(patch) {
+    try {
+      const current = loadCatalogCache();
+      localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ ...current, ...patch, updated_at: new Date().toISOString() }));
+    } catch(e) {}
+  }
+
 async function carregarTecnicos(){
+  const cached = loadCatalogCache().tecnicos || [];
   try {
     const data = await requestBackendJson('/api/technicians?active=true');
     window._tecnicos = data || [];
+    saveCatalogCachePatch({ tecnicos: window._tecnicos });
     console.log('Técnicos carregados:', window._tecnicos);
   } catch(e){
     console.error('Erro ao carregar técnicos:', e);
-    window._tecnicos = [];
+    window._tecnicos = window._tecnicos?.length ? window._tecnicos : cached;
+    if (window._tecnicos.length) console.warn('Usando técnicos do cache local.');
   }
 }
 
 async function carregarVeiculos(){
+  const cached = loadCatalogCache().veiculos || [];
   try {
     const data = await requestBackendJson('/api/veiculos?ativo=true');
     window._veiculos = data || [];
+    saveCatalogCachePatch({ veiculos: window._veiculos });
     console.log('Veículos carregados:', window._veiculos);
   } catch(e){
     console.error('Erro ao carregar veículos:', e);
-    window._veiculos = [];
+    window._veiculos = window._veiculos?.length ? window._veiculos : cached;
+    if (window._veiculos.length) console.warn('Usando veículos do cache local.');
   }
 }
 
   async function carregarTiposServico(){
+    const cached = loadCatalogCache().tiposServico || [];
     try {
       const response = await fetch(`${API_BASE_URL}/api/service-types`);
       if (!response.ok) throw new Error(`Erro ao carregar tipos: ${response.status}`);
       const data = await response.json();
 
       window._tiposServico = data || [];
+      saveCatalogCachePatch({ tiposServico: window._tiposServico });
 
       // Hidrata TIPO_SERVICO e TIPOS_CATALOGO dinamicamente a partir do banco
       (data || []).forEach(t => {
@@ -2500,7 +2525,7 @@ async function carregarVeiculos(){
       }
     } catch(e){
       console.warn('Tipos de serviço não carregados do banco, usando hardcoded:', e.message);
-      window._tiposServico = [];
+      window._tiposServico = cached;
     }
   }
 
@@ -4247,17 +4272,19 @@ return String(str || '')
 let _isSyncing = false;
 let _supabaseLoadWarningKey = '';
 let _supabaseLastRemoteLoadFailed = false;
+let agendaLoadedFromCache = false;
 
 function warnSupabaseLoadOnce(key, message) {
   if (_supabaseLoadWarningKey === key) return;
   _supabaseLoadWarningKey = key;
-  console.warn('[Supabase]', message);
+  console.warn('[Agenda Sync]', message);
   toast(`⚠️ ${message}`, 'warn');
 }
 
 function clearSupabaseLoadWarnings() {
   _supabaseLoadWarningKey = '';
   _supabaseLastRemoteLoadFailed = false;
+  agendaLoadedFromCache = false;
 }
 
 // ── Normaliza nome: sem acento, minúsculo, sem espaços extras ──
@@ -6502,27 +6529,20 @@ const ST_META = {
 let services = [];       // main service array (seed + user additions)
 
 // ===============================================
-// SERVIÇOS AGORA VÊM 100% DO SUPABASE (produção)
+// SERVIÇOS: backend é fonte principal; cache local sustenta modo offline.
 // ===============================================
 
 async function carregarServicesDoSupabase() {
   try {
-    const { data, error } = await supabaseClient
-      .from('services')
-      .select('*')
-      .order('date', { ascending: true });
-
-    if (error) throw error;
-
-    services = data || [];
-    console.log(`✅ ${services.length} serviços carregados do Supabase`);
+    await getServices();
+    console.log(`✅ ${services.length} serviços carregados pelo backend/cache`);
 
     if (typeof refreshPages === 'function') refreshPages();
     if (typeof updateBadges === 'function') updateBadges();
     if (typeof normalizarTecnicosIdsServicos === 'function') normalizarTecnicosIdsServicos();
 
   } catch (e) {
-    console.error('❌ Erro ao carregar serviços do Supabase:', e);
+    console.error('❌ Erro ao carregar serviços:', e);
     if (typeof toast === 'function') toast('Erro ao carregar agenda. Verifique sua conexão.', 'err');
   }
 }
@@ -6577,6 +6597,7 @@ async function carregarChecklistsDoSupabase() {
       hrS: r.hrs, hrC: r.hrc,
       hasAv: r.hasav, avTxt: r.avtxt
     }));
+    saveCLs();
     console.log(`✅ ${clRecords.length} checklists carregados do Supabase`);
     if (typeof updateBadges === 'function') updateBadges();
     if (typeof renderHist === 'function' && currentPage === 'historico') renderHist();
@@ -6756,10 +6777,21 @@ function saveSvcs(){
 }
 
 function loadState() {
-  // Em produção, os dados são carregados exclusivamente do Supabase.
-  services = [];
-  persistedServices = [];
-  clRecords = [];
+  // Cache local sustenta leitura offline até o backend responder novamente.
+  try {
+    const cachedServices = JSON.parse(localStorage.getItem('letec_svcs2') || '[]');
+    services = Array.isArray(cachedServices) ? dedupeServicesById(cachedServices.map(s => migrarServicoSupabase(s))) : [];
+    persistedServices = services.slice();
+  } catch(e) {
+    services = [];
+    persistedServices = [];
+  }
+  try {
+    const cachedChecklists = JSON.parse(localStorage.getItem('letec_cl2') || '[]');
+    clRecords = Array.isArray(cachedChecklists) ? cachedChecklists : [];
+  } catch(e) {
+    clRecords = [];
+  }
   updateFooter();
   syncMesSelects();
 }
@@ -7499,49 +7531,20 @@ function ordenarServicosCanonicos(list) {
 }
 
 async function carregarServicosSupabase() {
-  const orderColumns = ['date', 'data', 'dt'];
-  let lastOrderError = null;
-
-  for (const orderColumn of orderColumns) {
-    try {
-      const { data, error } = await supabaseClient
-        .from('services')
-        .select('*')
-        .order(orderColumn, { ascending: true });
-      if (error) throw error;
-      if (!data || !data.length) {
-        clearSupabaseLoadWarnings();
-        return null;
-      }
-
-      clearSupabaseLoadWarnings();
-      _supabaseLastRemoteLoadFailed = false;
-      if (orderColumn !== 'date') {
-        console.warn(`[Supabase] Carregando servicos ordenando por "${orderColumn}" (fallback de schema).`);
-      }
-      return data.map(row => migrarServicoSupabase(row));
-    } catch (e) {
-      lastOrderError = e;
-    }
-  }
-
   try {
-    const { data, error } = await supabaseClient
-      .from('services')
-      .select('*');
-    if (error) throw error;
+    const data = await requestBackendJson(`/api/services?limit=${SERVICE_SYNC_LIMIT}`);
     if (!data || !data.length) {
-      warnSupabaseLoadOnce("supabase-order-missing-empty", "Supabase respondeu sem ordenacao compativel; confira se a coluna de data se chama \"date\".");
+      clearSupabaseLoadWarnings();
       return null;
     }
-    _supabaseLastRemoteLoadFailed = false;
-    warnSupabaseLoadOnce("supabase-order-local-fallback", "Supabase carregado com ordenacao local; confira se a coluna de data se chama \"date\".");
+    clearSupabaseLoadWarnings();
     return ordenarServicosCanonicos(data.map(row => migrarServicoSupabase(row)));
   } catch (e) {
     _supabaseLastRemoteLoadFailed = true;
-    const detail = e?.message || lastOrderError?.message || "erro desconhecido";
-    warnSupabaseLoadOnce("supabase-load-failed", `Falha ao ler servicos do Supabase; exibindo cache local/SEED (${detail}).`);
-    console.warn("[Supabase] Falha ao carregar servicos:", detail);
+    agendaLoadedFromCache = true;
+    const detail = e?.message || "erro desconhecido";
+    warnSupabaseLoadOnce("backend-load-failed", `Falha ao ler agenda no backend; exibindo cache local (${detail}).`);
+    console.warn("[Backend] Falha ao carregar servicos:", detail);
     return null;
   }
 }
@@ -15099,9 +15102,10 @@ function abrirEdicaoEquipe(id) {
   carregarVeiculos().then(() => renderVeiculosSelect('eq-edit-vei', s.veiculo || ''));
 }
 
-function salvarEdicaoEquipe(id) {
+async function salvarEdicaoEquipe(id) {
   const s = services.find(x=>sameId(x.id, id));
   if (!s) return;
+  const previousService = cloneServiceState(s);
   const tecnicos_ids = Array.from(
     document.querySelectorAll('#eq-tecnicos-container input:checked')
   ).map(el => el.value);
@@ -15125,6 +15129,7 @@ function salvarEdicaoEquipe(id) {
   if (pageRenders[currentPage]) pageRenders[currentPage]();
   renderDash(); updateBadges();
   toast('✓ Serviço atualizado', 'ok');
+  if (USAR_SUPABASE) await atualizarServicoSupabase(s, previousService);
 }
 
 let offlineQueue = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
@@ -15147,8 +15152,11 @@ function formatLastSync() {
 function setSyncStatus(status) {
   const el = document.getElementById('sync-indicator');
   if (el) {
+    const queueSuffix = offlineQueue.length ? ` · ${offlineQueue.length} pendente(s)` : '';
+    const cacheSuffix = agendaLoadedFromCache ? ' · cache local' : '';
+    const apiSuffix = LETEC_BACKEND_CAPABILITIES.checked && LETEC_BACKEND_CAPABILITIES.available === false ? ' · API indisponível' : '';
     const suffix = lastSyncAt ? ` · Última sincronização: ${formatLastSync()}` : '';
-    el.innerHTML = `${status}${suffix}`;
+    el.innerHTML = `${status}${queueSuffix}${cacheSuffix}${apiSuffix}${suffix}`;
   }
 }
 
@@ -15249,6 +15257,7 @@ async function processOfflineQueue() {
   if (!USAR_SUPABASE || isProcessingQueue || offlineQueue.length === 0) return;
   isProcessingQueue = true;
   setConnectionState('syncing');
+  let syncedCount = 0;
 
   while (offlineQueue.length > 0 && navigator.onLine) {
     const item = offlineQueue[0];
@@ -15268,9 +15277,15 @@ async function processOfflineQueue() {
         }, item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
       } else if (item.op === 'delete') {
         ok = await safeSupabaseAction(() => deleteServiceViaBackend(item.id), item, null, { alreadyQueued: true, rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true });
+      } else {
+        console.warn('[OfflineQueue] Operação desconhecida descartada:', item);
+        offlineQueue.shift();
+        saveOfflineQueue();
+        continue;
       }
       if (!ok) break;
       offlineQueue.shift();
+      syncedCount++;
       saveOfflineQueue();
       lastSyncAt = Date.now();
       setConnectionState('online');
@@ -15279,10 +15294,31 @@ async function processOfflineQueue() {
     }
   }
 
+  if (syncedCount > 0 && navigator.onLine) {
+    await getServices();
+    refreshPages();
+    toast(`${syncedCount} pendência(s) sincronizada(s).`, 'ok');
+  }
+
   if (offlineQueue.length === 0 && navigator.onLine) {
     setConnectionState('online');
   }
   isProcessingQueue = false;
+}
+
+let connectionEventsBound = false;
+function bindConnectionEvents() {
+  if (connectionEventsBound) return;
+  window.addEventListener('online', () => {
+    setConnectionState('reconnecting');
+    toast('🔌 Conexão de internet restaurada. Sincronizando fila...', 'ok');
+    processOfflineQueue();
+  });
+  window.addEventListener('offline', () => {
+    setConnectionState('offline');
+    toast('⏳ Aguardando conexão...', 'warn');
+  });
+  connectionEventsBound = true;
 }
 
 function syncServiceFromPayload(payload) {
@@ -15368,15 +15404,7 @@ function init(){
   const mesFiltEl = document.getElementById('ag-mes');
   if (mesFiltEl) mesFiltEl.style.display = 'none';
   // Eventos de conexão para offline-first
-  window.addEventListener('online', () => {
-    setConnectionState('reconnecting');
-    toast('🔌 Conexão de internet restaurada. Sincronizando fila...', 'ok');
-    processOfflineQueue();
-  });
-  window.addEventListener('offline', () => {
-    setConnectionState('offline');
-    toast('⏳ Aguardando conexão...', 'warn');
-  });
+  bindConnectionEvents();
 
   listenSupabase();
   const shouldWaitRemoteBoot = USAR_SUPABASE && navigator.onLine;
@@ -15388,11 +15416,7 @@ function init(){
       updateBadges();
       processOfflineQueue();
       if (_supabaseLastRemoteLoadFailed) {
-        setSyncStatus('⚠️ Supabase indisponível — exibindo cache local/SEED');
-      } else if (_supabaseLoadWarningKey === 'supabase-order-local-fallback') {
-        setSyncStatus('🟡 Supabase carregado com ordenação local');
-      } else if (_supabaseLoadWarningKey === 'supabase-order-missing-empty') {
-        setSyncStatus('🟡 Supabase sem ordenação compatível');
+        setSyncStatus('⚠️ Backend indisponível — exibindo cache local');
       } else {
         setConnectionState('online');
       }
@@ -16232,21 +16256,27 @@ window.addEventListener('resize', () => {
 window.addEventListener('load', async () => {
   console.log('🚀 Letec Log v7.8 - Modo Produção iniciado');
   bindAuthEvents();
+  bindConnectionEvents();
+  loadState();
   await refreshBackendCapabilities();
   const autenticado = await checkAuth();
   if(!autenticado) return;
-    await carregarCatalogosServico();
-    await carregarServicesDoSupabase();
-    await carregarChecklistsDoSupabase();
-    await carregarEventosCampoDoSupabase();
-    await carregarRecadosTecnicosDoSupabase();
-    await carregarEstoqueDoSupabase();
-    await carregarFrotaV1();
-    prepareFieldOpsAudioAfterReload();
-    nav(currentPage, null);
-    if (!window._fieldOpsPolling) {
-      window._fieldOpsPolling = setInterval(pollFieldOpsUpdates, FIELD_OPS_POLL_INTERVAL_MS);
-    }
+  setConnectionState(navigator.onLine ? 'syncing' : 'offline');
+  listenSupabase();
+  await carregarCatalogosServico();
+  await carregarServicesDoSupabase();
+  await carregarChecklistsDoSupabase();
+  await carregarEventosCampoDoSupabase();
+  await carregarRecadosTecnicosDoSupabase();
+  await carregarEstoqueDoSupabase();
+  await carregarFrotaV1();
+  processOfflineQueue();
+  if (!_supabaseLastRemoteLoadFailed && navigator.onLine) setConnectionState('online');
+  prepareFieldOpsAudioAfterReload();
+  nav(currentPage, null);
+  if (!window._fieldOpsPolling) {
+    window._fieldOpsPolling = setInterval(pollFieldOpsUpdates, FIELD_OPS_POLL_INTERVAL_MS);
+  }
 });
 </script>
 </body>
