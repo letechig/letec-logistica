@@ -484,7 +484,10 @@
           <button id="tab-recados" onclick="showSection('recados')">Recados</button>
           <button id="tab-historico" onclick="showSection('historico')">Historico do dia</button>
         </nav>
-        <button class="danger-soft" type="button" onclick="callSupport()" style="width:100%;margin-top:10px">Chamar ajuda</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+          <button class="danger-soft" type="button" onclick="callSupport()">Chamar ajuda</button>
+          <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
+        </div>
         <div id="message-highlight"></div>
       </div>
       <section class="section active" id="section-servicos">
@@ -636,7 +639,6 @@
       </div>
     </div>
   </div>
-
   <script>
     const params = new URLSearchParams(window.location.search);
     const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
@@ -798,6 +800,55 @@
         };
         localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(all));
       } catch(e) {}
+    }
+
+    async function copyTextToClipboard(text) {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+
+    function buildPortalDiagnosticsText() {
+      const cache = loadPortalCache();
+      const queue = loadQueue();
+      const lines = [
+        'Diagnostico Portal do Tecnico - Letec',
+        `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+        `API: ${API_BASE_URL}`,
+        `Navegador: ${navigator.onLine ? 'online' : 'offline'}`,
+        `Tecnico/equipe: ${portal.tecnico}`,
+        `Data: ${portal.data}`,
+        `Veiculo: ${portal.veiculo || 'nao informado'}`,
+        `Fila local: ${queue.length} item(ns)`,
+        `Cache local: ${cache ? 'existe' : 'vazio'}${cache?.updated_at ? ` (${cache.updated_at})` : ''}`,
+        `Servicos carregados: ${state.services.length}`,
+        `Checklists carregados: ${state.checklists.length}`,
+        `Eventos carregados: ${state.events.length}`,
+        `Recados carregados: ${state.messages.length}`,
+        '',
+        'Fila:',
+        ...(queue.length ? queue.map((item, idx) => `- #${idx + 1} ${item.type || 'acao'} ${item.queued_at || ''}`) : ['- vazia'])
+      ];
+      return lines.join('\n');
+    }
+
+    async function copyPortalDiagnostics() {
+      try {
+        await copyTextToClipboard(buildPortalDiagnosticsText());
+        toast('Diagnostico copiado.', 'ok');
+      } catch(e) {
+        toast('Nao foi possivel copiar o diagnostico.', 'err');
+      }
     }
 
     async function requestBackendJson(path, options = {}) {

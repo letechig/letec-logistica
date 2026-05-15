@@ -14,6 +14,8 @@ function makeState() {
       { id: 3, nome: 'Beta Cliente', nome_normalizado: 'BETA CLIENTE', telefone: '553333333333', ativo: true, endereco: 'Rua B' }
     ],
     services: [{ id: 10, cliente_id: 2, cliente: 'Beta Cliente', endereco: 'Rua B' }],
+    technicians: [{ id: 'tec-1', nome: 'Joao', ativo: true }],
+    vehicles: [{ id: 'vei-1', nome: 'Fox', ativo: true }],
     contracts: [{ id: 20, customer_id: 2, tipo_servico: 'Controle de pragas' }],
     customer_service_history: [{ id: 30, customer_id: 2, servico: 'DS' }],
     data_reviews: [{ id: 40, customer_id: 2, tipo_problema: 'possivel_duplicidade' }],
@@ -316,6 +318,25 @@ test('POST /api/services cria cliente automaticamente quando agenda usa cliente 
     assert.equal(created.origem, 'agenda');
     assert.equal(payload.cliente_id, created.id);
     assert.equal(state.services.find(service => service.id === 101).cliente_id, created.id);
+  });
+});
+
+test('GET /api/diagnostics/operational retorna checks sem segredos', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/diagnostics/operational`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+
+    assert.equal(typeof payload.serverTime, 'string');
+    assert.equal(payload.features.supabaseConfigured, true);
+    assert.equal(payload.checks.services.ok, true);
+    assert.equal(payload.checks.customers.ok, true);
+    assert.equal(payload.checks.vehicles.ok, true);
+
+    const serialized = JSON.stringify(payload);
+    assert.equal(serialized.includes(process.env.SUPABASE_ANON_KEY), false);
+    assert.equal(serialized.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
+    assert.equal(serialized.includes('EVOLUTION_API_KEY'), false);
   });
 });
 

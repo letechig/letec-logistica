@@ -1588,6 +1588,86 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+async function checkSupabaseTable(tableName) {
+  const db = getSupabaseClient();
+  const startedAt = Date.now();
+  try {
+    const { error } = await db
+      .from(tableName)
+      .select('id')
+      .limit(1);
+
+    if (error) {
+      return {
+        ok: false,
+        status: 'error',
+        table: tableName,
+        ms: Date.now() - startedAt,
+        message: error.message || 'Falha ao consultar tabela'
+      };
+    }
+
+    return {
+      ok: true,
+      status: 'ok',
+      table: tableName,
+      ms: Date.now() - startedAt
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'error',
+      table: tableName,
+      ms: Date.now() - startedAt,
+      message: error.message || 'Falha ao consultar tabela'
+    };
+  }
+}
+
+app.get('/api/diagnostics/operational', async (req, res) => {
+  const tables = [
+    'services',
+    'customers',
+    'technicians',
+    'vehicles',
+    'checklists',
+    'technician_events',
+    'technician_messages'
+  ];
+
+  const checksList = await Promise.all(tables.map(checkSupabaseTable));
+  const checks = checksList.reduce((acc, item) => {
+    acc[item.table] = item;
+    return acc;
+  }, {});
+  const failed = checksList.filter(item => !item.ok);
+  const evolution = getEvolutionConfig();
+  const warnings = [];
+
+  if (!process.env.SUPABASE_URL) warnings.push('SUPABASE_URL nao configurada no backend.');
+  if (!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)) {
+    warnings.push('Chave Supabase do backend nao configurada.');
+  }
+  if (failed.length) {
+    warnings.push(`${failed.length} tabela(s) principal(is) com falha de consulta.`);
+  }
+  if (!evolution.configured) warnings.push('Evolution API nao configurada completamente.');
+
+  res.json({
+    ok: failed.length === 0,
+    serverTime: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    checks,
+    features: {
+      supabaseConfigured: !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)),
+      mapsConfigured: !!process.env.GOOGLE_MAPS_API_KEY,
+      evolutionConfigured: evolution.configured,
+      evolutionInstanceConfigured: !!evolution.instance
+    },
+    warnings
+  });
+});
+
 app.post('/api/logistics/validate-service', async (req, res) => {
   try {
     const service = req.body.service || req.body.servico || req.body;

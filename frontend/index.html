@@ -306,7 +306,10 @@ textarea:focus-visible,
   color: var(--green) !important;
   font-size: 11px !important;
   font-weight: 800;
+  cursor: pointer;
+  user-select: none;
 }
+#sync-indicator:hover { box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
 #auth-user-info {
   padding: 5px 9px;
   border-radius: 999px;
@@ -1239,6 +1242,28 @@ td.bold { color: var(--text); font-weight: 600; }
 .modal-bg.open { display:flex; }
 .modal { background:var(--card); border:1px solid var(--border2); border-radius:var(--radius-lg); padding:24px; width:90%; max-width:560px; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
 .modal-title { font-family:var(--display); font-size:18px; font-weight:800; margin-bottom:18px; letter-spacing:-0.3px; }
+#modal.diagnostics-modal { background:rgba(15,23,42,.52); backdrop-filter:blur(3px); padding:20px; }
+#modal.diagnostics-modal .modal { width:min(860px,96vw); max-width:860px; max-height:92vh; padding:0; overflow:hidden; display:flex; flex-direction:column; border-radius:14px; }
+#modal.diagnostics-modal .modal-title,
+#modal.diagnostics-modal .modal > .flex.gap2.mt3 { display:none; }
+#modal.diagnostics-modal #modal-body { min-height:0; flex:1; overflow:auto; padding:0; }
+.diagnostics-shell { display:flex; flex-direction:column; min-height:0; background:#fff; }
+.diagnostics-head { padding:18px 20px; border-bottom:1px solid var(--border2); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; background:linear-gradient(180deg,#fff,#f8fafc); }
+.diagnostics-title { font-family:var(--display); font-size:19px; font-weight:900; color:var(--text); }
+.diagnostics-sub { margin-top:4px; font-size:12px; color:var(--text3); }
+.diagnostics-body { padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
+.diagnostics-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+.diagnostics-card { border:1px solid var(--border2); border-radius:10px; padding:12px; background:#fff; }
+.diagnostics-label { font-family:var(--mono); text-transform:uppercase; letter-spacing:.12em; font-size:10px; color:var(--text3); margin-bottom:5px; }
+.diagnostics-value { font-size:13px; font-weight:800; color:var(--text); overflow-wrap:anywhere; }
+.diagnostics-table { width:100%; border-collapse:separate; border-spacing:0; font-size:12px; }
+.diagnostics-table th, .diagnostics-table td { padding:9px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+.diagnostics-table th { font-family:var(--mono); text-transform:uppercase; letter-spacing:.12em; font-size:10px; color:var(--text3); background:var(--bg2); }
+.diagnostics-chip { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:800; white-space:nowrap; }
+.diagnostics-chip.ok { color:var(--green); background:var(--green-bg); border:1px solid rgba(22,163,74,.18); }
+.diagnostics-chip.warn { color:var(--orange); background:var(--orange-bg); border:1px solid rgba(234,88,12,.22); }
+.diagnostics-chip.err { color:var(--red); background:var(--red-bg); border:1px solid rgba(220,38,38,.20); }
+.diagnostics-actions { padding:14px 20px; border-top:1px solid var(--border2); display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; background:#fff; }
 .logistica-modal-bg { display:none; position:fixed; inset:0; background:rgba(15,23,42,.62); z-index:260; align-items:center; justify-content:center; padding:18px; backdrop-filter:blur(4px); }
 .logistica-modal-bg.open { display:flex; }
 .logistica-modal { width:min(760px,96vw); max-height:92vh; overflow:hidden; display:flex; flex-direction:column; background:var(--card); border:1px solid var(--border2); border-radius:14px; box-shadow:0 28px 80px rgba(15,23,42,.30); }
@@ -1953,6 +1978,10 @@ td.bold { color: var(--text); font-weight: 600; }
   .modal-title { font-size:17px; }
   .logistica-modal-bg { align-items:flex-end; padding:0; }
   .logistica-modal { width:100%; max-height:94vh; border-radius:14px 14px 0 0; }
+  #modal.diagnostics-modal { align-items:flex-end; padding:0; }
+  #modal.diagnostics-modal .modal { width:100%; max-height:94vh; border-radius:14px 14px 0 0; }
+  .diagnostics-head,.diagnostics-body,.diagnostics-actions { padding-left:16px; padding-right:16px; }
+  .diagnostics-actions .btn { flex:1; justify-content:center; }
   .logistica-detail-grid { grid-template-columns:1fr; }
   .btn { width: auto; justify-content: center; }
   .modal .flex.gap2 { flex-wrap: wrap; }
@@ -2402,7 +2431,7 @@ gap: 6px;
       LETEC_BACKEND_CAPABILITIES.available = false;
       LETEC_BACKEND_CAPABILITIES.mapsProxy = false;
       console.warn('[Backend] Nao foi possivel consultar /api/health:', e.message || e);
-      if (typeof setSyncStatus === 'function') setSyncStatus('⚠️ API indisponível');
+      if (typeof setSyncStatus === 'function') setSyncStatus('⚠️ API indisponível — tentando usar cache local');
       return LETEC_BACKEND_CAPABILITIES;
     }
   }
@@ -2586,7 +2615,10 @@ async function carregarVeiculos(){
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      const error = new Error(payload?.error || `HTTP ${response.status}`);
+      const friendlyMessage = payload?.code === 'customer_link_ambiguous'
+        ? 'Cliente ambíguo na Agenda: selecione o cliente correto no autocomplete antes de salvar.'
+        : (payload?.error || `HTTP ${response.status}`);
+      const error = new Error(friendlyMessage);
       error.status = response.status;
       error.payload = payload;
       throw error;
@@ -2806,7 +2838,7 @@ async function carregarVeiculos(){
       <option value="DEZ">Dezembro 2026</option>
     </select>
     <button class="topbar-btn" onclick="showChangelog()">📋 v7.8</button>
-    <span id="sync-indicator" style="font-size:12px;color:var(--text3);margin-left:8px">🟢 Online</span>
+    <span id="sync-indicator" role="button" tabindex="0" title="Abrir diagnóstico operacional" onclick="openOperationalDiagnostics()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openOperationalDiagnostics();}" style="font-size:12px;color:var(--text3);margin-left:8px">🟢 Online</span>
     <span id="auth-user-info" style="font-size:12px;color:var(--text2);margin-left:8px;display:none">👤 Logado como —</span>
     <button class="topbar-btn" id="auth-logout-btn" style="display:none" type="button">Sair</button>
     <button class="topbar-btn primary" onclick="nav('checklist',null)">Novo checklist</button>
@@ -10313,7 +10345,7 @@ function fleetModal(title, bodyHtml) {
   document.getElementById('modal-body').innerHTML = bodyHtml;
   document.getElementById('modal-del').style.display = 'none';
   currentDelId = null;
-  modal.classList.remove('svc-edit-modal', 'day-detail-modal', 'changelog-modal');
+  modal.classList.remove('svc-edit-modal', 'day-detail-modal', 'changelog-modal', 'diagnostics-modal');
   modal.classList.add('open');
 }
 
@@ -11083,7 +11115,7 @@ function opsShowDetails(kind, id) {
   const row = rows.find(item => String(item.id) === String(id));
   if (!row) return;
   const modal = document.getElementById('modal');
-  modal.classList.remove('svc-edit-modal','day-detail-modal','changelog-modal');
+  modal.classList.remove('svc-edit-modal','day-detail-modal','changelog-modal','diagnostics-modal');
   currentDelId = null;
   const titleMap = { tecnicos:'Detalhes do técnico', servicos:'Detalhes do serviço', equipes:'Detalhes da equipe', bonus:'Detalhes da prévia' };
   document.getElementById('modal-title').textContent = `${titleMap[kind] || 'Detalhes'} — ${row.nome}`;
@@ -12246,10 +12278,18 @@ async function garantirClienteDoServico(prefix = 'ns') {
   if (!nome) return '';
 
   const existing = await buscarClientesServicoRemoto(nome).catch(() => []);
-  const exact = existing.find(c => normalizarNome(c.nome || '') === normalizarNome(nome));
-  if (exact) {
-    selecionarClienteServicoAutocomplete(prefix, exact.id);
-    return String(exact.id);
+  const exactMatches = existing.filter(c => normalizarNome(c.nome || '') === normalizarNome(nome));
+  if (exactMatches.length === 1) {
+    selecionarClienteServicoAutocomplete(prefix, exactMatches[0].id);
+    return String(exactMatches[0].id);
+  }
+  if (exactMatches.length > 1) {
+    const hint = document.getElementById(`${prefix}-client-hint`);
+    if (hint) {
+      hint.textContent = 'Cliente ambíguo: selecione o cadastro correto no autocomplete antes de salvar.';
+      hint.style.color = 'var(--red)';
+    }
+    throw new Error('Cliente ambíguo: selecione o cliente correto no autocomplete antes de salvar.');
   }
   if (existing.length) {
     const useExisting = confirmAction(`Encontramos cliente parecido: "${existing[0].nome}". Deseja usar esse cadastro existente?`);
@@ -12699,6 +12739,10 @@ async function confirmNewSvc(){
     cliente_id = await garantirClienteDoServico('ns');
   } catch(e) {
     console.warn('Não foi possível cadastrar/vincular cliente antes do serviço:', e);
+    if (String(e?.message || e).toLowerCase().includes('ambíguo') || String(e?.message || e).toLowerCase().includes('ambiguo')) {
+      toast('Cliente ambíguo: selecione o cliente correto no autocomplete antes de salvar.', 'err');
+      return;
+    }
     toast('Cliente não vinculado agora; o serviço será salvo mesmo assim.', 'warn');
     cliente_id = '';
   }
@@ -12943,7 +12987,7 @@ selectAuthProfile('admin');
 
 function closeModal(){
   const modal = document.getElementById('modal');
-  modal.classList.remove('open','svc-edit-modal','day-detail-modal','changelog-modal');
+  modal.classList.remove('open','svc-edit-modal','day-detail-modal','changelog-modal','diagnostics-modal');
   currentDelId=null;
 }
 async function delRecord(){
@@ -15324,12 +15368,13 @@ function formatLastSync() {
 function setSyncStatus(status) {
   const el = document.getElementById('sync-indicator');
   if (el) {
+    const baseStatus = String(status || '');
     const queueSuffix = offlineQueue.length ? ` · ${offlineQueue.length} pendente(s)` : '';
     const errorSuffix = offlineQueue.some(item => item && item.blocked) ? ' · erro de sincronização' : '';
-    const cacheSuffix = agendaLoadedFromCache ? ' · cache local' : '';
-    const apiSuffix = LETEC_BACKEND_CAPABILITIES.checked && LETEC_BACKEND_CAPABILITIES.available === false ? ' · API indisponível' : '';
+    const cacheSuffix = agendaLoadedFromCache && !baseStatus.toLowerCase().includes('cache local') ? ' · cache local' : '';
+    const apiSuffix = LETEC_BACKEND_CAPABILITIES.checked && LETEC_BACKEND_CAPABILITIES.available === false && !baseStatus.includes('API indisponível') ? ' · API indisponível' : '';
     const suffix = lastSyncAt ? ` · Última sincronização: ${formatLastSync()}` : '';
-    el.innerHTML = `${status}${queueSuffix}${errorSuffix}${cacheSuffix}${apiSuffix}${suffix}`;
+    el.innerHTML = `${baseStatus}${queueSuffix}${errorSuffix}${cacheSuffix}${apiSuffix}${suffix}`;
   }
 }
 
@@ -15344,6 +15389,7 @@ function enqueueOffline(item) {
   if (!item) return;
   item.attempts = item.attempts || 0;
   item.blocked = false;
+  item.queuedAt = item.queuedAt || new Date().toISOString();
   delete item.lastError;
   delete item.failedAt;
   offlineQueue.push(item);
@@ -15523,6 +15569,326 @@ async function processOfflineQueue() {
     setSyncStatus('🟡 Sincronização parcial');
   }
   isProcessingQueue = false;
+}
+
+let operationalDiagnosticsLastResult = null;
+let operationalDiagnosticsLastError = null;
+
+function diagnosticsChip(status, label) {
+  const cls = status === 'ok' ? 'ok' : status === 'warn' ? 'warn' : 'err';
+  return `<span class="diagnostics-chip ${cls}">${sanitize(label || status)}</span>`;
+}
+
+function diagnosticsTime(value) {
+  if (!value) return '—';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return sanitize(value);
+  return dt.toLocaleString('pt-BR');
+}
+
+function diagnosticsStorageInfo(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { key, exists: false, count: 0, bytes: 0 };
+    let count = 1;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) count = parsed.length;
+      else if (parsed && typeof parsed === 'object') count = Object.keys(parsed).length;
+    } catch(e) {}
+    return { key, exists: true, count, bytes: raw.length };
+  } catch(e) {
+    return { key, exists: false, count: 0, bytes: 0 };
+  }
+}
+
+function collectOperationalDiagnosticsSnapshot() {
+  const moduleRows = Object.entries(MODULE_LOADERS || {}).map(([key, loader]) => {
+    const state = moduleLoadState[key] || { status: 'idle', loadedAt: null, error: null };
+    return {
+      key,
+      label: loader.label || key,
+      status: state.status || 'idle',
+      loadedAt: state.loadedAt || null,
+      error: state.error?.message || state.error || ''
+    };
+  });
+  const caches = [
+    diagnosticsStorageInfo('letec_svcs2'),
+    diagnosticsStorageInfo('letec_cl2'),
+    diagnosticsStorageInfo('letec_catalogos_cache_v1'),
+    diagnosticsStorageInfo('offlineQueue')
+  ];
+  return {
+    apiBaseUrl: API_BASE_URL,
+    online: navigator.onLine,
+    currentPage,
+    lastSyncLabel: lastSyncAt ? formatLastSync() : '',
+    lastSyncAt,
+    agendaLoadedFromCache,
+    backendCapabilities: { ...LETEC_BACKEND_CAPABILITIES },
+    modules: moduleRows,
+    caches,
+    counts: {
+      services: Array.isArray(services) ? services.length : 0,
+      technicians: Array.isArray(window._tecnicos) ? window._tecnicos.length : 0,
+      vehicles: Array.isArray(window._veiculos) ? window._veiculos.length : 0,
+      fleetVehicles: Array.isArray(fleetVehicles) ? fleetVehicles.length : 0,
+      customersLoaded: Array.isArray(clientesData) ? clientesData.length : 0,
+      customersTotal: Number(clientesTotal || 0),
+      checklists: Array.isArray(clRecords) ? clRecords.length : 0
+    },
+    queue: (offlineQueue || []).map((item, index) => ({
+      index,
+      op: item?.op || item?.type || 'desconhecida',
+      status: item?.blocked ? 'bloqueada' : 'pendente',
+      attempts: item?.attempts || 0,
+      error: item?.lastError || item?.error || '',
+      queuedAt: item?.queuedAt || item?.queued_at || item?.failedAt || '',
+      ref: item?.id || item?.service?.id || item?.record?.id || ''
+    }))
+  };
+}
+
+function renderOperationalDiagnosticsPanel() {
+  const body = document.getElementById('modal-body');
+  if (!body) return;
+  const snapshot = collectOperationalDiagnosticsSnapshot();
+  const remote = operationalDiagnosticsLastResult;
+  const remoteChecks = remote?.checks || {};
+  const remoteWarnings = remote?.warnings || [];
+  const backendOk = remote ? !!remote.ok : LETEC_BACKEND_CAPABILITIES.available;
+  const apiLabel = operationalDiagnosticsLastError
+    ? operationalDiagnosticsLastError.message || 'Falha ao testar API'
+    : (remote ? `Servidor ${backendOk ? 'operacional' : 'com alertas'}` : 'Ainda não testado');
+  const queueRows = snapshot.queue.length ? snapshot.queue.map(item => `
+    <tr>
+      <td class="mono">#${item.index + 1}</td>
+      <td>${sanitize(item.op)}</td>
+      <td>${item.status === 'bloqueada' ? diagnosticsChip('err', 'erro permanente') : diagnosticsChip('warn', 'pendente')}</td>
+      <td>${sanitize(item.error || '—')}</td>
+      <td class="mono">${diagnosticsTime(item.queuedAt)}</td>
+      <td>${item.status === 'bloqueada' ? `<button class="btn btn-ghost btn-xs" onclick="removeBlockedOfflineQueueItem(${item.index})">Remover bloqueada</button>` : '<span class="text-muted">preservada</span>'}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" class="text-muted">Nenhuma pendência offline.</td></tr>';
+  const moduleRows = snapshot.modules.map(item => {
+    const status = item.status === 'loaded' ? diagnosticsChip('ok', 'carregado')
+      : item.status === 'loading' ? diagnosticsChip('warn', 'carregando')
+      : item.status === 'error' ? diagnosticsChip('err', 'erro')
+      : diagnosticsChip('warn', 'ainda não aberto');
+    return `<tr><td>${sanitize(item.label)}</td><td>${status}</td><td class="mono">${diagnosticsTime(item.loadedAt)}</td><td>${sanitize(item.error || '—')}</td></tr>`;
+  }).join('');
+  const checkRows = Object.entries(remoteChecks).map(([table, check]) => `
+    <tr>
+      <td class="mono">${sanitize(table)}</td>
+      <td>${check.ok ? diagnosticsChip('ok', 'ok') : diagnosticsChip('err', 'falha')}</td>
+      <td class="mono">${sanitize(check.ms ?? '—')}ms</td>
+      <td>${sanitize(check.message || '—')}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="text-muted">Clique em Testar conexão para consultar o backend.</td></tr>';
+  const cacheRows = snapshot.caches.map(item => `
+    <tr><td class="mono">${sanitize(item.key)}</td><td>${item.exists ? diagnosticsChip('ok', 'existe') : diagnosticsChip('warn', 'vazio')}</td><td class="mono">${item.count}</td><td class="mono">${item.bytes} bytes</td></tr>
+  `).join('');
+  const warningsHtml = [
+    ...(remoteWarnings || []),
+    ...(operationalDiagnosticsLastError ? ['API indisponível: tentando usar cache local quando existir.'] : []),
+    ...(snapshot.queue.some(item => item.status === 'bloqueada') ? ['Há pendência com erro permanente na fila offline.'] : []),
+    ...(snapshot.agendaLoadedFromCache ? ['Agenda exibida com cache local porque a API falhou no último carregamento.'] : [])
+  ];
+
+  body.innerHTML = `
+    <div class="diagnostics-shell">
+      <div class="diagnostics-head">
+        <div>
+          <div class="diagnostics-title">Diagnóstico Operacional</div>
+          <div class="diagnostics-sub">Visibilidade de API, cache local, módulos carregados e fila offline.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
+      </div>
+      <div class="diagnostics-body">
+        <div class="diagnostics-grid">
+          <div class="diagnostics-card"><div class="diagnostics-label">API em uso</div><div class="diagnostics-value mono">${sanitize(snapshot.apiBaseUrl)}</div></div>
+          <div class="diagnostics-card"><div class="diagnostics-label">Backend</div><div class="diagnostics-value">${backendOk ? diagnosticsChip('ok', 'online') : diagnosticsChip('err', 'atenção')} <span style="font-size:12px;color:var(--text3)">${sanitize(apiLabel)}</span></div></div>
+          <div class="diagnostics-card"><div class="diagnostics-label">Navegador</div><div class="diagnostics-value">${snapshot.online ? diagnosticsChip('ok', 'online') : diagnosticsChip('err', 'offline')}</div></div>
+          <div class="diagnostics-card"><div class="diagnostics-label">Última sync</div><div class="diagnostics-value">${sanitize(snapshot.lastSyncLabel || 'sem registro')}</div></div>
+          <div class="diagnostics-card"><div class="diagnostics-label">Tela atual</div><div class="diagnostics-value">${sanitize(PAGE_META[currentPage]?.title || currentPage)}</div></div>
+          <div class="diagnostics-card"><div class="diagnostics-label">Cache local</div><div class="diagnostics-value">${snapshot.agendaLoadedFromCache ? diagnosticsChip('warn', 'em uso') : diagnosticsChip('ok', 'normal')}</div></div>
+        </div>
+
+        <div class="diagnostics-card">
+          <div class="diagnostics-label">Resumo carregado neste computador</div>
+          <div class="diagnostics-grid">
+            <div><strong>${snapshot.counts.services}</strong><div class="text-muted">serviços</div></div>
+            <div><strong>${snapshot.counts.technicians}</strong><div class="text-muted">técnicos</div></div>
+            <div><strong>${snapshot.counts.vehicles}</strong><div class="text-muted">veículos catálogo</div></div>
+            <div><strong>${snapshot.counts.fleetVehicles}</strong><div class="text-muted">veículos frota</div></div>
+            <div><strong>${snapshot.counts.customersLoaded}/${snapshot.counts.customersTotal || snapshot.counts.customersLoaded}</strong><div class="text-muted">clientes</div></div>
+            <div><strong>${snapshot.counts.checklists}</strong><div class="text-muted">checklists</div></div>
+          </div>
+        </div>
+
+        ${warningsHtml.length ? `<div class="diagnostics-card" style="border-color:rgba(234,88,12,.28);background:var(--orange-bg)"><div class="diagnostics-label" style="color:var(--orange)">Avisos</div>${warningsHtml.map(w => `<div style="font-size:12px;color:var(--orange);font-weight:700;margin-top:4px">${sanitize(w)}</div>`).join('')}</div>` : ''}
+
+        <div class="diagnostics-card">
+          <div class="diagnostics-label">Fila offline</div>
+          <div class="tbl-wrap"><table class="diagnostics-table"><thead><tr><th>#</th><th>Operação</th><th>Status</th><th>Erro</th><th>Horário</th><th>Ação</th></tr></thead><tbody>${queueRows}</tbody></table></div>
+        </div>
+
+        <div class="diagnostics-card">
+          <div class="diagnostics-label">Módulos da interface</div>
+          <div class="tbl-wrap"><table class="diagnostics-table"><thead><tr><th>Módulo</th><th>Status</th><th>Carregado em</th><th>Erro</th></tr></thead><tbody>${moduleRows}</tbody></table></div>
+        </div>
+
+        <div class="diagnostics-card">
+          <div class="diagnostics-label">Checks do backend/Supabase</div>
+          <div class="tbl-wrap"><table class="diagnostics-table"><thead><tr><th>Tabela</th><th>Status</th><th>Tempo</th><th>Detalhe</th></tr></thead><tbody>${checkRows}</tbody></table></div>
+        </div>
+
+        <div class="diagnostics-card">
+          <div class="diagnostics-label">Caches locais</div>
+          <div class="tbl-wrap"><table class="diagnostics-table"><thead><tr><th>Chave</th><th>Status</th><th>Itens</th><th>Tamanho</th></tr></thead><tbody>${cacheRows}</tbody></table></div>
+        </div>
+      </div>
+      <div class="diagnostics-actions">
+        <button class="btn btn-ghost btn-sm" onclick="testOperationalConnection()">Testar conexão</button>
+        <button class="btn btn-ghost btn-sm" onclick="syncDiagnosticsNow()">Sincronizar agora</button>
+        <button class="btn btn-ghost btn-sm" onclick="reloadCurrentDiagnosticsPage()">Recarregar tela atual</button>
+        <button class="btn btn-primary btn-sm" onclick="copyOperationalDiagnostics()">Copiar diagnóstico</button>
+      </div>
+    </div>`;
+}
+
+async function fetchOperationalDiagnostics() {
+  try {
+    operationalDiagnosticsLastError = null;
+    operationalDiagnosticsLastResult = await requestBackendJson('/api/diagnostics/operational', { cache: 'no-store' });
+    LETEC_BACKEND_CAPABILITIES.checked = true;
+    LETEC_BACKEND_CAPABILITIES.available = true;
+    if (operationalDiagnosticsLastResult?.features) {
+      LETEC_BACKEND_CAPABILITIES.mapsProxy = !!operationalDiagnosticsLastResult.features.mapsConfigured;
+    }
+    return operationalDiagnosticsLastResult;
+  } catch(e) {
+    operationalDiagnosticsLastError = e;
+    LETEC_BACKEND_CAPABILITIES.checked = true;
+    LETEC_BACKEND_CAPABILITIES.available = false;
+    setSyncStatus('⚠️ API indisponível — tentando usar cache local');
+    return null;
+  }
+}
+
+async function openOperationalDiagnostics() {
+  const modal = document.getElementById('modal');
+  document.getElementById('modal-title').textContent = 'Diagnóstico Operacional';
+  document.getElementById('modal-body').innerHTML = '<div style="padding:20px;color:var(--text3)">Carregando diagnóstico...</div>';
+  document.getElementById('modal-del').style.display = 'none';
+  currentDelId = null;
+  modal.classList.remove('svc-edit-modal', 'day-detail-modal', 'changelog-modal', 'diagnostics-modal');
+  modal.classList.add('diagnostics-modal', 'open');
+  renderOperationalDiagnosticsPanel();
+  await fetchOperationalDiagnostics();
+  renderOperationalDiagnosticsPanel();
+}
+
+async function testOperationalConnection() {
+  toast('Testando conexão com a API...', 'warn');
+  await fetchOperationalDiagnostics();
+  renderOperationalDiagnosticsPanel();
+  toast(operationalDiagnosticsLastError ? 'API indisponível. Tentando usar cache local.' : 'Conexão testada.', operationalDiagnosticsLastError ? 'warn' : 'ok');
+}
+
+async function syncDiagnosticsNow() {
+  if (!navigator.onLine) {
+    toast('Este computador está offline. A fila será sincronizada ao reconectar.', 'warn');
+    renderOperationalDiagnosticsPanel();
+    return;
+  }
+  await processOfflineQueue();
+  await fetchOperationalDiagnostics();
+  renderOperationalDiagnosticsPanel();
+}
+
+async function reloadCurrentDiagnosticsPage() {
+  try {
+    if (PAGE_MODULE_KEY[currentPage] === 'services') {
+      await carregarCatalogosServico();
+      await getServices();
+      refreshPages();
+    } else {
+      await ensureModuleLoaded(currentPage, { force: true });
+    }
+    renderOperationalDiagnosticsPanel();
+    toast('Dados da tela atual recarregados.', 'ok');
+  } catch(e) {
+    toast(`Não foi possível recarregar agora: ${e.message || e}`, 'err');
+    renderOperationalDiagnosticsPanel();
+  }
+}
+
+function buildOperationalDiagnosticsText() {
+  const snapshot = collectOperationalDiagnosticsSnapshot();
+  const remote = operationalDiagnosticsLastResult;
+  const lines = [
+    'Diagnóstico Operacional - Letec',
+    `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+    `API: ${snapshot.apiBaseUrl}`,
+    `Backend: ${operationalDiagnosticsLastError ? 'indisponível' : remote ? (remote.ok ? 'ok' : 'com alertas') : 'não testado'}`,
+    `Servidor: ${remote?.serverTime || 'sem leitura'}`,
+    `Navegador: ${snapshot.online ? 'online' : 'offline'}`,
+    `Tela atual: ${PAGE_META[currentPage]?.title || currentPage}`,
+    `Última sincronização: ${snapshot.lastSyncLabel || 'sem registro'}`,
+    `Cache da agenda em uso: ${snapshot.agendaLoadedFromCache ? 'sim' : 'não'}`,
+    `Fila offline: ${snapshot.queue.length} item(ns), ${snapshot.queue.filter(item => item.status === 'bloqueada').length} bloqueado(s)`,
+    `Contagens: serviços ${snapshot.counts.services}, técnicos ${snapshot.counts.technicians}, veículos ${snapshot.counts.vehicles}, clientes ${snapshot.counts.customersLoaded}/${snapshot.counts.customersTotal || snapshot.counts.customersLoaded}, checklists ${snapshot.counts.checklists}`,
+    '',
+    'Módulos:',
+    ...snapshot.modules.map(item => `- ${item.label}: ${item.status}${item.error ? ` (${item.error})` : ''}`),
+    '',
+    'Fila offline:',
+    ...(snapshot.queue.length ? snapshot.queue.map(item => `- #${item.index + 1} ${item.op}: ${item.status}${item.error ? ` - ${item.error}` : ''}`) : ['- vazia']),
+    '',
+    'Checks backend:',
+    ...(remote?.checks ? Object.entries(remote.checks).map(([table, check]) => `- ${table}: ${check.ok ? 'ok' : 'falha'}${check.message ? ` - ${check.message}` : ''}`) : ['- não testado'])
+  ];
+  return lines.join('\n');
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand('copy');
+  area.remove();
+}
+
+async function copyOperationalDiagnostics() {
+  try {
+    await copyTextToClipboard(buildOperationalDiagnosticsText());
+    toast('Diagnóstico copiado.', 'ok');
+  } catch(e) {
+    toast('Não foi possível copiar o diagnóstico.', 'err');
+  }
+}
+
+function removeBlockedOfflineQueueItem(index) {
+  const item = offlineQueue[index];
+  if (!item || !item.blocked) {
+    toast('Só pendências bloqueadas podem ser removidas manualmente.', 'warn');
+    return;
+  }
+  if (!confirmAction('Remover esta pendência bloqueada da fila local? A ação não será enviada ao backend.')) return;
+  offlineQueue.splice(index, 1);
+  saveOfflineQueue();
+  setConnectionState(navigator.onLine ? 'online' : 'offline');
+  renderOperationalDiagnosticsPanel();
 }
 
 let connectionEventsBound = false;
@@ -16140,6 +16506,7 @@ function carregarOperacionalConfig() {
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="salvarSuporteWhatsAppConfig()">Salvar suporte</button>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cfg-suporte-whats').value='';salvarSuporteWhatsAppConfig()">Remover número</button>
+        <button class="btn btn-ghost btn-sm" onclick="openOperationalDiagnostics()">Diagnóstico operacional</button>
       </div>
     </div>`;
 }
