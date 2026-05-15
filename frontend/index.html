@@ -1795,6 +1795,155 @@ td.bold { color: var(--text); font-weight: 600; }
 .inventory-cat-card-title { font-weight:800; font-size:12px; color:var(--text); margin-bottom:4px; }
 .inventory-cat-card-meta { font-size:11px; color:var(--text3); line-height:1.45; }
 
+/* ─── UI REFRESH V1 ───────────────────────────── */
+.ui-page-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:16px;
+  padding:16px 18px;
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:var(--radius-lg);
+  background:linear-gradient(180deg,#fff,#f8fafc);
+  box-shadow:var(--shadow-sm);
+}
+.ui-page-kicker {
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--blue2);
+  margin-bottom:3px;
+}
+.ui-page-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+.ui-segmented {
+  display:flex;
+  gap:0;
+  border:1px solid var(--border2);
+  border-radius:11px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+}
+.ui-segmented .topbar-btn {
+  min-height:36px;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none;
+}
+.ui-filter-panel {
+  display:grid;
+  grid-template-columns:minmax(240px,1.4fr) repeat(3,minmax(150px,.8fr)) auto;
+  gap:10px;
+  align-items:center;
+  padding:12px;
+  margin-bottom:16px;
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:var(--radius-lg);
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+}
+.clients-filter-panel {
+  grid-template-columns:minmax(260px,1.35fr) repeat(6,minmax(132px,.75fr)) auto;
+}
+.ui-filter-panel .finput,
+.ui-filter-panel .fsel { min-height:40px; background:#f8fafc; }
+.ui-count-pill {
+  justify-self:end;
+  display:inline-flex;
+  align-items:center;
+  min-height:30px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid rgba(37,99,235,.16);
+  background:var(--blue-bg);
+  color:var(--blue2);
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.ui-table-card {
+  border:1px solid rgba(148,163,184,.24);
+  border-radius:var(--radius-lg);
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}
+.ui-table-card table { border-collapse:separate; border-spacing:0; width:100%; }
+.ui-table-card th {
+  background:#f8fafc;
+  color:#64748b;
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.10em;
+  text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+}
+.ui-table-card td { border-bottom:1px solid #eef2f7; }
+.ui-table-card tr:hover td { background:#f8fafc; }
+.ui-empty-state {
+  padding:24px;
+  text-align:center;
+  color:var(--text3);
+  background:#fff;
+  border:1px dashed var(--border2);
+  border-radius:var(--radius-lg);
+}
+.ui-empty-title { font-weight:900; color:var(--text2); margin-bottom:4px; }
+.ui-status-note {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:#fff;
+  color:var(--text2);
+  font-size:11px;
+  font-weight:800;
+}
+.chip-slate { background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; }
+.chip { border-radius:999px; font-weight:800; }
+.btn { border-radius:10px; }
+.btn-primary { box-shadow:0 8px 18px rgba(37,99,235,.14); }
+.svc-card-actions .svc-btn { border-radius:9px; }
+.svc-action-menu summary { border-radius:9px; }
+.svc-action-menu-panel { border-radius:12px; box-shadow:var(--shadow-md); }
+.client-actions { display:flex; justify-content:center; gap:4px; flex-wrap:nowrap; }
+.client-actions .btn { min-width:34px; }
+.client-name-cell { min-width:170px; }
+.client-name-cell .client-name { font-weight:850; color:var(--text); }
+.client-name-cell .client-sub { margin-top:2px; font-family:var(--mono); font-size:10px; color:var(--text3); }
+.new-service-shell .svc-edit-section { background:#fff; }
+.new-service-shell #ns-client-suggestions {
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:#fff;
+  box-shadow:var(--shadow-md);
+  padding:6px;
+}
+@media(max-width:1100px) {
+  .ui-filter-panel { grid-template-columns:1fr 1fr; }
+  .clients-filter-panel { grid-template-columns:1fr 1fr; }
+  .ui-count-pill { justify-self:start; }
+}
+@media(max-width:760px) {
+  .ui-page-head { padding:14px; }
+  .ui-page-actions { width:100%; justify-content:stretch; }
+  .ui-page-actions > * { flex:1; }
+  .ui-segmented { flex-basis:100%; }
+  .ui-segmented .topbar-btn { flex:1; justify-content:center; }
+  .ui-filter-panel { grid-template-columns:1fr; padding:10px; }
+  .clients-filter-panel { grid-template-columns:1fr; }
+  .ui-count-pill { width:max-content; }
+}
+
 /* ─── AGENDA KANBAN ───────────────────────────── */
 .kanban { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
 .kan-col { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
@@ -2986,14 +3135,15 @@ async function carregarVeiculos(){
 
     <!-- ═══ AGENDA ═══ -->
     <div id="page-agenda" class="page">
-      <div class="flex ic sb mb3">
+      <div class="ui-page-head">
         <div>
+          <div class="ui-page-kicker">Planejamento operacional</div>
           <div class="section-title">Agenda de Serviços</div>
           <div class="section-sub" id="ag-subtitle">Ano inteiro 2026 · dados da planilha Cronograma</div>
         </div>
-        <div class="flex gap2" style="align-items:center">
+        <div class="ui-page-actions">
           <!-- Toggle lista/kanban/data -->
-          <div style="display:flex;gap:0;border:1px solid var(--border2);border-radius:var(--r2);overflow:hidden">
+          <div class="ui-segmented">
             <button id="ag-view-list"  class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('lista')">☰ Lista</button>
             <button id="ag-view-board" class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('kanban')">⊞ Quadro</button>
             <button id="ag-view-data"  class="topbar-btn" style="border:none;border-radius:0;background:var(--blue);color:white" onclick="agSetView('data')">📅 Por Data</button>
@@ -3001,7 +3151,7 @@ async function carregarVeiculos(){
           <button class="btn btn-primary btn-sm" onclick="openNewSvc()">+ Novo Serviço</button>
         </div>
       </div>
-      <div class="filter-bar">
+      <div class="filter-bar ui-filter-panel">
         <input class="finput" id="ag-search" placeholder="🔍  Buscar cliente, endereço..." oninput="renderAgenda()">
         <button class="ag-filter-toggle" id="ag-filter-toggle" onclick="agToggleFilters()">🔽 Filtros <span id="ag-filter-badge"></span></button>
         <div class="ag-filter-fields" id="ag-filter-fields" style="display:contents">
@@ -3052,12 +3202,12 @@ async function carregarVeiculos(){
           <option value="DEZ">Dezembro</option>
         </select>
         </div>
-        <div class="text-muted" id="ag-count"></div>
+        <div class="text-muted ui-count-pill" id="ag-count"></div>
       </div>
 
       <!-- Vista lista -->
       <div id="ag-lista-view" style="display:none">
-        <div class="tbl-wrap">
+        <div class="tbl-wrap ui-table-card">
           <table>
             <thead>
               <tr><th>#</th><th>Data</th><th>Dia</th><th>Tipo</th><th>Cliente</th><th>Endereço</th><th>Horário</th><th>Equipe</th><th>Status</th><th>Ações</th></tr>
@@ -3512,12 +3662,18 @@ async function carregarVeiculos(){
 
     <!-- ═══ CLIENTES ═══ -->
     <div id="page-clientes" class="page">
-      <div class="flex ic sb mb4">
-        <div><div class="section-title">Clientes</div><div class="section-sub">Cadastro com deduplicação automática</div></div>
-        <button class="btn btn-primary btn-sm" onclick="openClientModal()">➕ Novo Cliente</button>
-        <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Gerenciar Duplicatas</button>
+      <div class="ui-page-head">
+        <div>
+          <div class="ui-page-kicker">Relacionamento e contratos</div>
+          <div class="section-title">Clientes</div>
+          <div class="section-sub">Cadastro, contratos, deduplicação e histórico operacional</div>
+        </div>
+        <div class="ui-page-actions">
+          <button class="btn btn-primary btn-sm" onclick="openClientModal()">➕ Novo Cliente</button>
+          <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Gerenciar Duplicatas</button>
+        </div>
       </div>
-      <div class="filter-bar">
+      <div class="filter-bar ui-filter-panel clients-filter-panel">
         <input class="finput" id="cli-search" placeholder="🔍  Buscar por nome, telefone ou endereço..." oninput="clientesResetPage()">
         <select class="fsel" id="cli-categoria-filter" onchange="renderClientes()">
           <option value="">Todas as categorias</option>
@@ -3565,7 +3721,7 @@ async function carregarVeiculos(){
           <option value="ativos">Somente ativos</option>
           <option value="todos">Incluir históricos/inativos</option>
         </select>
-        <div class="text-muted" id="cli-count"></div>
+        <div class="text-muted ui-count-pill" id="cli-count"></div>
       </div>
       <div class="flex ic sb mb2" style="gap:10px;flex-wrap:wrap">
         <div class="text-muted" id="cli-page-info">Página 1</div>
@@ -3574,7 +3730,7 @@ async function carregarVeiculos(){
           <button class="btn btn-ghost btn-sm" id="cli-next-page" onclick="clientesGoPage(1)">Próxima</button>
         </div>
       </div>
-      <div class="tbl-wrap"><table>
+      <div class="tbl-wrap ui-table-card"><table>
         <thead><tr><th>#</th><th>Cliente</th><th>Telefone</th><th>Endereço</th><th>Tipo</th><th>Status</th><th>Prior.</th><th>Local</th><th>Recorr.</th><th>Último</th><th>Ações</th></tr></thead>
         <tbody id="cli-tbody"></tbody>
       </table></div>
@@ -7080,7 +7236,7 @@ function renderTiposCheckbox(selected = [], containerId = 'tipos-container'){
 
   container.innerHTML = tipos.map(t => {
     const meta = TIPO_SERVICO[t.sigla] || TIPO_SERVICO.OUTRO;
-    if (containerId === 'ed-tipos-container') {
+    if (containerId === 'ed-tipos-container' || containerId === 'ns-tipos-container') {
       return `
         <label class="svc-edit-type-option">
           <input type="checkbox" value="${sanitize(t.sigla)}"
@@ -7828,6 +7984,18 @@ function renderAgenda() {
   // ── Lista ──────────────────────────────────────────────────
   const tbody = document.getElementById('agenda-tbody');
   const today2 = new Date().toISOString().split('T')[0];
+  if (!svcs.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10">
+          <div class="ui-empty-state">
+            <div class="ui-empty-title">Nenhum serviço encontrado</div>
+            <div>Ajuste os filtros ou cadastre um novo serviço para este período.</div>
+          </div>
+        </td>
+      </tr>`;
+    return;
+  }
   tbody.innerHTML = svcs.map(s => {
     const stKey   = s.status||s.st||'agendado';
     const st      = ST_META[stKey]||{label:stKey,chip:'chip-gray'};
@@ -11291,7 +11459,7 @@ async function renderClientes(){
     const statusFilter = (document.getElementById('cli-status-filter')?.value||'').trim();
     const prioridadeFilter = (document.getElementById('cli-prioridade-filter')?.value||'').trim();
     const ativoFilter = (document.getElementById('cli-ativo-filter')?.value||'ativos').trim();
-    
+
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (ativoFilter === 'todos') params.set('include_inactive', 'true');
@@ -11314,9 +11482,9 @@ async function renderClientes(){
     if (recorrenteFilter) filtered = filtered.filter(c => String(!!c.cliente_recorrente) === recorrenteFilter);
     if (statusFilter) filtered = filtered.filter(c => c.status_operacional === statusFilter);
     if (prioridadeFilter) filtered = filtered.filter(c => c.prioridade === prioridadeFilter);
-    if (search) filtered = filtered.filter(c => c.nome.toLowerCase().includes(search) || (c.telefone||'').includes(search) || (c.endereco||'').toLowerCase().includes(search) || (c.endereco_completo||'').toLowerCase().includes(search));
+    if (search) filtered = filtered.filter(c => (c.nome||'').toLowerCase().includes(search) || (c.telefone||'').includes(search) || (c.endereco||'').toLowerCase().includes(search) || (c.endereco_completo||'').toLowerCase().includes(search));
     
-    filtered.sort((a,b) => a.nome.localeCompare(b.nome));
+    filtered.sort((a,b) => (a.nome||'').localeCompare(b.nome||''));
     
     const totalPages = Math.max(Math.ceil(clientesTotal / clientesPageSize), 1);
     document.getElementById('cli-count').textContent = `${filtered.length} nesta página · ${clientesTotal} total`;
@@ -11327,7 +11495,21 @@ async function renderClientes(){
     if (prevBtn) prevBtn.disabled = clientesPage <= 1;
     if (nextBtn) nextBtn.disabled = clientesPage >= totalPages;
     
-    document.getElementById('cli-tbody').innerHTML = filtered.map((c,i) => {
+    const tbody = document.getElementById('cli-tbody');
+    if (!filtered.length) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="11">
+            <div class="ui-empty-state">
+              <div class="ui-empty-title">Nenhum cliente encontrado</div>
+              <div>Ajuste a busca ou os filtros para localizar o cadastro.</div>
+            </div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((c,i) => {
       const tipoChip = c.tipo === 'PJ' ? '<span class="chip chip-blue">PJ</span>' : '<span class="chip chip-cyan">PF</span>';
       const categoriaChip = c.tipo_cliente
         ? (c.tipo_cliente === 'Contrato' ? '<span class="chip chip-green">Contrato</span>' : `<span class="chip chip-gray">${sanitize(c.tipo_cliente)}</span>`)
@@ -11335,32 +11517,49 @@ async function renderClientes(){
       const statusText = c.status_operacional || (c.ativo === false ? 'Historico/Inativo' : '—');
       const statusClass = ['Ativo','A renovar','Eventual recente'].includes(statusText) ? 'chip-green' : (['Vencido','Cancelado','Historico/Inativo'].includes(statusText) ? 'chip-orange' : 'chip-gray');
       const prioridadeClass = c.prioridade === 'Alta' ? 'chip-red' : (c.prioridade === 'Baixa' ? 'chip-gray' : 'chip-orange');
-      const localChip = c.tipo_local ? `<span class="chip chip-slate">${c.tipo_local}</span>` : '—';
+      const localChip = c.tipo_local ? `<span class="chip chip-slate">${sanitize(c.tipo_local)}</span>` : '—';
       const recorrenteChip = c.cliente_recorrente ? '<span class="chip chip-green">Sim</span>' : '<span class="chip chip-gray">Não</span>';
       const ultimoServico = c.data_ultimo_servico ? c.data_ultimo_servico.slice(0, 10) : '—';
+      const nome = c.nome || 'Cliente sem nome';
+      const telefone = c.telefone || c.whatsapp || '—';
+      const endereco = c.endereco || c.endereco_completo || '';
+      const enderecoCurto = endereco ? `${sanitize(endereco.substring(0,42))}${endereco.length > 42 ? '...' : ''}` : '—';
       
       return `<tr>
         <td class="mono" style="color:var(--text3)">${i+1}</td>
-        <td class="bold">${c.nome}</td>
-        <td class="mono">${c.telefone || '—'}</td>
-        <td style="font-size:12px;color:var(--text2)">${c.endereco ? c.endereco.substring(0,35) + (c.endereco.length > 35 ? '...' : '') : '—'}</td>
+        <td class="client-name-cell">
+          <div class="client-name">${sanitize(nome)}</div>
+          <div class="client-sub">ID ${sanitize(c.id || '—')}</div>
+        </td>
+        <td class="mono">${sanitize(telefone)}</td>
+        <td style="font-size:12px;color:var(--text2)" title="${escapeHtmlAttr(endereco)}">${enderecoCurto}</td>
         <td>${categoriaChip} ${tipoChip}</td>
         <td><span class="chip ${statusClass}">${sanitize(statusText)}</span></td>
         <td>${c.prioridade ? `<span class="chip ${prioridadeClass}">${sanitize(c.prioridade)}</span>` : '—'}</td>
         <td>${localChip}</td>
         <td style="text-align:center">${recorrenteChip}</td>
         <td>${ultimoServico}</td>
-        <td style="text-align:center;gap:4px;display:flex;justify-content:center">
-          <button class="btn btn-ghost btn-xs" onclick="openServiceFromClient(${c.id})" style="padding:4px 8px;font-size:11px" title="Criar serviço para este cliente">➕</button>
-          <button class="btn btn-ghost btn-xs" onclick="openClientModal(${c.id})" style="padding:4px 8px;font-size:11px">✏️</button>
-          <button class="btn btn-ghost btn-xs" onclick="deleteClientDirectly(${c.id})" style="padding:4px 8px;font-size:11px">🗑️</button>
+        <td>
+          <div class="client-actions">
+            <button class="btn btn-ghost btn-xs" onclick="openServiceFromClient(${jsArg(c.id)})" style="padding:4px 8px;font-size:11px" title="Criar serviço para este cliente">➕</button>
+            <button class="btn btn-ghost btn-xs" onclick="openClientModal(${jsArg(c.id)})" style="padding:4px 8px;font-size:11px" title="Editar cliente">✏️</button>
+            <button class="btn btn-ghost btn-xs" onclick="deleteClientDirectly(${jsArg(c.id)})" style="padding:4px 8px;font-size:11px" title="Remover cliente">🗑️</button>
+          </div>
         </td>
       </tr>`;
     }).join('');
     
   } catch (error) {
     console.error('Erro renderClientes:', error);
-    document.getElementById('cli-tbody').innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red)">Erro ao carregar clientes: ${error.message}</td></tr>`;
+    document.getElementById('cli-tbody').innerHTML = `
+      <tr>
+        <td colspan="11">
+          <div class="ui-empty-state" style="border-color:rgba(220,38,38,.32);background:#fef2f2;color:#991b1b">
+            <div class="ui-empty-title" style="color:#991b1b">Erro ao carregar clientes</div>
+            <div>${sanitize(error.message)}</div>
+          </div>
+        </td>
+      </tr>`;
   }
 }
 
@@ -12655,48 +12854,110 @@ function openNewSvc(initialData = {}){
     endereco: initialData.endereco || '',
     focarData: !!initialData.focarData
   };
+  const modal = document.getElementById('modal');
+  modal.classList.remove('day-detail-modal','changelog-modal','diagnostics-modal');
+  modal.classList.add('svc-edit-modal');
   document.getElementById('modal-title').textContent='+ Novo Serviço';
   document.getElementById('modal-body').innerHTML=`
-    <div class="form-row fr-2 mb3">
-      <div class="field"><label>Data</label><input type="date" id="ns-dt" value="${defaults.data}"></div>
-      <div class="field"><label>Horário</label><input type="time" id="ns-hr"></div>
-    </div>
-    <div class="form-row mb3">
-      <div class="field">
-        <label>Buscar cliente cadastrado</label>
-        <input type="search" id="ns-client-search" class="finput" placeholder="Digite 3 letras para buscar..." oninput="buscarClienteServicoAutocomplete('ns')" autocomplete="off">
-        <input type="hidden" id="ns-client-select" value="${escapeHtmlAttr(defaults.clientId)}">
-        <div id="ns-client-suggestions" style="margin-top:6px;display:none"></div>
-        <div id="ns-client-hint" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Busque um cliente para preencher e vincular automaticamente.</div>
+    <div class="svc-edit-shell new-service-shell">
+      <div class="svc-edit-header">
+        <div class="svc-edit-title-row">
+          <div class="svc-edit-title-wrap">
+            <div class="svc-edit-icon">+</div>
+            <div>
+              <div class="svc-edit-title">Novo Serviço</div>
+              <div class="svc-edit-subtitle">Cadastre data, cliente, equipe e serviço em um fluxo único.</div>
+            </div>
+          </div>
+          <button type="button" class="svc-edit-btn secondary" onclick="closeModal()">Fechar</button>
+        </div>
+      </div>
+
+      <div class="svc-edit-body">
+        <div class="svc-edit-summary">
+          <div>
+            <div class="svc-edit-summary-name">${sanitize(defaults.cliente || 'Novo atendimento')}</div>
+            <div class="svc-edit-summary-meta">${sanitize(defaults.data)} · cliente e endereço serão vinculados ao salvar</div>
+            <div class="svc-edit-summary-address">${sanitize(defaults.endereco || 'Endereço ainda não informado')}</div>
+          </div>
+          <span class="svc-status-badge st-agendado">Agendado</span>
+        </div>
+
+        <div class="svc-edit-content">
+          <section class="svc-edit-section">
+            <div class="svc-edit-section-head">
+              <div class="svc-edit-section-title">Dados essenciais</div>
+              <div class="svc-edit-section-desc">Preencha primeiro data, cliente e endereço para evitar serviço solto.</div>
+            </div>
+            <div class="svc-edit-grid">
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Data</label>
+                <input type="date" id="ns-dt" value="${escapeHtmlAttr(defaults.data)}">
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Horário</label>
+                <input type="time" id="ns-hr">
+              </div>
+              <div class="svc-edit-field full">
+                <label class="svc-edit-label">Buscar cliente cadastrado</label>
+                <input type="search" id="ns-client-search" class="finput" placeholder="Digite 3 letras para buscar e vincular..." oninput="buscarClienteServicoAutocomplete('ns')" autocomplete="off">
+                <input type="hidden" id="ns-client-select" value="${escapeHtmlAttr(defaults.clientId)}">
+                <div id="ns-client-suggestions" style="margin-top:6px;display:none"></div>
+                <div id="ns-client-hint" class="svc-edit-help">Selecione o cliente no autocomplete quando ele já existir. Se não existir, o sistema cria o cadastro junto com o serviço.</div>
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Cliente / Condomínio</label>
+                <input type="text" id="ns-cl" value="${escapeHtmlAttr(defaults.cliente)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Nome do cliente" oninput="onNovoServicoClienteManualInput()">
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Endereço completo</label>
+                <input type="text" id="ns-end" value="${escapeHtmlAttr(defaults.endereco)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo">
+              </div>
+            </div>
+          </section>
+
+          <section class="svc-edit-section">
+            <div class="svc-edit-section-head">
+              <div class="svc-edit-section-title">Execução</div>
+              <div class="svc-edit-section-desc">Defina tipo de serviço, técnicos e veículo da operação.</div>
+            </div>
+            <div class="svc-edit-grid">
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Tipo(s) de Serviço</label>
+                <div id="ns-tipos-container" class="svc-edit-type-grid"></div>
+                <div id="ns-tipos-preview" class="svc-edit-preview">Nenhum tipo selecionado</div>
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Técnicos</label>
+                <div id="ns-tecnicos-container" class="tecnicos-container svc-edit-checklist"></div>
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Veículo</label>
+                <select id="ns-vei">${getVeiculosOptions()}</select>
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">OS (Ordem de Serviço)</label>
+                <input type="text" id="ns-os" placeholder="Ex: 1659">
+              </div>
+              <div class="svc-edit-field full">
+                <label class="svc-edit-label">Observações</label>
+                <textarea id="ns-obs" rows="3" placeholder="Observações importantes para a equipe..."></textarea>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="svc-edit-footer">
+        <button type="button" class="svc-edit-btn secondary" onclick="closeModal()">Cancelar</button>
+        <span class="svc-edit-footer-spacer"></span>
+        <button type="button" class="svc-edit-btn primary" onclick="confirmNewSvc()">Salvar Serviço</button>
       </div>
     </div>
-    <div class="form-row mb3">
-      <div class="field"><label>Cliente / Condomínio</label><input type="text" id="ns-cl" value="${sanitize(defaults.cliente)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Nome do cliente" oninput="onNovoServicoClienteManualInput()"></div>
-    </div>
-    <div class="form-row mb3">
-      <div class="field"><label>Endereço completo</label><input type="text" id="ns-end" value="${sanitize(defaults.endereco)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo"></div>
-    </div>
-    <div class="form-row fr-2 mb3">
-      <div class="field"><label>Tipo(s) de Serviço</label>
-        <div id="ns-tipos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
-        <div id="ns-tipos-preview" style="margin-top:5px;font-size:10px;color:var(--text3);font-family:var(--mono)">Nenhum tipo selecionado</div>
-      </div>
-      <div class="field"><label>Técnicos</label><div id="ns-tecnicos-container" class="tecnicos-container" style="border:1px solid var(--border2);border-radius:var(--r2);padding:8px 10px;background:var(--bg2);max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div></div>
-    </div>
-    <div class="form-row fr-2 mb3">
-      <div class="field"><label>Veículo</label>
-        <select id="ns-vei">${getVeiculosOptions()}</select>
-      </div>
-      <div class="field"><label>OS (Ordem de Serviço)</label><input type="text" id="ns-os" placeholder="Ex: 1659"></div>
-    </div>
-    <div class="form-row mb3">
-      <div class="field"><label>Observações</label><textarea id="ns-obs" rows="2" placeholder="Observações..."></textarea></div>
-    </div>
-    <button class="btn btn-primary btn-sm" onclick="confirmNewSvc()">Salvar Serviço</button>
   `;
   document.getElementById('modal-del').style.display='none';
   currentDelId=null;
-  document.getElementById('modal').classList.add('open');
+  modal.classList.add('open');
   renderTecnicos([], 'ns-tecnicos-container');
   carregarTecnicos().then(() => renderTecnicos([], 'ns-tecnicos-container'));
   carregarVeiculos().then(() => renderVeiculosSelect('ns-vei'));
