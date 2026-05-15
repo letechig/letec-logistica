@@ -2709,7 +2709,7 @@ async function carregarVeiculos(){
       },
       { op: 'insert', service: queuedService },
       () => rollbackInsertedService(queuedService?.id),
-      { rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true }
+      { rollbackOnOffline: false, rollbackOnFailure: false, rollbackOnValidationFailure: true, queueOnFailure: true }
     );
     return result;
   };
@@ -2726,7 +2726,7 @@ async function carregarVeiculos(){
       },
       { op: 'update', service: queuedService },
       rollbackSnapshot ? () => rollbackUpdatedService(rollbackSnapshot) : null,
-      { rollbackOnOffline: false, rollbackOnFailure: false, queueOnFailure: true }
+      { rollbackOnOffline: false, rollbackOnFailure: false, rollbackOnValidationFailure: true, queueOnFailure: true }
     );
   };
 </script>
@@ -15153,10 +15153,11 @@ function setSyncStatus(status) {
   const el = document.getElementById('sync-indicator');
   if (el) {
     const queueSuffix = offlineQueue.length ? ` · ${offlineQueue.length} pendente(s)` : '';
+    const errorSuffix = offlineQueue.some(item => item && item.blocked) ? ' · erro de sincronização' : '';
     const cacheSuffix = agendaLoadedFromCache ? ' · cache local' : '';
     const apiSuffix = LETEC_BACKEND_CAPABILITIES.checked && LETEC_BACKEND_CAPABILITIES.available === false ? ' · API indisponível' : '';
     const suffix = lastSyncAt ? ` · Última sincronização: ${formatLastSync()}` : '';
-    el.innerHTML = `${status}${queueSuffix}${cacheSuffix}${apiSuffix}${suffix}`;
+    el.innerHTML = `${status}${queueSuffix}${errorSuffix}${cacheSuffix}${apiSuffix}${suffix}`;
   }
 }
 
@@ -15170,6 +15171,9 @@ function setConnectionState(state) {
 function enqueueOffline(item) {
   if (!item) return;
   item.attempts = item.attempts || 0;
+  item.blocked = false;
+  delete item.lastError;
+  delete item.failedAt;
   offlineQueue.push(item);
   saveOfflineQueue();
   toast('⏳ Aguardando conexão...', 'warn');
@@ -15189,6 +15193,9 @@ async function safeSupabaseAction(actionFn, queueItem, rollbackFn, options) {
   const alreadyQueued = !!opts.alreadyQueued;
   const rollbackOnOffline = opts.rollbackOnOffline !== undefined ? opts.rollbackOnOffline : true;
   const rollbackOnFailure = opts.rollbackOnFailure !== undefined ? opts.rollbackOnFailure : true;
+  const rollbackOnValidationFailure = opts.rollbackOnValidationFailure !== undefined
+    ? opts.rollbackOnValidationFailure
+    : rollbackOnFailure;
   const queueOnFailure = opts.queueOnFailure !== undefined ? opts.queueOnFailure : true;
   if (!USAR_SUPABASE) return true; // No-op if disabled
   if (!navigator.onLine) {
@@ -15233,8 +15240,19 @@ async function safeSupabaseAction(actionFn, queueItem, rollbackFn, options) {
         } else {
           console.log('[Supabase] Final failure - non-transient error, not queuing');
           setConnectionState('online'); // Assume online but validation error
-          toast('Erro de validação no servidor - operação local mantida', 'warn');
-          // Do not queue or rollback for validation errors
+          if (queueItem) {
+            queueItem.blocked = true;
+            queueItem.lastError = e.message || 'Erro de validação no servidor';
+            queueItem.failedAt = new Date().toISOString();
+            if (alreadyQueued) saveOfflineQueue();
+          }
+          if (rollbackFn && rollbackOnValidationFailure) rollbackFn();
+          toast(
+            rollbackOnValidationFailure
+              ? `Erro no servidor: ${e.message || 'operação revertida'}`
+              : `Erro no servidor: ${e.message || 'operação local mantida'}`,
+            'err'
+          );
         }
         return false;
       }
@@ -15245,7 +15263,19 @@ async function safeSupabaseAction(actionFn, queueItem, rollbackFn, options) {
         // Non-transient error, fail immediately without retry
         console.log('[Supabase] Non-transient error, failing immediately');
         setConnectionState('online');
-        toast('Erro de validação no servidor - operação local mantida', 'warn');
+        if (queueItem) {
+          queueItem.blocked = true;
+          queueItem.lastError = e.message || 'Erro de validação no servidor';
+          queueItem.failedAt = new Date().toISOString();
+          if (alreadyQueued) saveOfflineQueue();
+        }
+        if (rollbackFn && rollbackOnValidationFailure) rollbackFn();
+        toast(
+          rollbackOnValidationFailure
+            ? `Erro no servidor: ${e.message || 'operação revertida'}`
+            : `Erro no servidor: ${e.message || 'operação local mantida'}`,
+          'err'
+        );
         return false;
       }
     }
@@ -15258,9 +15288,17 @@ async function processOfflineQueue() {
   isProcessingQueue = true;
   setConnectionState('syncing');
   let syncedCount = 0;
+  let inspectedCount = 0;
+  const maxInspect = offlineQueue.length;
 
-  while (offlineQueue.length > 0 && navigator.onLine) {
+  while (offlineQueue.length > 0 && navigator.onLine && inspectedCount < maxInspect) {
     const item = offlineQueue[0];
+    inspectedCount++;
+    if (item?.blocked) {
+      offlineQueue.push(offlineQueue.shift());
+      saveOfflineQueue();
+      continue;
+    }
     try {
       let ok = false;
       if (item.op === 'insert') {
@@ -15283,7 +15321,14 @@ async function processOfflineQueue() {
         saveOfflineQueue();
         continue;
       }
-      if (!ok) break;
+      if (!ok) {
+        if (item?.blocked) {
+          offlineQueue.push(offlineQueue.shift());
+          saveOfflineQueue();
+          continue;
+        }
+        break;
+      }
       offlineQueue.shift();
       syncedCount++;
       saveOfflineQueue();
@@ -15302,6 +15347,8 @@ async function processOfflineQueue() {
 
   if (offlineQueue.length === 0 && navigator.onLine) {
     setConnectionState('online');
+  } else if (offlineQueue.some(item => item && item.blocked)) {
+    setSyncStatus('🟡 Sincronização parcial');
   }
   isProcessingQueue = false;
 }

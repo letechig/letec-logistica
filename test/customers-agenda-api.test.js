@@ -269,6 +269,39 @@ test('POST /api/services salva cliente_id no agendamento', async () => {
   });
 });
 
+test('POST /api/services vincula cliente existente por nome sem duplicar cadastro', async () => {
+  await withServer(async (baseUrl, state) => {
+    const beforeCustomers = state.customers.length;
+    const response = await fetch(`${baseUrl}/api/services`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 100, date: '2026-05-13', cliente: 'Alpha Cliente', endereco: 'Rua A' })
+    });
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.cliente_id, 1);
+    assert.equal(state.customers.length, beforeCustomers);
+    assert.equal(state.services.find(service => service.id === 100).cliente_id, 1);
+  });
+});
+
+test('POST /api/services rejeita cliente ambíguo sem criar serviço ou duplicata', async () => {
+  await withServer(async (baseUrl, state) => {
+    const beforeCustomers = state.customers.length;
+    const beforeServices = state.services.length;
+    const response = await fetch(`${baseUrl}/api/services`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 102, date: '2026-05-13', cliente: 'Beta Cliente' })
+    });
+    assert.equal(response.status, 409);
+    const payload = await response.json();
+    assert.equal(payload.code, 'customer_link_ambiguous');
+    assert.equal(state.customers.length, beforeCustomers);
+    assert.equal(state.services.length, beforeServices);
+  });
+});
+
 test('POST /api/services cria cliente automaticamente quando agenda usa cliente novo', async () => {
   await withServer(async (baseUrl, state) => {
     const response = await fetch(`${baseUrl}/api/services`, {

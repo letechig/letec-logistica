@@ -237,6 +237,14 @@ function areDuplicateCustomers(left, right) {
   return false;
 }
 
+class CustomerLinkError extends Error {
+  constructor(message, statusCode = 409) {
+    super(message);
+    this.name = 'CustomerLinkError';
+    this.statusCode = statusCode;
+  }
+}
+
 function buildCustomerAddress({ rua, numero, bairro, cidade, uf, complemento, referencia }) {
   const parts = [];
   if (rua) parts.push(String(rua).trim());
@@ -1355,14 +1363,52 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}) {
     return { payload: servicePayload, customer: null, created: false };
   }
 
-  const existing = await fetchCustomerForService(db, servicePayload);
-  if (existing?.id) {
-    servicePayload.cliente_id = Number(existing.id);
-    return { payload: servicePayload, customer: existing, created: false };
-  }
-
   const name = String(servicePayload.cliente || '').trim();
   const address = String(servicePayload.endereco || '').trim();
+  const serviceName = normalizeLooseForMatch(name);
+
+  const { data: activeCustomers, error: activeCustomersError } = await db
+    .from('customers')
+    .select('*')
+    .eq('ativo', true)
+    .limit(1000);
+  if (activeCustomersError) throw activeCustomersError;
+
+  const exactMatches = (activeCustomers || [])
+    .filter(customer => normalizeLooseForMatch(customer.nome_normalizado || customer.nome) === serviceName);
+
+  if (exactMatches.length === 1) {
+    servicePayload.cliente_id = Number(exactMatches[0].id);
+    return { payload: servicePayload, customer: exactMatches[0], created: false };
+  }
+
+  if (exactMatches.length > 1) {
+    const serviceAddressFingerprint = buildCustomerAddressFingerprint({ endereco: address });
+    const addressMatches = serviceAddressFingerprint
+      ? exactMatches.filter(customer => buildCustomerAddressFingerprint(customer) === serviceAddressFingerprint)
+      : [];
+
+    if (addressMatches.length === 1) {
+      servicePayload.cliente_id = Number(addressMatches[0].id);
+      return { payload: servicePayload, customer: addressMatches[0], created: false };
+    }
+
+    throw new CustomerLinkError(
+      `Mais de um cliente ativo encontrado para "${name}". Selecione o cliente correto no autocomplete antes de salvar.`
+    );
+  }
+
+  const duplicate = await findDuplicateCustomer({
+    nome: name,
+    endereco: address,
+    endereco_completo: address,
+    db
+  });
+  if (duplicate?.id) {
+    servicePayload.cliente_id = Number(duplicate.id);
+    return { payload: servicePayload, customer: duplicate, created: false };
+  }
+
   const insertPayload = {
     nome: name,
     nome_normalizado: normalizeCustomerName(name),
@@ -1722,6 +1768,16 @@ app.post('/api/services', async (req, res) => {
       customerLink = await ensureCustomerForServicePayload(db, payload);
     } catch (customerError) {
       console.warn('[POST /api/services] Falha ao criar/vincular cliente automaticamente:', customerError.message);
+      if (customerError instanceof CustomerLinkError) {
+        return res.status(customerError.statusCode || 409).json({
+          error: customerError.message,
+          code: 'customer_link_ambiguous'
+        });
+      }
+      return res.status(500).json({
+        error: 'Falha ao criar/vincular cliente do serviço',
+        code: 'customer_link_failed'
+      });
     }
     const { data, error } = await db
       .from('services')
