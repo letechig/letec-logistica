@@ -7106,6 +7106,179 @@ const PAGE_META = {
   config:     { title:'Configurações',        sub:'Gerencie técnicos, veículos e tipos de serviço' }
 };
 
+const PAGE_MODULE_KEY = {
+  dashboard: 'services',
+  agenda: 'services',
+  equipes: 'services',
+  roteiro: 'services',
+  hoje: 'fieldOps',
+  rotas: 'checklists',
+  checklist: 'checklists',
+  historico: 'checklists',
+  frota: 'frota',
+  estoque: 'estoque',
+  comunicacao: 'comunicacao',
+  clientes: 'clientes',
+  revisao: 'revisao',
+  config: 'config'
+};
+
+const MODULE_LOADERS = {
+  services: {
+    label: 'agenda',
+    load: async () => {
+      await carregarCatalogosServico();
+      await carregarServicesDoSupabase();
+    }
+  },
+  fieldOps: {
+    label: 'painel do dia',
+    load: async () => {
+      await carregarCatalogosServico();
+      await carregarServicesDoSupabase();
+      await Promise.allSettled([
+        carregarEventosCampoDoSupabase(),
+        carregarRecadosTecnicosDoSupabase()
+      ]);
+    }
+  },
+  checklists: {
+    label: 'checklists',
+    load: async () => {
+      await carregarChecklistsDoSupabase();
+    }
+  },
+  frota: {
+    label: 'frota',
+    load: async () => {
+      await Promise.allSettled([
+        carregarChecklistsDoSupabase(),
+        carregarFrotaV1()
+      ]);
+    }
+  },
+  estoque: {
+    label: 'estoque',
+    load: async () => {
+      await carregarEstoqueDoSupabase();
+    }
+  },
+  comunicacao: {
+    label: 'comunicação',
+    load: async () => {
+      await renderComunicacaoLogistica(true);
+    }
+  },
+  clientes: {
+    label: 'clientes',
+    load: async () => {
+      await renderClientes();
+    }
+  },
+  revisao: {
+    label: 'revisão de dados',
+    load: async () => {
+      await renderRevisaoDados();
+    }
+  },
+  config: {
+    label: 'configurações',
+    load: async () => {
+      renderConfig();
+    }
+  }
+};
+
+const MODULE_RENDER_OWNS_LOAD = new Set(['comunicacao', 'clientes', 'revisao', 'config']);
+const moduleLoadState = {};
+let idlePreloadScheduled = false;
+
+function markModuleLoaded(key) {
+  if (!key) return;
+  moduleLoadState[key] = {
+    status: 'loaded',
+    promise: null,
+    loadedAt: Date.now(),
+    error: null
+  };
+}
+
+function refreshPageAfterModuleLoad(page) {
+  if (currentPage !== page || MODULE_RENDER_OWNS_LOAD.has(page)) return;
+  const renderers = {
+    dashboard: renderDash,
+    agenda: renderAgenda,
+    hoje: renderHoje,
+    rotas: renderRotas,
+    frota: renderFrota,
+    estoque: renderInventory,
+    equipes: renderEquipes,
+    historico: renderHist,
+    roteiro: rotGerarDoSistema
+  };
+  if (renderers[page]) renderers[page]();
+  updateBadges();
+}
+
+async function ensureModuleLoaded(page, options = {}) {
+  const key = PAGE_MODULE_KEY[page];
+  const loader = key ? MODULE_LOADERS[key] : null;
+  if (!key || !loader) return null;
+
+  const force = !!options.force;
+  const background = !!options.background;
+  const current = moduleLoadState[key] || { status: 'idle', promise: null };
+  if (!force && current.status === 'loaded') return current;
+  if (!force && current.status === 'loading' && current.promise) return current.promise;
+
+  if (!background) setSyncStatus(`🔄 Carregando ${loader.label}...`);
+
+  const promise = Promise.resolve()
+    .then(() => loader.load({ page, force, background }))
+    .then(result => {
+      markModuleLoaded(key);
+      refreshPageAfterModuleLoad(page);
+      if (!background && navigator.onLine && !offlineQueue.length) setConnectionState('online');
+      return result;
+    })
+    .catch(error => {
+      moduleLoadState[key] = {
+        status: 'error',
+        promise: null,
+        loadedAt: current.loadedAt || null,
+        error
+      };
+      if (!background) {
+        console.warn(`[LazyLoad] Falha ao carregar ${loader.label}:`, error.message || error);
+        setSyncStatus(`⚠️ ${loader.label} indisponível`);
+      }
+      throw error;
+    });
+
+  moduleLoadState[key] = {
+    status: 'loading',
+    promise,
+    loadedAt: current.loadedAt || null,
+    error: null
+  };
+  return promise;
+}
+
+function scheduleIdleModulePreload() {
+  if (idlePreloadScheduled) return;
+  idlePreloadScheduled = true;
+  const run = () => {
+    if (!navigator.onLine) return;
+    if (LETEC_BACKEND_CAPABILITIES.checked && LETEC_BACKEND_CAPABILITIES.available === false) return;
+    ensureModuleLoaded('historico', { background: true }).catch(() => {});
+  };
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(run, { timeout: 6000 });
+  } else {
+    setTimeout(run, 5000);
+  }
+}
+
 window.nav = function(page, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -7121,10 +7294,9 @@ window.nav = function(page, btn) {
   document.getElementById('page-sub').textContent   = meta.sub   || '';
   currentPage = page;
   try { localStorage.setItem(CURRENT_PAGE_PREF_KEY, page); } catch(e) {}
-  // Para agenda: carrega dados do Supabase antes de renderizar
-  const renderAgendaComDados = async () => { await getServices(); renderAgenda(); };
-  const renders = { dashboard: renderDash, agenda: renderAgendaComDados, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, clientes: renderClientes, revisao: renderRevisaoDados, historico: renderHist, roteiro: rotGerarDoSistema, comunicacao: renderComunicacaoLogistica, config: renderConfig };
+  const renders = { dashboard: renderDash, agenda: renderAgenda, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, historico: renderHist, roteiro: rotGerarDoSistema };
   if (renders[page]) renders[page]();
+  ensureModuleLoaded(page).catch(() => {});
   updateBadges();
 }
 
@@ -16312,15 +16484,12 @@ window.addEventListener('load', async () => {
   listenSupabase();
   await carregarCatalogosServico();
   await carregarServicesDoSupabase();
-  await carregarChecklistsDoSupabase();
-  await carregarEventosCampoDoSupabase();
-  await carregarRecadosTecnicosDoSupabase();
-  await carregarEstoqueDoSupabase();
-  await carregarFrotaV1();
+  markModuleLoaded('services');
   processOfflineQueue();
   if (!_supabaseLastRemoteLoadFailed && navigator.onLine) setConnectionState('online');
   prepareFieldOpsAudioAfterReload();
   nav(currentPage, null);
+  scheduleIdleModulePreload();
   if (!window._fieldOpsPolling) {
     window._fieldOpsPolling = setInterval(pollFieldOpsUpdates, FIELD_OPS_POLL_INTERVAL_MS);
   }
