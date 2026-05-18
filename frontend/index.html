@@ -13050,7 +13050,13 @@ async function geocodeClientAddress() {
     suggestionsDiv.style.display = 'block';
     
     const response = await fetch(`${API_BASE_URL}/api/geocode?address=${encodeURIComponent(endereco)}`);
-    const data = await response.json();
+    const responseText = await response.text();
+    let data = {};
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      data = { error: responseText || `Resposta inválida da API (${response.status})` };
+    }
     
     if (!response.ok) {
       if (data.suggestions && data.suggestions.length > 0) {
@@ -13063,7 +13069,10 @@ async function geocodeClientAddress() {
           `).join('')}
         `;
       } else {
-        suggestionsDiv.innerHTML = `<div style="font-size:12px;color:var(--red)">❌ ${data.error}</div>`;
+        const message = response.status === 429
+          ? 'Muitas validações em pouco tempo. Aguarde alguns minutos e tente novamente.'
+          : (data.error || `Erro ${response.status} ao buscar endereço`);
+        suggestionsDiv.innerHTML = `<div style="font-size:12px;color:var(--red)">❌ ${sanitize(message)}</div>`;
       }
       return;
     }

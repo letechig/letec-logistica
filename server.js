@@ -10,6 +10,7 @@ const { validateService, buildDayRoutes } = require('./src/logistics/engine');
 require('dotenv').config();
 
 const app = express();
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 const PORT = process.env.PORT || 8000;
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
 const EVOLUTION_SEND_DELAY_MS = Number(process.env.EVOLUTION_SEND_DELAY_MS || 1200);
@@ -31,11 +32,21 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
+function rateLimitJsonHandler(message, code) {
+  return (req, res, next, options = {}) => {
+    res.status(options.statusCode || 429).json({
+      error: message,
+      code
+    });
+  };
+}
+
 // Rate limiting middleware
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 100,                   // limit each IP to 100 requests per windowMs
+  max: Number(process.env.GLOBAL_RATE_LIMIT_MAX || 600),
   message: 'Muitas requisições deste endereço IP, tente novamente mais tarde',
+  handler: rateLimitJsonHandler('Muitas requisições deste endereço IP, tente novamente mais tarde', 'rate_limited'),
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.path === '/api/health'  // Allow health checks
@@ -43,8 +54,9 @@ const globalLimiter = rateLimit({
 
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 30,                    // limit each IP to 30 requests for write operations
+  max: Number(process.env.STRICT_RATE_LIMIT_MAX || 60),
   message: 'Muitas requisições de escrita, tente novamente em alguns minutos',
+  handler: rateLimitJsonHandler('Muitas requisições de escrita, tente novamente em alguns minutos', 'write_rate_limited'),
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -3524,7 +3536,24 @@ app.get('/api/geocode', async (req, res) => {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${apiKey}&region=br&language=pt-BR`;
     
     const response = await fetch(url);
-    const data = await response.json();
+    const responseText = await response.text();
+    let data = {};
+    if (responseText) {
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        return res.status(502).json({
+          error: 'Resposta inválida do Google Maps',
+          details: responseText.slice(0, 120)
+        });
+      }
+    }
+    if (!response.ok) {
+      return res.status(502).json({
+        error: 'Falha ao consultar Google Maps',
+        details: data.error_message || data.status || `HTTP ${response.status}`
+      });
+    }
     
     if (data.status !== 'OK') {
       return res.status(400).json({ 
