@@ -2124,6 +2124,149 @@ td.bold { color: var(--text); font-weight: 600; }
   .fleet-actions .btn { flex:1; }
 }
 
+/* ─── QA VISUAL V1 ────────────────────────────── */
+.content,
+.card,
+.ui-page-head,
+.ui-filter-panel,
+.ui-table-card,
+.fleet-section-card,
+.fleet-detail-card,
+.fleet-history-card,
+.com-status-card,
+.dash-v2-panel,
+.svc-card,
+.client-modal-shell,
+.modal,
+.logistica-modal { min-width:0; }
+.ui-page-head > div:first-child,
+.ui-subsection-head > div:first-child { min-width:0; }
+.ui-page-actions .btn,
+.ui-page-actions .fsel,
+.ui-page-actions .finput,
+.fleet-actions .btn,
+.client-actions .btn { min-height:38px; }
+.tbl-wrap,
+.ui-table-card {
+  max-width:100%;
+  scrollbar-width:thin;
+}
+.ui-table-card th,
+.ui-table-card td,
+.tbl-wrap th,
+.tbl-wrap td { vertical-align:top; }
+.ui-table-card td,
+.tbl-wrap td,
+.ui-empty-state,
+.fleet-mini-panel,
+.com-msg-preview,
+.diagnostics-card { overflow-wrap:anywhere; }
+.ui-table-card .btn,
+.tbl-wrap .btn { white-space:nowrap; }
+.chip,
+.ui-status-note,
+.ui-count-pill { max-width:100%; }
+.finput,
+.fsel,
+textarea { max-width:100%; }
+.client-actions { align-items:center; }
+.com-msg-preview { min-width:220px; }
+.fleet-alert-summary { min-width:190px; }
+.fleet-detail-card .tbl-wrap,
+.fleet-section-card .tbl-wrap { margin-top:10px; }
+.svc-card-actions,
+.dash-op-actions,
+.button-row { min-width:0; }
+@media(max-width:900px) {
+  .ui-page-actions { justify-content:flex-start; }
+  .dash-v2-analytics,
+  .grid-kpi,
+  .com-kpis,
+  .fleet-kpi-strip { gap:10px; }
+}
+@media(max-width:760px) {
+  .ui-page-head {
+    align-items:stretch;
+    gap:12px;
+  }
+  .ui-page-head .section-title {
+    font-size:20px;
+    line-height:1.15;
+  }
+  .ui-page-actions {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  }
+  .ui-page-actions > *,
+  .ui-page-actions .btn,
+  .ui-page-actions .fsel,
+  .ui-page-actions .finput {
+    width:100%;
+    min-width:0;
+  }
+  .ui-segmented { grid-column:1/-1; }
+  .ui-filter-panel { gap:8px; }
+  .ui-table-card { border-radius:12px; }
+  .ui-table-card table,
+  .tbl-wrap table { min-width:720px; }
+  .client-actions {
+    justify-content:flex-start;
+    flex-wrap:wrap;
+  }
+  .com-msg-preview { max-width:none; }
+  .fleet-alert-summary { min-width:220px; }
+  .fleet-detail-grid { gap:10px; }
+  .modal .flex.gap2,
+  .client-modal-footer,
+  .logistica-modal-actions { gap:8px; }
+}
+@media(max-width:480px) {
+  .main { padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px)) !important; }
+  .mob-bottom-nav {
+    height:calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+    align-items:flex-start;
+  }
+  .mob-nav-item {
+    min-height:58px;
+    padding-top:10px;
+  }
+  .content { padding:10px; }
+  .ui-page-head {
+    padding:13px;
+    border-radius:14px;
+    margin-bottom:12px;
+  }
+  .ui-page-actions { grid-template-columns:1fr; }
+  .ui-page-actions .btn,
+  .ui-page-actions .fsel,
+  .ui-page-actions .finput { min-height:42px; }
+  .ui-filter-panel,
+  .fleet-section-card,
+  .fleet-detail-card,
+  .fleet-history-card,
+  .com-status-card { border-radius:14px; }
+  .ui-empty-state { padding:18px 14px; }
+  .ui-table-card,
+  .tbl-wrap {
+    margin-left:-2px;
+    margin-right:-2px;
+    border-radius:12px;
+  }
+  .btn { min-height:38px; }
+  .chip { white-space:normal; }
+  .modal { max-height:calc(94dvh - env(safe-area-inset-bottom, 0px)) !important; }
+  .client-modal-footer .btn,
+  .logistica-modal-actions .btn,
+  .diagnostics-actions .btn { flex:1 1 150px; }
+  .fleet-actions .btn { flex:1 1 140px; }
+}
+@media(max-width:360px) {
+  .topbar-title { font-size:13px; }
+  .mob-nav-item .mob-label { font-size:8px; }
+  .ui-page-head .section-title { font-size:18px; }
+}
+
 /* ─── AGENDA KANBAN ───────────────────────────── */
 .kanban { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
 .kan-col { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
