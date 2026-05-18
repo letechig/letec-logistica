@@ -114,9 +114,17 @@ function mapContractStatus(value) {
 
 function mapEventualStatus(row) {
   const year = getYear(row.ultima_execucao_identificada);
-  if (year === 2026) return 'Eventual recente';
-  if (year === 2025) return 'Eventual antigo';
-  return 'Historico/Inativo';
+  if (year === 2026 || year === 2025) return 'Eventual';
+  return 'Inativo';
+}
+
+function mapPriority(value, fallback) {
+  const raw = clean(value) || fallback || null;
+  const key = normalizeLoose(raw);
+  if (key === 'ALTA') return 'Alta';
+  if (key === 'MEDIA') return 'Média';
+  if (key === 'BAIXA') return 'Baixa';
+  return raw;
 }
 
 function shouldBeActive(row, source) {
@@ -135,7 +143,7 @@ function customerPayload(row, source) {
   const periodicidade = isContract ? mapPeriodicidade(row.periodicidade_indicada) : null;
   const prioridade = isContract && ['Ativo', 'A renovar'].includes(statusOperacional)
     ? 'Alta'
-    : (clean(row.prioridade_sugerida) || (isContract ? 'Alta' : 'Media'));
+    : mapPriority(row.prioridade_sugerida, isContract ? 'Alta' : 'Média');
 
   return {
     nome: clean(row.cliente_oficial) || clean(row.nome_id),

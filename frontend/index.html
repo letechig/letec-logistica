@@ -2340,7 +2340,20 @@ textarea { max-width:100%; }
   transition: color .15s;
   position: relative;
 }
-.mob-nav-item .mob-ico { font-size: 20px; line-height: 1; }
+.mob-nav-item .mob-ico {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.mob-nav-item .mob-ico svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex-shrink: 0;
+}
 .mob-nav-item.active { color: var(--blue2); }
 .mob-nav-item.active::before {
   content:'';
@@ -3322,21 +3335,21 @@ async function carregarVeiculos(){
 <!-- ═══ BOTTOM NAV (mobile) ════════════════════ -->
 <nav class="mob-bottom-nav" id="mob-bottom-nav">
   <button class="mob-nav-item active" id="mn-dashboard" onclick="mobNav('dashboard',this)">
-    <span class="mob-ico">📊</span><span class="mob-label">Início</span>
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg></span><span class="mob-label">Início</span>
   </button>
   <button class="mob-nav-item" id="mn-agenda" onclick="mobNav('agenda',this)">
-    <span class="mob-ico">📅</span><span class="mob-label">Agenda</span>
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg></span><span class="mob-label">Agenda</span>
     <span class="mob-badge" id="mn-badge-agenda"></span>
   </button>
   <button class="mob-nav-item" id="mn-hoje" onclick="mobNav('hoje',this)">
-    <span class="mob-ico">🗓</span><span class="mob-label">Hoje</span>
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg></span><span class="mob-label">Hoje</span>
     <span class="mob-badge" id="mn-badge-hoje"></span>
   </button>
   <button class="mob-nav-item" id="mn-roteiro" onclick="mobNav('roteiro',this)">
-    <span class="mob-ico">📱</span><span class="mob-label">Roteiro</span>
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg></span><span class="mob-label">Roteiro</span>
   </button>
   <button class="mob-nav-item" id="mn-rotas" onclick="mobNav('rotas',this)">
-    <span class="mob-ico">🗺</span><span class="mob-label">Rotas</span>
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon><path d="M9 3v15"></path><path d="M15 6v15"></path></svg></span><span class="mob-label">Rotas</span>
   </button>
 </nav>
 
@@ -4047,16 +4060,13 @@ async function carregarVeiculos(){
           <option value="Ativo">Ativo</option>
           <option value="A renovar">A renovar</option>
           <option value="Vencido">Vencido</option>
-          <option value="Cancelado">Cancelado</option>
-          <option value="Eventual recente">Eventual recente</option>
-          <option value="Eventual antigo">Eventual antigo</option>
-          <option value="Historico/Inativo">Histórico/Inativo</option>
+          <option value="Eventual">Eventual</option>
+          <option value="Inativo">Inativo</option>
         </select>
         <select class="fsel" id="cli-prioridade-filter" onchange="renderClientes()">
           <option value="">Prioridade</option>
           <option value="Alta">Alta</option>
           <option value="Média">Média</option>
-          <option value="Media">Media</option>
           <option value="Baixa">Baixa</option>
         </select>
         <select class="fsel" id="cli-ativo-filter" onchange="renderClientes()">
@@ -4307,10 +4317,8 @@ async function carregarVeiculos(){
                   <option value="Ativo">Ativo</option>
                   <option value="A renovar">A renovar</option>
                   <option value="Vencido">Vencido</option>
-                  <option value="Cancelado">Cancelado</option>
-                  <option value="Eventual recente">Eventual recente</option>
-                  <option value="Eventual antigo">Eventual antigo</option>
-                  <option value="Historico/Inativo">Histórico/Inativo</option>
+                  <option value="Eventual">Eventual</option>
+                  <option value="Inativo">Inativo</option>
                 </select>
               </div>
               <div class="client-field">
@@ -4319,7 +4327,6 @@ async function carregarVeiculos(){
                   <option value="">Sem prioridade</option>
                   <option value="Alta">Alta</option>
                   <option value="Média">Média</option>
-                  <option value="Media">Media</option>
                   <option value="Baixa">Baixa</option>
                 </select>
               </div>
@@ -11793,6 +11800,43 @@ let clientesPageSize = 50;
 let clientesTotal = 0;
 let clienteContratosDraft = [];
 
+function normalizeClientePriority(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const key = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (key === 'alta') return 'Alta';
+  if (key === 'media') return 'Média';
+  if (key === 'baixa') return 'Baixa';
+  return raw;
+}
+
+function normalizeClienteStatus(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const key = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (key === 'ativo') return 'Ativo';
+  if (key === 'a renovar') return 'A renovar';
+  if (key === 'vencido') return 'Vencido';
+  if (key === 'eventual' || key === 'eventual recente' || key === 'eventual antigo') return 'Eventual';
+  if (key === 'inativo' || key === 'historico/inativo' || key === 'cancelado') return 'Inativo';
+  return raw;
+}
+
+function clienteStatusChipClass(status) {
+  if (status === 'Ativo' || status === 'Eventual') return 'chip-green';
+  if (status === 'A renovar') return 'chip-blue';
+  if (status === 'Vencido') return 'chip-orange';
+  if (status === 'Inativo') return 'chip-gray';
+  return 'chip-gray';
+}
+
+function clientePrioridadeChipClass(prioridade) {
+  if (prioridade === 'Alta') return 'chip-red';
+  if (prioridade === 'Baixa') return 'chip-gray';
+  if (prioridade === 'Média') return 'chip-orange';
+  return 'chip-gray';
+}
+
 async function renderClientes(){
   try {
     const search = (document.getElementById('cli-search')?.value||'').toLowerCase();
@@ -11806,7 +11850,7 @@ async function renderClientes(){
 
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (ativoFilter === 'todos') params.set('include_inactive', 'true');
+    if (ativoFilter === 'todos' || statusFilter === 'Inativo') params.set('include_inactive', 'true');
     params.set('page', String(clientesPage));
     params.set('limit', String(clientesPageSize));
     const queryString = params.toString();
@@ -11824,8 +11868,8 @@ async function renderClientes(){
     if (tipoLocalFilter) filtered = filtered.filter(c => c.tipo_local === tipoLocalFilter);
     if (urgenciaFilter) filtered = filtered.filter(c => c.nivel_urgencia_padrao === urgenciaFilter);
     if (recorrenteFilter) filtered = filtered.filter(c => String(!!c.cliente_recorrente) === recorrenteFilter);
-    if (statusFilter) filtered = filtered.filter(c => c.status_operacional === statusFilter);
-    if (prioridadeFilter) filtered = filtered.filter(c => c.prioridade === prioridadeFilter);
+    if (statusFilter) filtered = filtered.filter(c => normalizeClienteStatus(c.status_operacional || (c.ativo === false ? 'Inativo' : '')) === statusFilter);
+    if (prioridadeFilter) filtered = filtered.filter(c => normalizeClientePriority(c.prioridade) === prioridadeFilter);
     if (search) filtered = filtered.filter(c => (c.nome||'').toLowerCase().includes(search) || (c.telefone||'').includes(search) || (c.endereco||'').toLowerCase().includes(search) || (c.endereco_completo||'').toLowerCase().includes(search));
     
     filtered.sort((a,b) => (a.nome||'').localeCompare(b.nome||''));
@@ -11858,9 +11902,10 @@ async function renderClientes(){
       const categoriaChip = c.tipo_cliente
         ? (c.tipo_cliente === 'Contrato' ? '<span class="chip chip-green">Contrato</span>' : `<span class="chip chip-gray">${sanitize(c.tipo_cliente)}</span>`)
         : (c.categoria === 'contrato' ? '<span class="chip chip-green">Contrato</span>' : '<span class="chip chip-yellow">Sem class.</span>');
-      const statusText = c.status_operacional || (c.ativo === false ? 'Historico/Inativo' : '—');
-      const statusClass = ['Ativo','A renovar','Eventual recente'].includes(statusText) ? 'chip-green' : (['Vencido','Cancelado','Historico/Inativo'].includes(statusText) ? 'chip-orange' : 'chip-gray');
-      const prioridadeClass = c.prioridade === 'Alta' ? 'chip-red' : (c.prioridade === 'Baixa' ? 'chip-gray' : 'chip-orange');
+      const statusText = normalizeClienteStatus(c.status_operacional) || (c.ativo === false ? 'Inativo' : '—');
+      const statusClass = clienteStatusChipClass(statusText);
+      const prioridadeText = normalizeClientePriority(c.prioridade);
+      const prioridadeClass = clientePrioridadeChipClass(prioridadeText);
       const localChip = c.tipo_local ? `<span class="chip chip-slate">${sanitize(c.tipo_local)}</span>` : '—';
       const recorrenteChip = c.cliente_recorrente ? '<span class="chip chip-green">Sim</span>' : '<span class="chip chip-gray">Não</span>';
       const ultimoServico = c.data_ultimo_servico ? c.data_ultimo_servico.slice(0, 10) : '—';
@@ -11879,7 +11924,7 @@ async function renderClientes(){
         <td style="font-size:12px;color:var(--text2)" title="${escapeHtmlAttr(endereco)}">${enderecoCurto}</td>
         <td>${categoriaChip} ${tipoChip}</td>
         <td><span class="chip ${statusClass}">${sanitize(statusText)}</span></td>
-        <td>${c.prioridade ? `<span class="chip ${prioridadeClass}">${sanitize(c.prioridade)}</span>` : '—'}</td>
+        <td>${prioridadeText ? `<span class="chip ${prioridadeClass}">${sanitize(prioridadeText)}</span>` : '—'}</td>
         <td>${localChip}</td>
         <td style="text-align:center">${recorrenteChip}</td>
         <td>${ultimoServico}</td>
@@ -12159,8 +12204,8 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-form-recorrente').checked = !!clienteEditando.cliente_recorrente;
     document.getElementById('cli-form-periodicidade').value = clienteEditando.periodicidade || '';
     document.getElementById('cli-form-ultimo-servico').value = clienteEditando.data_ultimo_servico ? clienteEditando.data_ultimo_servico.slice(0, 10) : '';
-    document.getElementById('cli-form-status-operacional').value = clienteEditando.status_operacional || '';
-    document.getElementById('cli-form-prioridade').value = clienteEditando.prioridade || '';
+    document.getElementById('cli-form-status-operacional').value = normalizeClienteStatus(clienteEditando.status_operacional) || '';
+    document.getElementById('cli-form-prioridade').value = normalizeClientePriority(clienteEditando.prioridade) || '';
     document.getElementById('cli-form-zona').value = clienteEditando.zona || '';
     document.getElementById('cli-form-origem').value = clienteEditando.origem || '';
     document.getElementById('cli-form-restricoes').value = clienteEditando.restricoes_operacionais || '';

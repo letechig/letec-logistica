@@ -167,6 +167,41 @@ function normalizeLooseText(value) {
     .trim();
 }
 
+function normalizeCustomerPriority(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const key = normalizeLooseText(raw);
+  if (key === 'ALTA') return 'Alta';
+  if (key === 'MEDIA') return 'Média';
+  if (key === 'BAIXA') return 'Baixa';
+  return raw;
+}
+
+function customerPriorityAliases(value) {
+  const normalized = normalizeCustomerPriority(value);
+  if (normalized === 'Média') return ['Média', 'Media', 'média', 'media', 'MÉDIA', 'MEDIA'];
+  return normalized ? [normalized] : [];
+}
+
+function normalizeCustomerOperationalStatus(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const key = normalizeLooseText(raw);
+  if (key === 'ATIVO') return 'Ativo';
+  if (key === 'A RENOVAR') return 'A renovar';
+  if (key === 'VENCIDO') return 'Vencido';
+  if (key === 'EVENTUAL' || key === 'EVENTUAL RECENTE' || key === 'EVENTUAL ANTIGO') return 'Eventual';
+  if (key === 'INATIVO' || key === 'HISTORICO INATIVO' || key === 'CANCELADO') return 'Inativo';
+  return raw;
+}
+
+function customerStatusAliases(value) {
+  const normalized = normalizeCustomerOperationalStatus(value);
+  if (normalized === 'Eventual') return ['Eventual', 'Eventual recente', 'Eventual antigo'];
+  if (normalized === 'Inativo') return ['Inativo', 'Historico/Inativo', 'Histórico/Inativo', 'Cancelado'];
+  return normalized ? [normalized] : [];
+}
+
 function normalizeAddress(value) {
   return normalizeLooseText(value)
     .replace(/\bAVENIDA\b/g, 'AV')
@@ -2767,12 +2802,13 @@ app.get('/api/customers', async (req, res) => {
     const limit = Math.min(Math.max(parseInt(rawLimit, 10) || (hasPagination ? 50 : 500), 1), 500);
     const page = Math.max(parseInt(rawPage, 10) || 1, 1);
     const offset = Math.max(parseInt(rawOffset, 10) || ((page - 1) * limit), 0);
+    const normalizedStatusFilter = normalizeCustomerOperationalStatus(status_operacional);
     let query = db
       .from('customers')
       .select('*', hasPagination ? { count: 'exact' } : undefined)
       .order('nome', { ascending: true });
 
-    if (String(include_inactive) !== 'true') {
+    if (String(include_inactive) !== 'true' && normalizedStatusFilter !== 'Inativo') {
       query = query.eq('ativo', true);
     }
     
@@ -2786,8 +2822,18 @@ app.get('/api/customers', async (req, res) => {
     if (bairro) query = query.ilike('bairro', `%${String(bairro).trim()}%`);
     if (nivel_urgencia_padrao) query = query.eq('nivel_urgencia_padrao', nivel_urgencia_padrao);
     if (tipo_cliente) query = query.eq('tipo_cliente', tipo_cliente);
-    if (status_operacional) query = query.eq('status_operacional', status_operacional);
-    if (prioridade) query = query.eq('prioridade', prioridade);
+    if (status_operacional) {
+      const aliases = customerStatusAliases(normalizedStatusFilter || status_operacional);
+      query = aliases.length > 1
+        ? query.in('status_operacional', aliases)
+        : query.eq('status_operacional', aliases[0] || status_operacional);
+    }
+    if (prioridade) {
+      const aliases = customerPriorityAliases(prioridade);
+      query = aliases.length > 1
+        ? query.in('prioridade', aliases)
+        : query.eq('prioridade', aliases[0] || prioridade);
+    }
     if (cliente_recorrente !== undefined) {
       query = query.eq('cliente_recorrente', String(cliente_recorrente) === 'true');
     }
@@ -2796,10 +2842,15 @@ app.get('/api/customers', async (req, res) => {
     
     const { data, error, count } = await query;
     if (error) throw error;
+    const normalizedData = (data || []).map(row => ({
+      ...row,
+      status_operacional: normalizeCustomerOperationalStatus(row.status_operacional) || row.status_operacional,
+      prioridade: normalizeCustomerPriority(row.prioridade) || row.prioridade
+    }));
     if (hasPagination) {
-      return res.json({ items: data || [], total: count || 0, page, limit, offset });
+      return res.json({ items: normalizedData, total: count || 0, page, limit, offset });
     }
-    res.json(data || []);
+    res.json(normalizedData);
   } catch (error) {
     console.error('[GET /api/customers] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar clientes' });
@@ -2856,6 +2907,8 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
     const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
     const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
+    const statusOperacionalNormalizado = normalizeCustomerOperationalStatus(status_operacional);
+    const prioridadeNormalizada = normalizeCustomerPriority(prioridade);
 
     if (!nome) {
       return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
@@ -2921,11 +2974,11 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       contato: contato ? String(contato).trim() : null,
       zona: zona ? String(zona).trim() : null,
       tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
-      status_operacional: status_operacional ? String(status_operacional).trim() : null,
-      prioridade: prioridade ? String(prioridade).trim() : null,
+      status_operacional: statusOperacionalNormalizado,
+      prioridade: prioridadeNormalizada,
       origem: origem ? String(origem).trim() : null,
       observacoes,
-      ativo: true
+      ativo: statusOperacionalNormalizado === 'Inativo' ? false : true
     };
 
     const { data, error } = await runCustomerWriteWithSchemaFallback(
@@ -2999,6 +3052,8 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
     const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
     const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
     const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
+    const statusOperacionalNormalizado = normalizeCustomerOperationalStatus(status_operacional);
+    const prioridadeNormalizada = normalizeCustomerPriority(prioridade);
 
     if (!nome) {
       return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
@@ -3066,10 +3121,11 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       contato: contato ? String(contato).trim() : null,
       zona: zona ? String(zona).trim() : null,
       tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
-      status_operacional: status_operacional ? String(status_operacional).trim() : null,
-      prioridade: prioridade ? String(prioridade).trim() : null,
+      status_operacional: statusOperacionalNormalizado,
+      prioridade: prioridadeNormalizada,
       origem: origem ? String(origem).trim() : null,
       observacoes,
+      ativo: statusOperacionalNormalizado === 'Inativo' ? false : true,
       updated_at: new Date().toISOString()
     };
 

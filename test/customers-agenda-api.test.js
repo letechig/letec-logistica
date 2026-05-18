@@ -131,6 +131,65 @@ test('GET /api/customers suporta autocomplete limitado e paginação com total',
   });
 });
 
+test('clientes normalizam prioridade e status operacionais legados', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers.push({
+      id: 4,
+      nome: 'Legacy Cliente',
+      nome_normalizado: 'LEGACY CLIENTE',
+      telefone: '554444444444',
+      ativo: true,
+      prioridade: 'Media',
+      status_operacional: 'Eventual recente'
+    });
+
+    const list = await fetch(`${baseUrl}/api/customers?search=Legacy&limit=10`);
+    assert.equal(list.status, 200);
+    const rows = await list.json();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].prioridade, 'Média');
+    assert.equal(rows[0].status_operacional, 'Eventual');
+
+    const filtered = await fetch(`${baseUrl}/api/customers?status_operacional=Eventual&prioridade=Média&include_inactive=true&limit=10`);
+    assert.equal(filtered.status, 200);
+    const filteredRows = await filtered.json();
+    assert.ok(filteredRows.some(customer => customer.nome === 'Legacy Cliente'));
+
+    const created = await fetch(`${baseUrl}/api/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Gamma Cliente',
+        telefone: '555555555555',
+        categoria: 'eventual',
+        prioridade: 'Media',
+        status_operacional: 'Eventual antigo'
+      })
+    });
+    assert.equal(created.status, 201);
+    const createdPayload = await created.json();
+    assert.equal(createdPayload.prioridade, 'Média');
+    assert.equal(createdPayload.status_operacional, 'Eventual');
+
+    const updated = await fetch(`${baseUrl}/api/customers/1`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Alpha Cliente',
+        telefone: '551111111111',
+        categoria: 'eventual',
+        prioridade: 'media',
+        status_operacional: 'Cancelado'
+      })
+    });
+    assert.equal(updated.status, 200);
+    const updatedPayload = await updated.json();
+    assert.equal(updatedPayload.prioridade, 'Média');
+    assert.equal(updatedPayload.status_operacional, 'Inativo');
+    assert.equal(updatedPayload.ativo, false);
+  });
+});
+
 test('PUT /api/services/:id atualiza agenda preservando campos operacionais', async () => {
   await withServer(async (baseUrl, state) => {
     state.services[0].tipos = ['DS'];
