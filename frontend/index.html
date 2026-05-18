@@ -13251,14 +13251,20 @@ async function deleteCustomerById(clientId, clientName, options = {}) {
   if (!confirmAction(`Tem certeza que deseja remover o cliente "${clientName}"?`)) return false;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/customers/${clientId}`, { method: 'DELETE' });
+    const response = await fetch(`${API_BASE_URL}/api/customers/${clientId}`, {
+      method: 'DELETE',
+      cache: 'no-store'
+    });
+    const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error || `Erro ${response.status}`);
+      throw new Error(result.error || `Erro ${response.status}`);
     }
 
     if (options.closeModal) closeClientModal();
+    clientesData = clientesData.filter(c => String(c.id) !== String(clientId));
+    clientesTotal = Math.max(0, Number(clientesTotal || 0) - 1);
+    toast(result.message || 'Cliente removido com sucesso', 'ok');
     await renderClientes();
     return true;
   } catch (error) {

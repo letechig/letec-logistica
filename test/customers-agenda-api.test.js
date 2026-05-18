@@ -190,6 +190,27 @@ test('clientes normalizam prioridade e status operacionais legados', async () =>
   });
 });
 
+test('DELETE /api/customers/:id inativa cliente sem apagar histórico', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/customers/1`, { method: 'DELETE' });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.customer.id, 1);
+    assert.equal(payload.customer.ativo, false);
+    assert.equal(payload.customer.status_operacional, 'Inativo');
+    assert.equal(state.customers.find(customer => customer.id === 1).ativo, false);
+    assert.equal(state.services.length, 1);
+
+    const activeList = await fetch(`${baseUrl}/api/customers?limit=10`);
+    const activeRows = await activeList.json();
+    assert.equal(activeRows.some(customer => customer.id === 1), false);
+
+    const inactiveList = await fetch(`${baseUrl}/api/customers?status_operacional=Inativo&include_inactive=true&limit=10`);
+    const inactiveRows = await inactiveList.json();
+    assert.equal(inactiveRows.some(customer => customer.id === 1), true);
+  });
+});
+
 test('PUT /api/services/:id atualiza agenda preservando campos operacionais', async () => {
   await withServer(async (baseUrl, state) => {
     state.services[0].tipos = ['DS'];

@@ -3500,18 +3500,23 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
 app.delete('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
     const db = getSupabaseClient();
-    const { id } = req.params;
+    const rawId = String(req.params.id || '').trim();
+    const customerId = /^\d+$/.test(rawId) ? parseInt(rawId, 10) : rawId;
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('customers')
-      .update({ ativo: false, updated_at: new Date().toISOString() })
-      .eq('id', parseInt(id, 10))
+      .update({
+        ativo: false,
+        status_operacional: 'Inativo',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', customerId)
       .select();
 
     if (error) throw error;
     if (!data.length) return res.status(404).json({ error: 'Cliente não encontrado' });
     
-    res.json({ message: 'Cliente removido com sucesso' });
+    res.json({ message: 'Cliente removido com sucesso', customer: data[0] });
   } catch (error) {
     console.error('[DELETE /api/customers/:id] Error:', error.message);
     res.status(500).json({ error: 'Falha ao remover cliente' });
@@ -4250,14 +4255,15 @@ app.get('/api/data-reviews', async (req, res) => {
 
 app.put('/api/data-reviews/:id', strictLimiter, async (req, res) => {
   try {
-    const { id } = req.params;
+    const rawId = String(req.params.id || '').trim();
+    const customerId = /^\d+$/.test(rawId) ? parseInt(rawId, 10) : rawId;
     const { status_revisao } = req.body;
     const allowed = ['pendente', 'resolvido', 'ignorado'];
     if (!allowed.includes(String(status_revisao))) {
       return res.status(400).json({ error: 'status_revisao invalido' });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('data_reviews')
       .update({ status_revisao, updated_at: new Date().toISOString() })
       .eq('id', Number(id))
