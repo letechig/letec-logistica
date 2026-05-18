@@ -380,6 +380,70 @@ test('POST /api/services cria cliente automaticamente quando agenda usa cliente 
   });
 });
 
+test('GET /api/services/customer-link-audit classifica vínculos pendentes da agenda', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services.push(
+      { id: 11, cliente: 'Alpha Cliente', endereco: 'Rua A', status: 'agendado' },
+      { id: 12, cliente: 'Cliente Novo Agenda', endereco: 'Rua Nova', status: 'agendado' },
+      { id: 13, cliente: 'Beta Cliente', endereco: 'Rua B', status: 'agendado' }
+    );
+
+    const response = await fetch(`${baseUrl}/api/services/customer-link-audit`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+
+    assert.equal(payload.counts.link_auto_seguro, 1);
+    assert.equal(payload.counts.criar_cliente, 1);
+    assert.equal(payload.counts.revisao_manual, 1);
+    assert.equal(payload.items.link_auto_seguro[0].service.id, 11);
+    assert.equal(payload.items.link_auto_seguro[0].suggested_customer.id, 1);
+    assert.equal(payload.items.criar_cliente[0].service.id, 12);
+    assert.equal(payload.items.revisao_manual[0].service.id, 13);
+  });
+});
+
+test('POST /api/services/customer-link-repair respeita dry-run e aplica apenas casos seguros', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services.push(
+      { id: 11, cliente: 'Alpha Cliente', endereco: 'Rua A', status: 'agendado' },
+      { id: 12, cliente: 'Cliente Novo Agenda', endereco: 'Rua Nova', status: 'agendado' },
+      { id: 14, cliente: 'Cliente Novo Agenda', endereco: 'Rua Nova', status: 'agendado' },
+      { id: 13, cliente: 'Beta Cliente', endereco: 'Rua B', status: 'agendado' }
+    );
+    const originalCustomers = state.customers.length;
+
+    const dryRun = await fetch(`${baseUrl}/api/services/customer-link-repair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: true })
+    });
+    assert.equal(dryRun.status, 200);
+    const dryPayload = await dryRun.json();
+    assert.equal(dryPayload.dry_run, true);
+    assert.equal(state.services.find(service => service.id === 11).cliente_id, undefined);
+    assert.equal(state.customers.length, originalCustomers);
+
+    const applied = await fetch(`${baseUrl}/api/services/customer-link-repair?apply=true`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apply: true })
+    });
+    assert.equal(applied.status, 200);
+    const appliedPayload = await applied.json();
+    assert.equal(appliedPayload.linked, 3);
+    assert.equal(appliedPayload.created, 1);
+    assert.equal(appliedPayload.ambiguous, 1);
+    assert.equal(state.services.find(service => service.id === 11).cliente_id, 1);
+    assert.ok(state.services.find(service => service.id === 12).cliente_id);
+    assert.equal(state.services.find(service => service.id === 14).cliente_id, state.services.find(service => service.id === 12).cliente_id);
+    assert.equal(state.services.find(service => service.id === 13).cliente_id, undefined);
+    assert.equal(state.customers.length, originalCustomers + 1);
+    const created = state.customers.find(customer => customer.nome === 'Cliente Novo Agenda');
+    assert.equal(created.tipo_cliente, 'Eventual');
+    assert.equal(created.origem, 'agenda_repair');
+  });
+});
+
 test('GET /api/diagnostics/operational retorna checks sem segredos', async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/diagnostics/operational`);

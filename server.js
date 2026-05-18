@@ -1467,6 +1467,242 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}) {
   return { payload: servicePayload, customer: created, created: true };
 }
 
+function serviceCustomerId(service = {}) {
+  return service.cliente_id || service.customer_id || service.clienteId || service.client_id || null;
+}
+
+function serviceCustomerName(service = {}) {
+  return String(service.cliente || service.cl || '').trim();
+}
+
+function compactServiceCustomerLink(service = {}) {
+  return {
+    id: service.id,
+    date: serviceDateValue(service) || null,
+    cliente: serviceCustomerName(service),
+    cliente_id: serviceCustomerId(service),
+    endereco: service.endereco || null,
+    status: service.status || service.st || null
+  };
+}
+
+function compactCustomerCandidate(customer = {}, score = 0, reason = '') {
+  return {
+    id: customer.id,
+    nome: customer.nome,
+    telefone: customer.telefone || customer.whatsapp || null,
+    endereco: customer.endereco || customer.endereco_completo || null,
+    ativo: customer.ativo !== false,
+    score,
+    reason
+  };
+}
+
+function customerLinkNameScore(left, right) {
+  const leftName = normalizeCustomerName(left);
+  const rightName = normalizeCustomerName(right);
+  if (!leftName || !rightName) return 0;
+  if (leftName === rightName) return 100;
+  if ((leftName.length >= 3 && rightName.includes(leftName)) || (rightName.length >= 3 && leftName.includes(rightName))) {
+    return 88;
+  }
+
+  const leftTokens = leftName.split(' ').filter(token => token.length >= 3);
+  const rightTokens = rightName.split(' ').filter(token => token.length >= 3);
+  if (!leftTokens.length || !rightTokens.length) return 0;
+  const rightSet = new Set(rightTokens);
+  const common = leftTokens.filter(token => rightSet.has(token)).length;
+  return Math.round((common / Math.max(leftTokens.length, rightTokens.length)) * 80);
+}
+
+function buildCustomerLinkCandidateList(service, customers = []) {
+  const serviceName = serviceCustomerName(service);
+  const serviceFingerprint = buildCustomerAddressFingerprint({ endereco: service.endereco || '' });
+  return customers
+    .map(customer => {
+      const score = customerLinkNameScore(serviceName, customer.nome_normalizado || customer.nome);
+      const addressMatch = serviceFingerprint && buildCustomerAddressFingerprint(customer) === serviceFingerprint;
+      const finalScore = addressMatch ? Math.max(score, 72) : score;
+      return compactCustomerCandidate(customer, finalScore, addressMatch ? 'endereco_compativel' : 'nome_parecido');
+    })
+    .filter(candidate => candidate.score >= 50)
+    .sort((a, b) => b.score - a.score || String(a.nome || '').localeCompare(String(b.nome || '')))
+    .slice(0, 5);
+}
+
+function classifyServiceCustomerLink(service, customers = []) {
+  const serviceName = serviceCustomerName(service);
+  if (!serviceName) {
+    return {
+      type: 'revisao_manual',
+      confidence: 0,
+      reason: 'servico_sem_nome_cliente',
+      service: compactServiceCustomerLink(service),
+      candidates: []
+    };
+  }
+
+  const normalizedServiceName = normalizeCustomerName(serviceName);
+  const activeCustomers = customers.filter(customer => customer.ativo !== false);
+  const exactActive = activeCustomers.filter(customer => normalizeCustomerName(customer.nome_normalizado || customer.nome) === normalizedServiceName);
+
+  if (exactActive.length === 1) {
+    return {
+      type: 'link_auto_seguro',
+      confidence: 100,
+      reason: 'nome_exato_unico',
+      service: compactServiceCustomerLink(service),
+      suggested_customer: compactCustomerCandidate(exactActive[0], 100, 'nome_exato_unico')
+    };
+  }
+
+  const serviceFingerprint = buildCustomerAddressFingerprint({ endereco: service.endereco || '' });
+  if (exactActive.length > 1) {
+    const byAddress = serviceFingerprint
+      ? exactActive.filter(customer => buildCustomerAddressFingerprint(customer) === serviceFingerprint)
+      : [];
+    if (byAddress.length === 1) {
+      return {
+        type: 'link_auto_seguro',
+        confidence: 96,
+        reason: 'nome_exato_e_endereco_unicos',
+        service: compactServiceCustomerLink(service),
+        suggested_customer: compactCustomerCandidate(byAddress[0], 96, 'nome_exato_e_endereco_unicos')
+      };
+    }
+    return {
+      type: 'revisao_manual',
+      confidence: 0,
+      reason: 'nome_exato_multiplo',
+      service: compactServiceCustomerLink(service),
+      candidates: buildCustomerLinkCandidateList(service, exactActive)
+    };
+  }
+
+  const addressMatches = serviceFingerprint
+    ? activeCustomers.filter(customer => buildCustomerAddressFingerprint(customer) === serviceFingerprint)
+    : [];
+  const compatibleAddressMatches = addressMatches
+    .map(customer => ({ customer, score: customerLinkNameScore(serviceName, customer.nome_normalizado || customer.nome) }))
+    .filter(item => item.score >= 45);
+
+  if (compatibleAddressMatches.length === 1) {
+    return {
+      type: 'link_auto_seguro',
+      confidence: 92,
+      reason: 'endereco_unico_nome_compativel',
+      service: compactServiceCustomerLink(service),
+      suggested_customer: compactCustomerCandidate(compatibleAddressMatches[0].customer, 92, 'endereco_unico_nome_compativel')
+    };
+  }
+
+  const candidates = buildCustomerLinkCandidateList(service, customers);
+  if (compatibleAddressMatches.length > 1 || candidates.length) {
+    return {
+      type: 'revisao_manual',
+      confidence: 0,
+      reason: compatibleAddressMatches.length > 1 ? 'endereco_multiplo' : 'nome_parecido',
+      service: compactServiceCustomerLink(service),
+      candidates
+    };
+  }
+
+  return {
+    type: 'criar_cliente',
+    confidence: 90,
+    reason: 'sem_candidato_seguro',
+    service: compactServiceCustomerLink(service),
+    new_customer: {
+      nome: serviceName,
+      endereco: service.endereco || null,
+      tipo_cliente: 'Eventual',
+      origem: 'agenda_repair'
+    }
+  };
+}
+
+function summarizeCustomerLinkAudit(items = {}) {
+  return {
+    link_auto_seguro: items.link_auto_seguro?.length || 0,
+    criar_cliente: items.criar_cliente?.length || 0,
+    revisao_manual: items.revisao_manual?.length || 0,
+    ignorados: items.ignorados?.length || 0,
+    total_pendentes: (items.link_auto_seguro?.length || 0) + (items.criar_cliente?.length || 0) + (items.revisao_manual?.length || 0)
+  };
+}
+
+async function buildCustomerLinkAudit(db, options = {}) {
+  const serviceLimit = Math.min(Math.max(parseInt(options.serviceLimit, 10) || 5000, 1), 10000);
+  const customerLimit = Math.min(Math.max(parseInt(options.customerLimit, 10) || 5000, 1), 10000);
+  const includeCancelled = options.includeCancelled === true || String(options.includeCancelled) === 'true';
+
+  const [servicesRes, customersRes] = await Promise.all([
+    db.from('services').select('*').order('date', { ascending: false, nullsFirst: false }).limit(serviceLimit),
+    db.from('customers').select('*').limit(customerLimit)
+  ]);
+  if (servicesRes.error) throw servicesRes.error;
+  if (customersRes.error) throw customersRes.error;
+
+  const items = {
+    link_auto_seguro: [],
+    criar_cliente: [],
+    revisao_manual: [],
+    ignorados: []
+  };
+
+  for (const service of servicesRes.data || []) {
+    if (serviceCustomerId(service)) {
+      items.ignorados.push({ reason: 'ja_vinculado', service: compactServiceCustomerLink(service) });
+      continue;
+    }
+    if (!includeCancelled && String(service.status || service.st || '').toLowerCase() === 'cancelado') {
+      items.ignorados.push({ reason: 'cancelado', service: compactServiceCustomerLink(service) });
+      continue;
+    }
+
+    const classified = classifyServiceCustomerLink(service, customersRes.data || []);
+    items[classified.type].push(classified);
+  }
+
+  return {
+    ok: true,
+    generated_at: new Date().toISOString(),
+    limits: { services: serviceLimit, customers: customerLimit },
+    totals: {
+      services_loaded: (servicesRes.data || []).length,
+      customers_loaded: (customersRes.data || []).length
+    },
+    counts: summarizeCustomerLinkAudit(items),
+    items
+  };
+}
+
+async function createCustomerFromServiceForRepair(db, service = {}) {
+  const name = serviceCustomerName(service);
+  const address = String(service.endereco || '').trim();
+  const payload = {
+    nome: name,
+    nome_normalizado: normalizeCustomerName(name),
+    endereco: address || null,
+    endereco_completo: address || null,
+    categoria: 'eventual',
+    tipo: 'PF',
+    tipo_cliente: 'Eventual',
+    status_operacional: 'Eventual',
+    prioridade: 'Média',
+    origem: 'agenda_repair',
+    observacoes: `Criado automaticamente pela correção de vínculo da Agenda a partir do serviço #${service.id || '-'}.`,
+    ativo: true
+  };
+  const { data, error } = await runCustomerWriteWithSchemaFallback(
+    workingPayload => db.from('customers').insert([workingPayload]).select(),
+    payload,
+    'POST /api/services/customer-link-repair create customer'
+  );
+  if (error) throw error;
+  return data?.[0] || null;
+}
+
 function customerPhone(customer = {}) {
   return normalizeBrazilWhatsAppNumber(customer.whatsapp || customer.telefone || '');
 }
@@ -1845,6 +2081,105 @@ app.get('/api/maps/distance-matrix', async (req, res) => {
 });
 
 // Example routes for logistics operations
+app.get('/api/services/customer-link-audit', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const audit = await buildCustomerLinkAudit(db, {
+      serviceLimit: req.query.service_limit || req.query.limit,
+      customerLimit: req.query.customer_limit,
+      includeCancelled: req.query.include_cancelled
+    });
+    res.json(audit);
+  } catch (error) {
+    console.error('[GET /api/services/customer-link-audit] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao auditar vínculos da agenda' });
+  }
+});
+
+app.post('/api/services/customer-link-repair', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const apply = req.body?.apply === true || String(req.query.apply || '').toLowerCase() === 'true';
+    const audit = await buildCustomerLinkAudit(db, {
+      serviceLimit: req.body?.service_limit || req.query.service_limit || req.query.limit,
+      customerLimit: req.body?.customer_limit || req.query.customer_limit,
+      includeCancelled: req.body?.include_cancelled || req.query.include_cancelled
+    });
+    const summary = {
+      dry_run: !apply,
+      linked: 0,
+      created: 0,
+      ignored: audit.counts.revisao_manual,
+      ambiguous: audit.counts.revisao_manual,
+      errors: []
+    };
+
+    if (!apply) {
+      return res.json({
+        ok: true,
+        ...summary,
+        counts: audit.counts,
+        preview: audit.items
+      });
+    }
+
+    for (const item of audit.items.link_auto_seguro) {
+      try {
+        const serviceId = item.service?.id;
+        const customerId = item.suggested_customer?.id;
+        if (!serviceId || !customerId) throw new Error('Serviço ou cliente ausente na sugestão');
+        const { data, error } = await db
+          .from('services')
+          .update({ cliente_id: Number(customerId) })
+          .eq('id', serviceId)
+          .select();
+        if (error) throw error;
+        if (!data?.length) throw new Error('Serviço não encontrado para vínculo');
+        summary.linked += 1;
+      } catch (error) {
+        summary.errors.push({ service_id: item.service?.id || null, action: 'link', error: error.message });
+      }
+    }
+
+    const createdCustomerByRepairKey = new Map();
+    for (const item of audit.items.criar_cliente) {
+      try {
+        const serviceId = item.service?.id;
+        if (!serviceId) throw new Error('Serviço ausente para criação');
+        const service = (audit.items.criar_cliente || []).find(candidate => candidate.service?.id === serviceId)?.service || item.service;
+        const repairKey = `${normalizeCustomerName(service.cliente)}|${buildCustomerAddressFingerprint({ endereco: service.endereco || '' })}`;
+        let customerId = createdCustomerByRepairKey.get(repairKey);
+        if (!customerId) {
+          const created = await createCustomerFromServiceForRepair(db, service);
+          if (!created?.id) throw new Error('Cliente criado sem ID retornado');
+          customerId = created.id;
+          createdCustomerByRepairKey.set(repairKey, customerId);
+          summary.created += 1;
+        }
+        const { data, error } = await db
+          .from('services')
+          .update({ cliente_id: Number(customerId) })
+          .eq('id', serviceId)
+          .select();
+        if (error) throw error;
+        if (!data?.length) throw new Error('Serviço não encontrado para vínculo do cliente criado');
+        summary.linked += 1;
+      } catch (error) {
+        summary.errors.push({ service_id: item.service?.id || null, action: 'create', error: error.message });
+      }
+    }
+
+    res.json({
+      ok: summary.errors.length === 0,
+      ...summary,
+      counts: audit.counts
+    });
+  } catch (error) {
+    console.error('[POST /api/services/customer-link-repair] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao corrigir vínculos da agenda' });
+  }
+});
+
 app.get('/api/services', async (req, res) => {
   try {
     const db = getSupabaseClient();

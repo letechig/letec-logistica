@@ -4025,6 +4025,7 @@ async function carregarVeiculos(){
         </div>
         <div class="ui-page-actions">
           <button class="btn btn-primary btn-sm" onclick="openClientModal()">➕ Novo Cliente</button>
+          <button class="btn btn-ghost btn-sm" onclick="abrirAuditoriaVinculosAgenda()">Auditar vínculos da agenda</button>
           <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Gerenciar Duplicatas</button>
         </div>
       </div>
@@ -11799,6 +11800,7 @@ let clientesPage = 1;
 let clientesPageSize = 50;
 let clientesTotal = 0;
 let clienteContratosDraft = [];
+let customerLinkAuditData = null;
 
 function normalizeClientePriority(value) {
   const raw = String(value || '').trim();
@@ -11835,6 +11837,122 @@ function clientePrioridadeChipClass(prioridade) {
   if (prioridade === 'Baixa') return 'chip-gray';
   if (prioridade === 'Média') return 'chip-orange';
   return 'chip-gray';
+}
+
+function renderCustomerLinkAuditRows(items = [], type = '') {
+  if (!items.length) {
+    return '<div class="ui-empty-state"><div class="ui-empty-title">Nenhum item neste grupo</div><div>Não há serviços pendentes nessa classificação.</div></div>';
+  }
+  const shown = items.slice(0, 50);
+  return `
+    <div class="tbl-wrap ui-table-card">
+      <table>
+        <thead><tr><th>Serviço</th><th>Cliente na agenda</th><th>Destino sugerido</th><th>Motivo</th><th>Ação</th></tr></thead>
+        <tbody>
+          ${shown.map(item => {
+            const service = item.service || {};
+            const suggested = item.suggested_customer || item.new_customer || {};
+            const candidates = (item.candidates || []).slice(0, 3);
+            const destination = item.suggested_customer
+              ? `${sanitize(suggested.nome || 'Cliente')} <span class="mono">#${sanitize(suggested.id || '')}</span>`
+              : item.new_customer
+                ? `Criar: ${sanitize(suggested.nome || service.cliente || '')}`
+                : candidates.length
+                  ? candidates.map(c => `${sanitize(c.nome || 'Cliente')} <span class="mono">#${sanitize(c.id || '')}</span>`).join('<br>')
+                  : '—';
+            const action = type === 'revisao_manual'
+              ? `<button class="btn btn-ghost btn-xs" onclick="closeModal();setTimeout(()=>openEditSvc(${jsArg(service.id)}),100)">Abrir serviço</button>`
+              : '<span class="chip chip-green">Seguro</span>';
+            return `<tr>
+              <td><div class="mono">#${sanitize(service.id || '—')}</div><div class="text-muted">${sanitize(service.date || 'sem data')}</div></td>
+              <td><strong>${sanitize(service.cliente || 'Cliente sem nome')}</strong><div class="text-muted">${sanitize(service.endereco || 'sem endereço')}</div></td>
+              <td>${destination}</td>
+              <td><span class="chip chip-slate">${sanitize(item.reason || '—')}</span><div class="text-muted">Confiança ${sanitize(item.confidence ?? 0)}%</div></td>
+              <td>${action}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    ${items.length > shown.length ? `<div class="text-muted mt2">Mostrando ${shown.length} de ${items.length} itens.</div>` : ''}
+  `;
+}
+
+function renderCustomerLinkAuditModal(payload, repairResult = null) {
+  customerLinkAuditData = payload;
+  const counts = payload?.counts || {};
+  const items = payload?.items || {};
+  const body = document.getElementById('modal-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div class="grid-kpi mb3">
+      <div class="card"><div class="card-label">Vincular seguro</div><div class="card-value">${counts.link_auto_seguro || 0}</div><div class="card-trend">cliente já existe</div></div>
+      <div class="card"><div class="card-label">Criar cliente</div><div class="card-value">${counts.criar_cliente || 0}</div><div class="card-trend">sem candidato seguro</div></div>
+      <div class="card"><div class="card-label">Revisar manual</div><div class="card-value">${counts.revisao_manual || 0}</div><div class="card-trend">nome parecido ou duplicado</div></div>
+      <div class="card"><div class="card-label">Já vinculados/ignorados</div><div class="card-value">${counts.ignorados || 0}</div><div class="card-trend">fora da correção</div></div>
+    </div>
+    ${repairResult ? `<div class="note mb3">Correção aplicada: ${repairResult.linked || 0} vínculo(s), ${repairResult.created || 0} cliente(s) criado(s), ${repairResult.ambiguous || 0} em revisão, ${repairResult.errors?.length || 0} erro(s).</div>` : ''}
+    <div class="flex gap2 mb3" style="flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" id="customer-link-repair-btn" onclick="aplicarCorrecoesVinculoCliente()">Aplicar correções seguras</button>
+      <button class="btn btn-ghost btn-sm" onclick="abrirAuditoriaVinculosAgenda(true)">Atualizar prévia</button>
+    </div>
+    <div class="note mb3">A correção segura só preenche <span class="mono">services.cliente_id</span> ou cria cliente eventual quando não houver candidato parecido. O texto histórico do serviço não será alterado.</div>
+    <div class="ui-subsection-head"><div><div class="ui-subsection-title">Pode vincular automaticamente</div><div class="ui-subsection-sub">Nome exato único ou endereço único com nome compatível.</div></div></div>
+    ${renderCustomerLinkAuditRows(items.link_auto_seguro || [], 'link_auto_seguro')}
+    <div class="ui-subsection-head"><div><div class="ui-subsection-title">Pode criar cliente</div><div class="ui-subsection-sub">Nenhum cadastro confiável encontrado.</div></div></div>
+    ${renderCustomerLinkAuditRows(items.criar_cliente || [], 'criar_cliente')}
+    <div class="ui-subsection-head"><div><div class="ui-subsection-title">Precisa revisar</div><div class="ui-subsection-sub">Há múltiplos candidatos ou apenas nome parecido.</div></div></div>
+    ${renderCustomerLinkAuditRows(items.revisao_manual || [], 'revisao_manual')}
+  `;
+}
+
+async function abrirAuditoriaVinculosAgenda(force = false) {
+  const modal = document.getElementById('modal');
+  document.getElementById('modal-title').textContent = 'Auditoria de vínculos da Agenda';
+  document.getElementById('modal-body').innerHTML = '<div class="ui-empty-state"><div class="ui-empty-title">Carregando auditoria</div><div>Comparando serviços da agenda com a base de clientes.</div></div>';
+  document.getElementById('modal-del').style.display = 'none';
+  modal.classList.remove('svc-edit-modal','day-detail-modal','changelog-modal','diagnostics-modal');
+  modal.classList.add('open');
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/services/customer-link-audit?limit=5000`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+    renderCustomerLinkAuditModal(payload);
+    if (force) toast('Prévia de vínculos atualizada.', 'ok');
+  } catch (error) {
+    document.getElementById('modal-body').innerHTML = `<div class="ui-empty-state"><div class="ui-empty-title">Erro ao auditar vínculos</div><div>${sanitize(error.message || error)}</div></div>`;
+    toast('Erro ao auditar vínculos da agenda', 'err');
+  }
+}
+
+async function aplicarCorrecoesVinculoCliente() {
+  const counts = customerLinkAuditData?.counts || {};
+  const totalSafe = Number(counts.link_auto_seguro || 0) + Number(counts.criar_cliente || 0);
+  if (!totalSafe) {
+    toast('Não há correções seguras para aplicar.', 'warn');
+    return;
+  }
+  if (!confirmAction(`Aplicar ${totalSafe} correção(ões) segura(s)? Casos ambíguos ficarão para revisão manual.`)) return;
+  const btn = document.getElementById('customer-link-repair-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Aplicando...'; }
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/services/customer-link-repair?apply=true`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apply: true })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
+    toast(`Correção aplicada: ${result.linked || 0} vínculo(s), ${result.created || 0} cliente(s) criado(s).`, result.errors?.length ? 'warn' : 'ok');
+    const refreshed = await fetch(`${API_BASE_URL}/api/services/customer-link-audit?limit=5000`);
+    const payload = await refreshed.json().catch(() => ({}));
+    if (refreshed.ok) renderCustomerLinkAuditModal(payload, result);
+    await Promise.allSettled([getServices(), renderClientes()]);
+  } catch (error) {
+    toast('Erro ao aplicar correções: ' + (error.message || error), 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Aplicar correções seguras'; }
+  }
 }
 
 async function renderClientes(){
