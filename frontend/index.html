@@ -1944,6 +1944,186 @@ td.bold { color: var(--text); font-weight: 600; }
   .ui-count-pill { width:max-content; }
 }
 
+/* ─── UI REFRESH V2 ───────────────────────────── */
+.ui-subsection-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin:22px 0 12px;
+}
+.ui-subsection-title {
+  font-family:var(--display);
+  font-size:16px;
+  font-weight:900;
+  color:var(--text);
+}
+.ui-subsection-sub {
+  margin-top:3px;
+  font-size:12px;
+  color:var(--text3);
+  line-height:1.45;
+}
+.dash-v2-head #dash-mes-filter,
+.com-v2-head #com-data {
+  min-width:190px;
+  background:#fff;
+}
+.dash-v2-analytics {
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:14px !important;
+  margin-bottom:18px !important;
+}
+.dash-v2-panel {
+  border:1px solid rgba(148,163,184,.22) !important;
+  border-radius:var(--radius-lg) !important;
+  background:#fff !important;
+  box-shadow:var(--shadow-sm);
+}
+.dash-v2-panel .card-label {
+  color:#475569;
+  font-size:11px;
+  letter-spacing:.08em;
+}
+.dash-op-kpi {
+  border-top:3px solid rgba(37,99,235,.45);
+  background:linear-gradient(180deg,#fff,#f8fafc);
+}
+.dash-op-kpi.kpi-green { border-top-color:var(--green); }
+.dash-op-kpi.kpi-orange { border-top-color:var(--orange); }
+.dash-op-kpi.kpi-red { border-top-color:var(--red); }
+.dash-op-kpi.kpi-blue { border-top-color:var(--blue); }
+.dash-op-empty {
+  border:1px dashed rgba(22,163,74,.22);
+  border-radius:12px;
+  background:#f0fdf4;
+  color:#166534;
+}
+.com-filter-panel { grid-template-columns:repeat(3,minmax(180px,1fr)); }
+.com-kpis .card {
+  min-height:92px;
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-sm);
+}
+.com-status-card {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  gap:12px;
+  align-items:start;
+  margin-bottom:14px;
+  padding:14px 16px;
+  border-radius:var(--radius-lg);
+  border:1px solid var(--border);
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+}
+.com-status-card.ok { border-color:rgba(22,163,74,.22); background:linear-gradient(90deg,#f0fdf4,#fff 58%); }
+.com-status-card.warn { border-color:rgba(234,88,12,.24); background:linear-gradient(90deg,#fff7ed,#fff 58%); }
+.com-status-dot {
+  width:10px;
+  height:10px;
+  margin-top:4px;
+  border-radius:99px;
+  background:var(--orange);
+  box-shadow:0 0 0 4px rgba(234,88,12,.10);
+}
+.com-status-card.ok .com-status-dot {
+  background:var(--green);
+  box-shadow:0 0 0 4px rgba(22,163,74,.10);
+}
+.com-status-title { font-size:13px; font-weight:900; color:var(--text); }
+.com-status-text { margin-top:3px; font-size:12px; color:var(--text2); line-height:1.45; }
+.com-msg-dest { min-width:180px; }
+.com-msg-dest strong { display:block; color:var(--text); margin-bottom:2px; }
+.com-msg-preview { max-width:420px; font-size:12px; color:var(--text2); line-height:1.45; }
+.com-msg-error { margin-top:5px; color:var(--red); font-size:11px; font-weight:700; }
+.fleet-section-card,
+.fleet-detail-card,
+.fleet-history-card {
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:var(--radius-lg);
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+  padding:16px;
+}
+.fleet-section-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:14px;
+}
+.fleet-section-title {
+  font-family:var(--display);
+  font-size:15px;
+  font-weight:900;
+  color:var(--text);
+}
+.fleet-section-sub {
+  margin-top:3px;
+  font-size:12px;
+  color:var(--text3);
+  line-height:1.45;
+}
+.fleet-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.fleet-kpi-strip { margin-bottom:14px; }
+.fleet-kpi-strip .card {
+  min-height:92px;
+  border-radius:var(--radius-lg);
+  box-shadow:none;
+  background:#f8fafc;
+}
+.fleet-filter-panel { grid-template-columns:minmax(260px,1.3fr) repeat(2,minmax(160px,.7fr)); margin-bottom:14px; }
+.fleet-vehicle-name { min-width:170px; }
+.fleet-vehicle-name strong { display:block; color:var(--text); }
+.fleet-vehicle-name span { display:block; margin-top:2px; font-size:11px; color:var(--text3); }
+.fleet-alert-summary { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.fleet-setup-notice {
+  border:1px solid rgba(234,88,12,.28);
+  border-left:4px solid var(--orange);
+  border-radius:var(--radius-lg);
+  background:#fff7ed;
+  color:#92400e;
+  padding:13px 15px;
+  margin-bottom:14px;
+  box-shadow:var(--shadow-sm);
+}
+.fleet-setup-title { font-weight:900; margin-bottom:4px; }
+.fleet-setup-text { font-size:12px; line-height:1.45; color:#7c2d12; }
+.fleet-setup-meta { margin-top:6px; font-size:11px; color:#9a3412; }
+.fleet-detail-hero {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:12px;
+  align-items:start;
+  margin-bottom:14px;
+}
+.fleet-detail-title { font-family:var(--display); font-size:18px; font-weight:900; color:var(--text); }
+.fleet-detail-meta { margin-top:4px; font-size:12px; color:var(--text3); }
+.fleet-detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.fleet-mini-panel {
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  background:#f8fafc;
+}
+.fleet-history-card { margin-top:18px; }
+@media(max-width:1100px) {
+  .dash-v2-analytics { grid-template-columns:1fr !important; }
+  .fleet-filter-panel { grid-template-columns:1fr 1fr; }
+}
+@media(max-width:760px) {
+  .com-filter-panel,
+  .fleet-filter-panel,
+  .fleet-detail-grid,
+  .fleet-detail-hero { grid-template-columns:1fr; }
+  .fleet-actions { width:100%; justify-content:stretch; }
+  .fleet-actions .btn { flex:1; }
+}
+
 /* ─── AGENDA KANBAN ───────────────────────────── */
 .kanban { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
 .kan-col { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
@@ -3021,12 +3201,13 @@ async function carregarVeiculos(){
     <div id="page-dashboard" class="page active">
 
       <!-- ── Cabeçalho + Filtro de Mês ── -->
-      <div class="dash-op-head">
+      <div class="ui-page-head dash-v2-head">
         <div>
+          <div class="ui-page-kicker">Central operacional</div>
           <div class="section-title">Dashboard Operacional</div>
           <div class="section-sub" id="dash-period">Ano inteiro 2026 · carregando...</div>
         </div>
-        <div class="dash-op-actions">
+        <div class="ui-page-actions dash-op-actions">
           <select class="fsel" id="dash-mes-filter" onchange="dashSetMes(this.value)" style="min-width:150px;font-weight:600">
             <option value="all">📅 Ano inteiro 2026</option>
             <option value="JAN">Janeiro 2026</option>
@@ -3085,16 +3266,16 @@ async function carregarVeiculos(){
       </div>
 
       <!-- ── ZONA 3: Distribuição + Semana + Horários ── -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px" class="grid-3-resp mb4">
-        <div class="card">
+      <div class="dash-v2-analytics grid-3-resp mb4">
+        <div class="card dash-v2-panel">
           <div class="card-label mb2">Serviços por Tipo</div>
           <div id="dash-equipe-chart"></div>
         </div>
-        <div class="card">
+        <div class="card dash-v2-panel">
           <div class="card-label mb2">Serviços por Semana</div>
           <div class="bar-wrap" id="dash-bar"></div>
         </div>
-        <div class="card" style="border-top:2px solid var(--purple)">
+        <div class="card dash-v2-panel" style="border-top:2px solid var(--purple)">
           <div class="card-label mb2">⏰ Picos por Horário</div>
           <div id="dash-hora-chart"></div>
           <div style="font-size:10px;color:var(--text3);margin-top:8px">Volume por faixa horária do dia</div>
@@ -3103,15 +3284,15 @@ async function carregarVeiculos(){
 
       <!-- ── ZONA 4: Status + Top Clientes + Frota ── -->
       <div class="grid-3">
-        <div class="card card-accent">
+        <div class="card card-accent dash-v2-panel">
           <div class="card-label mb2">Status dos Serviços</div>
           <div id="dash-status"></div>
         </div>
-        <div class="card card-green">
+        <div class="card card-green dash-v2-panel">
           <div class="card-label mb2">Top 10 Clientes</div>
           <div id="dash-top-clients"></div>
         </div>
-        <div class="card">
+        <div class="card dash-v2-panel">
           <div class="card-label mb2">Frota & Combustível</div>
           <div id="dash-frota-km"></div>
           <div style="height:1px;background:var(--border);margin:12px 0"></div>
@@ -3121,11 +3302,11 @@ async function carregarVeiculos(){
 
       <!-- ── ZONA 5: Eficiência de Rotas ── -->
       <div class="grid-2 mb4">
-        <div class="card">
+        <div class="card dash-v2-panel">
           <div class="card-label mb2">📊 Eficiência de Rotas</div>
           <div id="dash-eficiencia"></div>
         </div>
-        <div class="card">
+        <div class="card dash-v2-panel">
           <div class="card-label mb2">⚡ KM e Combustível</div>
           <div id="dash-km-stats"></div>
         </div>
@@ -3320,12 +3501,13 @@ async function carregarVeiculos(){
 
     <!-- ═══ COMUNICAÇÃO LOGÍSTICA ═══ -->
     <div id="page-comunicacao" class="page">
-      <div class="flex ic sb mb3">
+      <div class="ui-page-head com-v2-head">
         <div>
+          <div class="ui-page-kicker">WhatsApp operacional</div>
           <div class="section-title">Comunicação Logística</div>
           <div class="section-sub">WhatsApp operacional, lembretes e histórico de mensagens</div>
         </div>
-        <div class="flex gap2" style="flex-wrap:wrap;align-items:center">
+        <div class="ui-page-actions">
           <input type="date" class="fsel" id="com-data" onchange="renderComunicacaoLogistica(true)">
           <button class="btn btn-primary btn-sm" onclick="comEnviarAgendaTodos()">Enviar agenda para todos</button>
           <button class="btn btn-green btn-sm" onclick="comEnviarLembretes24h()">Enviar lembretes 24h</button>
@@ -3333,11 +3515,11 @@ async function carregarVeiculos(){
         </div>
       </div>
 
-      <div id="com-evolution-status" style="margin-bottom:12px"></div>
+      <div id="com-evolution-status" class="com-status-slot"></div>
 
-      <div class="grid-kpi" id="com-kpis" style="margin-bottom:16px"></div>
+      <div class="grid-kpi com-kpis" id="com-kpis" style="margin-bottom:16px"></div>
 
-      <div class="filter-bar">
+      <div class="filter-bar ui-filter-panel com-filter-panel">
         <select class="fsel" id="com-filter-tipo" onchange="renderComunicacaoLogistica(true)">
           <option value="">Todos os tipos</option>
           <option value="agenda_tecnico">Agenda técnico</option>
@@ -3360,7 +3542,7 @@ async function carregarVeiculos(){
         </select>
       </div>
 
-      <div class="tbl-wrap">
+      <div class="tbl-wrap ui-table-card">
         <table>
           <thead>
             <tr><th>Data</th><th>Tipo</th><th>Destino</th><th>Status</th><th>Mensagem</th><th>Ações</th></tr>
@@ -3525,37 +3707,54 @@ async function carregarVeiculos(){
 
     <!-- ═══ FROTA ═══ -->
     <div id="page-frota" class="page">
-      <div class="section-title">Controle de Frota</div>
-      <div class="section-sub">Veículos, documentos, manutenções, alertas e KPIs extraídos dos check lists diários</div>
+      <div class="ui-page-head">
+        <div>
+          <div class="ui-page-kicker">Frota e manutenção</div>
+          <div class="section-title">Controle de Frota</div>
+          <div class="section-sub">Veículos, documentos, manutenções, alertas e KPIs extraídos dos check lists diários</div>
+        </div>
+        <div class="ui-page-actions">
+          <button class="btn btn-ghost btn-sm" onclick="carregarFrotaV1()">Atualizar frota</button>
+          <button class="btn btn-primary btn-sm" onclick="abrirCadastroVeiculoFrota()">Novo veículo</button>
+        </div>
+      </div>
       <div id="frota-alertas-v1" class="mb4"></div>
       <div id="frota-veiculos-v1" class="mb4"></div>
       <div id="frota-detalhe-v1" class="mb4"></div>
-      <div class="grid-kpi mb4" id="frota-kpis"></div>
-      <div class="grid-2 mb4">
-        <div class="card">
-          <div class="card-label mb3">KM por Dia — últimos registros</div>
-          <div class="bar-wrap" id="frota-bar"></div>
-        </div>
-        <div class="card">
-          <div class="card-label mb3">⛽ Distribuição Combustível</div>
-          <div id="frota-fuel"></div>
+      <div class="ui-subsection-head">
+        <div>
+          <div class="ui-subsection-title">Histórico de checklists</div>
+          <div class="ui-subsection-sub">Indicadores antigos de KM, combustível, motoristas e avarias preservados como histórico operacional.</div>
         </div>
       </div>
-      <div class="grid-2 mb4">
-        <div class="card">
+      <div class="fleet-history-card">
+        <div class="grid-kpi mb4" id="frota-kpis"></div>
+        <div class="grid-2 mb4">
+          <div class="card dash-v2-panel">
+            <div class="card-label mb3">KM por Dia — últimos registros</div>
+            <div class="bar-wrap" id="frota-bar"></div>
+          </div>
+          <div class="card dash-v2-panel">
+            <div class="card-label mb3">⛽ Distribuição Combustível</div>
+            <div id="frota-fuel"></div>
+          </div>
+        </div>
+        <div class="grid-2 mb4">
+          <div class="card dash-v2-panel">
           <div class="card-label mb3">🚗 KM por Veículo</div>
           <div id="frota-veic"></div>
-        </div>
-        <div class="card">
+          </div>
+          <div class="card dash-v2-panel">
           <div class="card-label mb3">👷 Ranking Motoristas</div>
           <div class="tbl-wrap"><table>
             <thead><tr><th>Motorista</th><th>Dias</th><th>KM</th><th>Avg</th><th>Avarias</th></tr></thead>
             <tbody id="frota-mot-tbody"></tbody>
           </table></div>
+          </div>
         </div>
+        <div id="avarias-section"></div>
       </div>
-      <div id="avarias-section"></div>
-      <div class="card mt4">
+      <div class="card fleet-history-card mt4">
         <div class="card-label mb3">📋 Importar Registros Históricos (3 meses)</div>
         <div class="note mb3"><strong>Você tem papéis na gaveta.</strong> Use este formulário para inserir cada dia passado. KM, horários, combustível e avarias são os campos mais valiosos.</div>
         <div class="form-row fr-4 mb3">
@@ -7609,10 +7808,10 @@ function renderDash() {
   // ── ZONA 1: KPIs ───────────────────────────────────────────
   const kpiTxColor = txExec>=70?'var(--green)':txExec>=50?'var(--orange)':'var(--red)';
   document.getElementById('dash-kpis').innerHTML = `
-    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Executados</div><div class="dash-op-kpi-value" style="color:var(--green)">${exec}</div><div class="dash-op-kpi-note">${txExec}% do período concluído</div></div>
-    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Pendentes</div><div class="dash-op-kpi-value" style="color:${pend?'var(--orange)':'var(--green)'}">${pend}</div><div class="dash-op-kpi-note">serviços aguardando execução</div></div>
-    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Atrasados</div><div class="dash-op-kpi-value" style="color:${vencidos.length?'var(--red)':'var(--green)'}">${vencidos.length}</div><div class="dash-op-kpi-note">${vencidos.length?'datas passadas ainda agendadas':'operação em dia'}</div></div>
-    <div class="dash-op-kpi"><div class="dash-op-kpi-label">Taxa de execução</div><div class="dash-op-kpi-value" style="color:${kpiTxColor}">${txExec}%</div><div class="dash-op-kpi-note">${total} serviços · ${mLabel}</div></div>
+    <div class="dash-op-kpi kpi-green"><div class="dash-op-kpi-label">Executados</div><div class="dash-op-kpi-value" style="color:var(--green)">${exec}</div><div class="dash-op-kpi-note">${txExec}% do período concluído</div></div>
+    <div class="dash-op-kpi kpi-orange"><div class="dash-op-kpi-label">Pendentes</div><div class="dash-op-kpi-value" style="color:${pend?'var(--orange)':'var(--green)'}">${pend}</div><div class="dash-op-kpi-note">serviços aguardando execução</div></div>
+    <div class="dash-op-kpi kpi-red"><div class="dash-op-kpi-label">Atrasados</div><div class="dash-op-kpi-value" style="color:${vencidos.length?'var(--red)':'var(--green)'}">${vencidos.length}</div><div class="dash-op-kpi-note">${vencidos.length?'datas passadas ainda agendadas':'operação em dia'}</div></div>
+    <div class="dash-op-kpi kpi-blue"><div class="dash-op-kpi-label">Taxa de execução</div><div class="dash-op-kpi-value" style="color:${kpiTxColor}">${txExec}%</div><div class="dash-op-kpi-note">${total} serviços · ${mLabel}</div></div>
   `;
 
   const acoes = [];
@@ -10263,10 +10462,10 @@ function fleetSetupNotice() {
   const missingTables = (fleetSetupStatus.missing_tables || []).join(', ') || 'nenhuma tabela informada';
   const missingColumns = (fleetSetupStatus.missing_columns || []).join(', ') || 'nenhuma coluna informada';
   const duplicateCount = (fleetSetupStatus.duplicate_plates || []).length;
-  return `<div class="note" style="border-color:rgba(234,88,12,.35);background:rgba(234,88,12,.08);margin-bottom:14px">
-    <div style="font-weight:800;color:var(--orange);margin-bottom:4px">Setup da Frota V2 incompleto</div>
-    <div style="font-size:12px;color:var(--text2);line-height:1.45">Os veículos antigos continuam aparecendo. Para liberar documentos, manutenções, histórico e alertas completos, rode <span class="mono">${sanitize(fleetSetupStatus.migration || 'migration-frota-v1.sql')}</span> no SQL Editor do Supabase.</div>
-    <div style="font-size:11px;color:var(--text3);margin-top:6px">Tabelas pendentes: ${sanitize(missingTables)} · Colunas pendentes: ${sanitize(missingColumns)}${duplicateCount ? ` · Placas duplicadas para revisar: ${duplicateCount}` : ''}</div>
+  return `<div class="fleet-setup-notice">
+    <div class="fleet-setup-title">Setup da Frota V2 incompleto</div>
+    <div class="fleet-setup-text">Os veículos antigos continuam aparecendo. Para liberar documentos, manutenções, histórico e alertas completos, rode <span class="mono">${sanitize(fleetSetupStatus.migration || 'migration-frota-v1.sql')}</span> no SQL Editor do Supabase.</div>
+    <div class="fleet-setup-meta">Tabelas pendentes: ${sanitize(missingTables)} · Colunas pendentes: ${sanitize(missingColumns)}${duplicateCount ? ` · Placas duplicadas para revisar: ${duplicateCount}` : ''}</div>
   </div>`;
 }
 
@@ -10349,55 +10548,57 @@ function renderFrotaV1() {
 
   alertsEl.innerHTML = `
     ${fleetSetupNotice()}
-    <div class="card" style="padding:16px">
-      <div class="flex ic sb mb3" style="gap:12px;flex-wrap:wrap">
+    <div class="fleet-section-card">
+      <div class="fleet-section-head">
         <div>
-          <div class="card-label">Alertas de Frota</div>
-          <div class="section-sub" style="font-size:12px">Documentos, manutenção, rodízio e pendências operacionais.</div>
+          <div class="fleet-section-title">Alertas de Frota</div>
+          <div class="fleet-section-sub">Documentos, manutenção, rodízio e pendências operacionais agrupados por veículo.</div>
         </div>
-        <div class="flex gap2" style="flex-wrap:wrap">
+        <div class="fleet-actions">
           <button class="btn btn-ghost btn-sm" onclick="carregarFrotaV1()">Atualizar</button>
           <button class="btn btn-primary btn-sm" onclick="enviarResumoFrotaWhatsApp()">Enviar resumo WhatsApp</button>
         </div>
       </div>
-      <div class="grid-kpi mb3">
+      <div class="grid-kpi fleet-kpi-strip">
         <div class="card card-red"><div class="card-label">Críticos</div><div class="card-value cv-red">${counts.critica || 0}</div></div>
         <div class="card card-orange"><div class="card-label">Altos</div><div class="card-value cv-orange">${counts.alta || 0}</div></div>
         <div class="card"><div class="card-label">Médios</div><div class="card-value cv-blue">${counts.media || 0}</div></div>
         <div class="card"><div class="card-label">Total</div><div class="card-value">${fleetAlerts.length}</div></div>
       </div>
-      <div class="tbl-wrap"><table>
+      <div class="tbl-wrap ui-table-card"><table>
         <thead><tr><th>Veículo</th><th>Placa</th><th>Alertas</th><th>Prioridade</th><th>Prazo/KM</th><th>Ações</th></tr></thead>
         <tbody>${alertGroups.length ? alertGroups.map(group => {
           const a = group.principal || {};
           return `<tr>
-          <td class="bold">${sanitize(group.veiculo || a.veiculo || '—')}</td>
+          <td class="fleet-vehicle-name"><strong>${sanitize(group.veiculo || a.veiculo || '—')}</strong><span>${sanitize(group.alerts.length)} pendência(s) vinculada(s)</span></td>
           <td class="mono">${sanitize(group.placa || a.placa || '—')}</td>
-          <td><span class="chip chip-blue">${group.alerts.length} alerta${group.alerts.length === 1 ? '' : 's'}</span> ${sanitize(a.mensagem || a.tipo_alerta || '—')}</td>
+          <td><div class="fleet-alert-summary"><span class="chip chip-blue">${group.alerts.length} alerta${group.alerts.length === 1 ? '' : 's'}</span><span>${sanitize(a.mensagem || a.tipo_alerta || '—')}</span></div></td>
           <td>${fleetPriorityChip(group.prioridade)}</td>
           <td class="mono">${sanitize(a.data_limite || a.proxima_quilometragem || a.km_restante || '—')}</td>
-          <td style="display:flex;gap:6px;flex-wrap:wrap">
+          <td><div class="fleet-actions">
             <button class="btn btn-ghost btn-xs" onclick="abrirDetalheVeiculo(${jsArg(group.veiculo_id || a.veiculo_id)})">Ver veículo</button>
             <button class="btn btn-ghost btn-xs" onclick="abrirCadastroVeiculoFrota(${jsArg(group.veiculo_id || a.veiculo_id)})">Editar</button>
             <button class="btn btn-ghost btn-xs" onclick="resolverAlertaFrota(${jsArg(a.alerta_chave)})">Resolver</button>
             <button class="btn btn-ghost btn-xs" onclick="enviarAlertaFrotaWhatsApp(${jsArg(a.alerta_chave)})">WhatsApp</button>
-          </td>
+          </div></td>
         </tr>`;
-        }).join('') : '<tr><td colspan="6" class="text-muted">Nenhum alerta de frota no momento.</td></tr>'}</tbody>
+        }).join('') : '<tr><td colspan="6"><div class="ui-empty-state"><div class="ui-empty-title">Nenhum alerta de frota no momento</div><div>Quando houver vencimentos, manutenção próxima ou rodízio, eles aparecem aqui.</div></div></td></tr>'}</tbody>
       </table></div>
     </div>`;
 
   const filteredVehicles = fleetFilteredVehicles();
   vehiclesEl.innerHTML = `
-    <div class="card" style="padding:16px">
-      <div class="flex ic sb mb3" style="gap:12px;flex-wrap:wrap">
+    <div class="fleet-section-card">
+      <div class="fleet-section-head">
         <div>
-          <div class="card-label">Veículos cadastrados (${filteredVehicles.length}/${fleetVehicles.length})</div>
-          <div class="section-sub" style="font-size:12px">Cadastro principal, KM atual, técnico responsável e rodízio.</div>
+          <div class="fleet-section-title">Veículos cadastrados (${filteredVehicles.length}/${fleetVehicles.length})</div>
+          <div class="fleet-section-sub">Cadastro principal, KM atual, técnico responsável e rodízio.</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="abrirCadastroVeiculoFrota()">Novo veículo</button>
+        <div class="fleet-actions">
+          <button class="btn btn-primary btn-sm" onclick="abrirCadastroVeiculoFrota()">Novo veículo</button>
+        </div>
       </div>
-      <div class="filter-bar" style="margin-bottom:12px">
+      <div class="filter-bar ui-filter-panel fleet-filter-panel">
         <input class="finput" placeholder="Buscar por placa, nome, marca ou modelo..." value="${escapeHtmlAttr(fleetFilters.search || '')}" oninput="setFleetFilter('search', this.value)">
         <select class="fsel" onchange="setFleetFilter('status', this.value)">
           <option value="" ${!fleetFilters.status ? 'selected' : ''}>Todos status</option>
@@ -10411,24 +10612,24 @@ function renderFrotaV1() {
           <option value="sem_alerta" ${fleetFilters.alert === 'sem_alerta' ? 'selected' : ''}>Sem alerta</option>
         </select>
       </div>
-      <div class="tbl-wrap"><table>
+      <div class="tbl-wrap ui-table-card"><table>
         <thead><tr><th>Placa</th><th>Veículo</th><th>Técnico</th><th>KM atual</th><th>Status</th><th>Rodízio</th><th>Próximo alerta</th><th>Ações</th></tr></thead>
         <tbody>${filteredVehicles.length ? filteredVehicles.map(v => {
           const alert = fleetVehicleAlert(v.id);
           return `<tr>
             <td class="mono">${sanitize(v.placa || '—')}</td>
-            <td class="bold">${sanitize(v.nome || [v.marca, v.modelo].filter(Boolean).join(' ') || '—')}</td>
+            <td class="fleet-vehicle-name"><strong>${sanitize(v.nome || [v.marca, v.modelo].filter(Boolean).join(' ') || '—')}</strong><span>${sanitize([v.marca, v.modelo, v.ano].filter(Boolean).join(' · ') || 'Dados gerais pendentes')}</span></td>
             <td>${sanitize((window._tecnicos || []).find(t => String(t.id) === String(v.tecnico_responsavel_id))?.nome || '—')}</td>
             <td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td>
             <td><span class="chip ${v.status === 'manutencao' ? 'chip-orange' : v.status === 'inativo' || v.ativo === false ? 'chip-gray' : 'chip-green'}">${sanitize(v.status || (v.ativo === false ? 'inativo' : 'ativo'))}</span></td>
             <td>${v.rodizio?.status_rodizio_hoje ? '<span class="chip chip-orange">Hoje</span>' : sanitize(v.rodizio?.dia_rodizio || '—')}</td>
-            <td>${alert ? `${fleetPriorityChip(alert.prioridade)} ${sanitize(alert.mensagem || '')}` : '<span class="chip chip-green">Em dia</span>'}</td>
-            <td style="display:flex;gap:6px;flex-wrap:wrap">
+            <td>${alert ? `<div class="fleet-alert-summary">${fleetPriorityChip(alert.prioridade)}<span>${sanitize(alert.mensagem || '')}</span></div>` : '<span class="chip chip-green">Em dia</span>'}</td>
+            <td><div class="fleet-actions">
               <button class="btn btn-ghost btn-xs" onclick="abrirDetalheVeiculo(${jsArg(v.id)})">Ver</button>
               <button class="btn btn-ghost btn-xs" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)})">Editar</button>
-            </td>
+            </div></td>
           </tr>`;
-        }).join('') : '<tr><td colspan="8" class="text-muted">Nenhum veículo encontrado para os filtros atuais.</td></tr>'}</tbody>
+        }).join('') : '<tr><td colspan="8"><div class="ui-empty-state"><div class="ui-empty-title">Nenhum veículo encontrado</div><div>Ajuste os filtros ou cadastre um novo veículo.</div></div></td></tr>'}</tbody>
       </table></div>
     </div>`;
 
@@ -10452,13 +10653,13 @@ function renderDetalheVeiculo(v) {
   const detailEl = document.getElementById('frota-detalhe-v1');
   if (!detailEl || !v) return;
   detailEl.innerHTML = `
-    <div class="card" style="padding:16px">
-      <div class="flex ic sb mb3" style="gap:12px;flex-wrap:wrap">
+    <div class="fleet-detail-card">
+      <div class="fleet-detail-hero">
         <div>
-          <div class="card-label">${sanitize(v.nome || 'Veículo')} ${v.placa ? `<span class="mono">· ${sanitize(v.placa)}</span>` : ''}</div>
-          <div class="section-sub" style="font-size:12px">${sanitize(v.marca || '')} ${sanitize(v.modelo || '')} · KM ${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</div>
+          <div class="fleet-detail-title">${sanitize(v.nome || 'Veículo')} ${v.placa ? `<span class="mono">· ${sanitize(v.placa)}</span>` : ''}</div>
+          <div class="fleet-detail-meta">${sanitize([v.marca, v.modelo, v.ano].filter(Boolean).join(' · ') || 'Dados gerais pendentes')} · KM ${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</div>
         </div>
-        <div class="flex gap2" style="flex-wrap:wrap">
+        <div class="fleet-actions">
           <button class="btn btn-ghost btn-sm" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)})">Editar veículo</button>
           <button class="btn btn-ghost btn-sm" onclick="atualizarKmVeiculo(${jsArg(v.id)})">Atualizar KM</button>
           <button class="btn btn-ghost btn-sm" ${fleetFeatureEnabled('documentos') ? '' : 'disabled'} onclick="novoDocumentoVeiculo(${jsArg(v.id)})">Novo documento</button>
@@ -10467,35 +10668,35 @@ function renderDetalheVeiculo(v) {
         </div>
       </div>
       ${!fleetSetupStatus.complete ? fleetSetupNotice() : ''}
-      <div class="grid-kpi mb3">
+      <div class="grid-kpi fleet-kpi-strip">
         <div class="card"><div class="card-label">Status</div><div class="card-value" style="font-size:20px">${sanitize(v.status || (v.ativo === false ? 'inativo' : 'ativo'))}</div></div>
         <div class="card"><div class="card-label">Rodízio</div><div class="card-value" style="font-size:20px">${sanitize(v.rodizio?.dia_rodizio || '—')}</div></div>
         <div class="card"><div class="card-label">Técnico</div><div class="card-value" style="font-size:20px">${sanitize((window._tecnicos || []).find(t => String(t.id) === String(v.tecnico_responsavel_id))?.nome || '—')}</div></div>
         <div class="card"><div class="card-label">Alertas</div><div class="card-value">${(v.alertas || []).length}</div></div>
       </div>
-      <div class="grid-2 mb3">
-        <div>
-          <div class="card-label mb2">Documentos</div>
-          <div class="tbl-wrap"><table><thead><tr><th>Tipo</th><th>Vencimento</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody>${fleetFeatureEnabled('documentos') ? ((v.documentos || []).length ? v.documentos.map(d => `<tr><td>${sanitize(d.tipo_documento)}</td><td class="mono">${sanitize(d.data_vencimento || '—')}</td><td>${sanitize(d.status || '—')}</td><td style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" onclick="novoDocumentoVeiculo(${jsArg(v.id)}, ${jsArg(d.id)})">Editar</button><button class="btn btn-ghost btn-xs" onclick="marcarDocumentoPago(${jsArg(d.id)})">Pago</button><button class="btn btn-ghost btn-xs" onclick="excluirDocumentoVeiculo(${jsArg(d.id)})">Excluir</button></td></tr>`).join('') : '<tr><td colspan="4" class="text-muted">Sem documentos.</td></tr>') : '<tr><td colspan="4" class="text-muted">Rode migration-frota-v1.sql para liberar documentos.</td></tr>'}</tbody>
+      <div class="fleet-detail-grid mb3">
+        <div class="fleet-mini-panel">
+          <div class="fleet-section-title mb2">Documentos</div>
+          <div class="tbl-wrap ui-table-card"><table><thead><tr><th>Tipo</th><th>Vencimento</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>${fleetFeatureEnabled('documentos') ? ((v.documentos || []).length ? v.documentos.map(d => `<tr><td>${sanitize(d.tipo_documento)}</td><td class="mono">${sanitize(d.data_vencimento || '—')}</td><td>${sanitize(d.status || '—')}</td><td><div class="fleet-actions"><button class="btn btn-ghost btn-xs" onclick="novoDocumentoVeiculo(${jsArg(v.id)}, ${jsArg(d.id)})">Editar</button><button class="btn btn-ghost btn-xs" onclick="marcarDocumentoPago(${jsArg(d.id)})">Pago</button><button class="btn btn-ghost btn-xs" onclick="excluirDocumentoVeiculo(${jsArg(d.id)})">Excluir</button></div></td></tr>`).join('') : '<tr><td colspan="4"><div class="ui-empty-state">Sem documentos.</div></td></tr>') : '<tr><td colspan="4"><div class="ui-empty-state">Rode migration-frota-v1.sql para liberar documentos.</div></td></tr>'}</tbody>
           </table></div>
         </div>
-        <div>
-          <div class="card-label mb2">Manutenções</div>
-          <div class="tbl-wrap"><table><thead><tr><th>Tipo</th><th>Próx. data</th><th>Próx. KM</th><th>Ações</th></tr></thead>
-            <tbody>${fleetFeatureEnabled('manutencoes') ? ((v.manutencoes || []).length ? v.manutencoes.map(m => `<tr><td>${sanitize(m.tipo_manutencao)}</td><td class="mono">${sanitize(m.proxima_data || '—')}</td><td class="mono">${m.proxima_quilometragem || '—'}</td><td style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" onclick="novaManutencaoVeiculo(${jsArg(v.id)}, ${jsArg(m.id)})">Editar</button><button class="btn btn-ghost btn-xs" onclick="marcarManutencaoRealizada(${jsArg(m.id)})">Realizada</button><button class="btn btn-ghost btn-xs" onclick="excluirManutencaoVeiculo(${jsArg(m.id)})">Excluir</button></td></tr>`).join('') : '<tr><td colspan="4" class="text-muted">Sem manutenções.</td></tr>') : '<tr><td colspan="4" class="text-muted">Rode migration-frota-v1.sql para liberar manutenções.</td></tr>'}</tbody>
+        <div class="fleet-mini-panel">
+          <div class="fleet-section-title mb2">Manutenções</div>
+          <div class="tbl-wrap ui-table-card"><table><thead><tr><th>Tipo</th><th>Próx. data</th><th>Próx. KM</th><th>Ações</th></tr></thead>
+            <tbody>${fleetFeatureEnabled('manutencoes') ? ((v.manutencoes || []).length ? v.manutencoes.map(m => `<tr><td>${sanitize(m.tipo_manutencao)}</td><td class="mono">${sanitize(m.proxima_data || '—')}</td><td class="mono">${m.proxima_quilometragem || '—'}</td><td><div class="fleet-actions"><button class="btn btn-ghost btn-xs" onclick="novaManutencaoVeiculo(${jsArg(v.id)}, ${jsArg(m.id)})">Editar</button><button class="btn btn-ghost btn-xs" onclick="marcarManutencaoRealizada(${jsArg(m.id)})">Realizada</button><button class="btn btn-ghost btn-xs" onclick="excluirManutencaoVeiculo(${jsArg(m.id)})">Excluir</button></div></td></tr>`).join('') : '<tr><td colspan="4"><div class="ui-empty-state">Sem manutenções.</div></td></tr>') : '<tr><td colspan="4"><div class="ui-empty-state">Rode migration-frota-v1.sql para liberar manutenções.</div></td></tr>'}</tbody>
           </table></div>
         </div>
       </div>
-      <div class="grid-2">
-        <div>
-          <div class="card-label mb2">Alertas</div>
+      <div class="fleet-detail-grid">
+        <div class="fleet-mini-panel">
+          <div class="fleet-section-title mb2">Alertas</div>
           ${(v.alertas || []).length ? v.alertas.map(a => `<div class="note mb2">${fleetPriorityChip(a.prioridade)} ${sanitize(a.mensagem || a.tipo_alerta)}</div>`).join('') : '<div class="text-muted">Sem alertas para este veículo.</div>'}
         </div>
-        <div>
-          <div class="card-label mb2">Histórico</div>
-          <div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Descrição</th></tr></thead>
-            <tbody>${(v.historico || []).length ? v.historico.slice(0, 8).map(h => `<tr><td class="mono">${String(h.created_at || '').slice(0,10)}</td><td>${sanitize(h.tipo_evento || '—')}</td><td>${sanitize(h.descricao || '—')}</td></tr>`).join('') : '<tr><td colspan="3" class="text-muted">Sem histórico.</td></tr>'}</tbody>
+        <div class="fleet-mini-panel">
+          <div class="fleet-section-title mb2">Histórico</div>
+          <div class="tbl-wrap ui-table-card"><table><thead><tr><th>Data</th><th>Evento</th><th>Descrição</th></tr></thead>
+            <tbody>${(v.historico || []).length ? v.historico.slice(0, 8).map(h => `<tr><td class="mono">${String(h.created_at || '').slice(0,10)}</td><td>${sanitize(h.tipo_evento || '—')}</td><td>${sanitize(h.descricao || '—')}</td></tr>`).join('') : '<tr><td colspan="3"><div class="ui-empty-state">Sem histórico.</div></td></tr>'}</tbody>
           </table></div>
         </div>
       </div>
@@ -14056,7 +14257,13 @@ function reminderStatusChip(item) {
 function evolutionStatusAlertHtml() {
   if (!evolutionStatus.checked) return '';
   if (evolutionStatus.connected) {
-    return `<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(22,163,74,.25);border-radius:var(--r2);background:var(--green-bg);color:var(--green);font-size:11px;font-weight:700">Evolution API conectada${evolutionStatus.instance ? ` · instância ${sanitize(evolutionStatus.instance)}` : ''}</div>`;
+    return `<div class="com-status-card ok">
+      <span class="com-status-dot"></span>
+      <div>
+        <div class="com-status-title">Evolution API conectada${evolutionStatus.instance ? ` · instância ${sanitize(evolutionStatus.instance)}` : ''}</div>
+        <div class="com-status-text">Envios pela API liberados para agenda técnica, confirmações e lembretes.</div>
+      </div>
+    </div>`;
   }
   const msg = evolutionStatus.configured
     ? (() => {
@@ -14067,7 +14274,13 @@ function evolutionStatusAlertHtml() {
         return `Evolution configurada, mas instância desconectada${evolutionStatus.state ? ` (${sanitize(evolutionStatus.state)})` : ''}.`;
       })()
     : 'Evolution API ainda não configurada no backend.';
-  return `<div style="margin-bottom:10px;padding:9px;border:1px solid rgba(234,88,12,.25);border-radius:var(--r2);background:var(--orange-bg);color:var(--orange);font-size:11px;font-weight:700">${msg} Use copiar texto como fallback.</div>`;
+  return `<div class="com-status-card warn">
+    <span class="com-status-dot"></span>
+    <div>
+      <div class="com-status-title">Envio automático indisponível</div>
+      <div class="com-status-text">${msg} Use copiar texto como fallback.</div>
+    </div>
+  </div>`;
 }
 
 function renderCustomerRemindersPanel(servicos = [], data = '') {
@@ -14346,7 +14559,7 @@ async function renderComunicacaoLogistica(force = false) {
   const tbody = document.getElementById('com-msg-tbody');
   if (!tbody) return;
   comDataValue();
-  tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Carregando histórico...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6"><div class="ui-empty-state"><div class="ui-empty-title">Carregando histórico</div><div>Buscando mensagens e status da Evolution API.</div></div></td></tr>';
   await carregarEvolutionStatus(force);
   const statusBox = document.getElementById('com-evolution-status');
   if (statusBox) statusBox.innerHTML = evolutionStatusAlertHtml();
@@ -14358,13 +14571,13 @@ async function renderComunicacaoLogistica(force = false) {
     const kpis = document.getElementById('com-kpis');
     if (kpis) {
       kpis.innerHTML = `
-        <div class="card card-accent"><div class="card-label">Mensagens</div><div class="card-value cv-blue">${items.length}</div></div>
-        <div class="card card-green"><div class="card-label">Enviadas</div><div class="card-value cv-green">${enviados}</div></div>
-        <div class="card card-orange"><div class="card-label">Pendentes</div><div class="card-value cv-orange">${pendentes}</div></div>
-        <div class="card"><div class="card-label">Erros</div><div class="card-value" style="color:var(--red)">${erros}</div></div>`;
+        <div class="card card-accent"><div class="card-label">Mensagens</div><div class="card-value cv-blue">${items.length}</div><div class="card-trend">histórico filtrado</div></div>
+        <div class="card card-green"><div class="card-label">Enviadas</div><div class="card-value cv-green">${enviados}</div><div class="card-trend">confirmadas no backend</div></div>
+        <div class="card card-orange"><div class="card-label">Pendentes</div><div class="card-value cv-orange">${pendentes}</div><div class="card-trend">aguardando envio</div></div>
+        <div class="card"><div class="card-label">Erros</div><div class="card-value" style="color:var(--red)">${erros}</div><div class="card-trend">requerem ação</div></div>`;
     }
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Nenhuma mensagem encontrada para os filtros atuais.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6"><div class="ui-empty-state"><div class="ui-empty-title">Nenhuma mensagem encontrada</div><div>Ajuste os filtros ou envie uma nova comunicação logística.</div></div></td></tr>';
       return;
     }
     tbody.innerHTML = items.map(msg => {
@@ -14373,14 +14586,14 @@ async function renderComunicacaoLogistica(force = false) {
       return `<tr>
         <td class="mono">${comFormatDate(msg.created_at)}</td>
         <td>${sanitize(comTipoLabel(msg.tipo))}</td>
-        <td><div class="bold">${sanitize(dest)}</div><div class="mono" style="font-size:10px;color:var(--text3)">${sanitize(msg.telefone || msg.grupo_jid || '')}</div></td>
+        <td><div class="com-msg-dest"><strong>${sanitize(dest)}</strong><div class="mono" style="font-size:10px;color:var(--text3)">${sanitize(msg.telefone || msg.grupo_jid || '')}</div></div></td>
         <td>${comStatusChip(msg.status)}</td>
-        <td style="max-width:360px;font-size:11px;color:var(--text2)">${preview}${(msg.mensagem || '').length > 130 ? '...' : ''}${msg.erro ? `<div style="color:var(--red);margin-top:4px">${sanitize(msg.erro)}</div>` : ''}</td>
+        <td><div class="com-msg-preview">${preview}${(msg.mensagem || '').length > 130 ? '...' : ''}${msg.erro ? `<div class="com-msg-error">${sanitize(msg.erro)}</div>` : ''}</div></td>
         <td>${['erro','pendente'].includes(String(msg.status)) ? `<button class="btn btn-ghost btn-sm" onclick="comReenviarMensagem(${jsArg(msg.id)})">Reenviar</button>` : '<span class="text-muted">—</span>'}</td>
       </tr>`;
     }).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--red)">Erro ao carregar mensagens: ${sanitize(e.message || e)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6"><div class="ui-empty-state" style="border-color:rgba(220,38,38,.32);background:#fef2f2;color:#991b1b"><div class="ui-empty-title" style="color:#991b1b">Erro ao carregar mensagens</div><div>${sanitize(e.message || e)}</div></div></td></tr>`;
   }
 }
 
