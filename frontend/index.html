@@ -3265,27 +3265,27 @@ async function carregarVeiculos(){
     </div>
   </div>
 
-  <div class="nav-section-label">Principal</div>
-  <button class="nav-item active" onclick="nav('dashboard',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg><span>Dashboard</span></button>
+  <div class="nav-section-label">Operação</div>
+  <button class="nav-item active" onclick="nav('hoje',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg><span>Hoje</span><span class="nav-badge orange" id="nb-hoje">0</span></button>
   <button class="nav-item" onclick="nav('agenda',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg><span>Agenda</span><span class="nav-badge" id="nb-agenda">0</span></button>
-  <button class="nav-item" onclick="nav('hoje',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg><span>Hoje</span><span class="nav-badge orange" id="nb-hoje">0</span></button>
+  <button class="nav-item" onclick="nav('roteiro',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg><span>Roteiro</span><span class="nav-badge" id="nb-roteiro" style="display:none">0</span></button>
+  <button class="nav-item" onclick="nav('comunicacao',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>WhatsApp</span></button>
 
-  <div class="nav-section-label">Operacional</div>
-  <button class="nav-item" onclick="nav('roteiro',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg><span>Roteiro do Dia</span><span class="nav-badge" id="nb-roteiro" style="display:none">0</span></button>
-  <button class="nav-item" onclick="nav('comunicacao',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>Comunicação</span></button>
+  <div class="nav-section-label">Cadastros</div>
+  <button class="nav-item" onclick="nav('clientes',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v8h20v-8a2 2 0 0 0-2-2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg><span>Clientes</span></button>
+  <button class="nav-item" onclick="nav('config',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Cadastros e Configurações</span></button>
+
+  <div class="nav-section-label">Controle</div>
+  <button class="nav-item" onclick="nav('checklist',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg><span>Checklist</span></button>
   <button class="nav-item" onclick="nav('rotas',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon><path d="M9 3v15"></path><path d="M15 6v15"></path></svg><span>Rotas & KM</span></button>
-  <button class="nav-item" onclick="nav('checklist',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg><span>Check List</span></button>
   <button class="nav-item" onclick="nav('frota',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-2-2.4-3.1c-.4-.4-1-.9-1.6-.9H5c-.6 0-1.1.4-1.4.9L2 10v6c0 .6.4 1 1 1h2"></path><circle cx="7" cy="17" r="2"></circle><path d="M9 17h6"></path><circle cx="17" cy="17" r="2"></circle></svg><span>Frota</span><span class="nav-badge green" id="nb-frota">0</span></button>
   <button class="nav-item" onclick="nav('estoque',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"></path><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg><span>Estoque</span></button>
 
-  <div class="nav-section-label">Análise</div>
+  <div class="nav-section-label">Gestão</div>
+  <button class="nav-item" onclick="nav('dashboard',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg><span>Dashboard / Gestão</span></button>
   <button class="nav-item" onclick="nav('equipes',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"></line><line x1="12" x2="12" y1="20" y2="4"></line><line x1="6" x2="6" y1="20" y2="14"></line></svg><span>Indicadores</span></button>
-  <button class="nav-item" onclick="nav('clientes',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v8h20v-8a2 2 0 0 0-2-2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg><span>Clientes</span></button>
   <button class="nav-item" onclick="nav('revisao',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span>Revisão de Dados</span></button>
   <button class="nav-item" onclick="nav('historico',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6A2 2 0 0 1 18.46 20H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H19a2 2 0 0 1 2 2v2"></path></svg><span>Histórico</span></button>
-
-  <div class="nav-section-label">Admin</div>
-  <button class="nav-item" onclick="nav('config',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Configurações</span></button>
 
   <div class="sidebar-footer">
     <div class="sidebar-footer-card">
@@ -3302,8 +3302,8 @@ async function carregarVeiculos(){
 <div class="main">
   <div class="topbar">
     <div>
-      <div class="topbar-title" id="page-title">Dashboard</div>
-      <div class="topbar-sub" id="page-sub">Visão geral operacional</div>
+      <div class="topbar-title" id="page-title">Painel do Dia</div>
+      <div class="topbar-sub" id="page-sub">Serviços de hoje e pendências</div>
     </div>
     <button class="mob-hamburger" onclick="mobToggleSidebar()" aria-label="Menu">☰</button>
     <div class="topbar-sep"></div>
@@ -3323,30 +3323,30 @@ async function carregarVeiculos(){
       <option value="DEZ">Dezembro 2026</option>
     </select>
     <button class="topbar-btn" onclick="showChangelog()">📋 v7.8</button>
-    <span id="sync-indicator" role="button" tabindex="0" title="Abrir diagnóstico operacional" onclick="openOperationalDiagnostics()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openOperationalDiagnostics();}" style="font-size:12px;color:var(--text3);margin-left:8px">🟢 Online</span>
+    <span id="sync-indicator" role="button" tabindex="0" title="Abrir status do sistema" onclick="openOperationalDiagnostics()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openOperationalDiagnostics();}" style="font-size:12px;color:var(--text3);margin-left:8px">🟢 Online</span>
     <span id="auth-user-info" style="font-size:12px;color:var(--text2);margin-left:8px;display:none">👤 Logado como —</span>
     <button class="topbar-btn" id="auth-logout-btn" style="display:none" type="button">Sair</button>
-    <button class="topbar-btn primary" onclick="nav('checklist',null)">Novo checklist</button>
-    <button class="topbar-btn" onclick="exportCSV()">📤 Exportar relatório</button>
+    <button class="topbar-btn primary" onclick="openNewSvc()">Novo serviço</button>
+    <button class="topbar-btn" onclick="exportCSV()">Exportar relatório</button>
   </div>
 
   <div class="content">
 
 <!-- ═══ BOTTOM NAV (mobile) ════════════════════ -->
 <nav class="mob-bottom-nav" id="mob-bottom-nav">
-  <button class="mob-nav-item active" id="mn-dashboard" onclick="mobNav('dashboard',this)">
-    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg></span><span class="mob-label">Início</span>
+  <button class="mob-nav-item active" id="mn-hoje" onclick="mobNav('hoje',this)">
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg></span><span class="mob-label">Hoje</span>
+    <span class="mob-badge" id="mn-badge-hoje"></span>
   </button>
   <button class="mob-nav-item" id="mn-agenda" onclick="mobNav('agenda',this)">
     <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg></span><span class="mob-label">Agenda</span>
     <span class="mob-badge" id="mn-badge-agenda"></span>
   </button>
-  <button class="mob-nav-item" id="mn-hoje" onclick="mobNav('hoje',this)">
-    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg></span><span class="mob-label">Hoje</span>
-    <span class="mob-badge" id="mn-badge-hoje"></span>
-  </button>
   <button class="mob-nav-item" id="mn-roteiro" onclick="mobNav('roteiro',this)">
     <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg></span><span class="mob-label">Roteiro</span>
+  </button>
+  <button class="mob-nav-item" id="mn-comunicacao" onclick="mobNav('comunicacao',this)">
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span><span class="mob-label">WhatsApp</span>
   </button>
   <button class="mob-nav-item" id="mn-rotas" onclick="mobNav('rotas',this)">
     <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon><path d="M9 3v15"></path><path d="M15 6v15"></path></svg></span><span class="mob-label">Rotas</span>
@@ -3354,13 +3354,13 @@ async function carregarVeiculos(){
 </nav>
 
     <!-- ═══ DASHBOARD ═══ -->
-    <div id="page-dashboard" class="page active">
+    <div id="page-dashboard" class="page">
 
       <!-- ── Cabeçalho + Filtro de Mês ── -->
       <div class="ui-page-head dash-v2-head">
         <div>
-          <div class="ui-page-kicker">Central operacional</div>
-          <div class="section-title">Dashboard Operacional</div>
+          <div class="ui-page-kicker">Gestão e análise</div>
+          <div class="section-title">Dashboard / Gestão</div>
           <div class="section-sub" id="dash-period">Ano inteiro 2026 · carregando...</div>
         </div>
         <div class="ui-page-actions dash-op-actions">
@@ -3385,7 +3385,7 @@ async function carregarVeiculos(){
       <!-- ── ZONA 0: Painel de Decisão Rápida ── -->
       <div id="dash-decisao-rapida" style="margin-bottom:20px"></div>
 
-      <!-- ── ZONA 1: KPIs principais ── -->
+      <!-- ── ZONA 1: Resumo principal ── -->
       <div class="dash-op-kpis" id="dash-kpis"></div>
 
       <!-- ── ZONA 2: Ações | Críticos | Avisos | Capacidade ── -->
@@ -3481,15 +3481,15 @@ async function carregarVeiculos(){
         <div class="ui-page-actions">
           <!-- Toggle lista/kanban/data -->
           <div class="ui-segmented">
-            <button id="ag-view-list"  class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('lista')">☰ Lista</button>
-            <button id="ag-view-board" class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('kanban')">⊞ Quadro</button>
-            <button id="ag-view-data"  class="topbar-btn" style="border:none;border-radius:0;background:var(--blue);color:white" onclick="agSetView('data')">📅 Por Data</button>
+            <button id="ag-view-list"  class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('lista')">Lista</button>
+            <button id="ag-view-board" class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('kanban')">Status</button>
+            <button id="ag-view-data"  class="topbar-btn" style="border:none;border-radius:0;background:var(--blue);color:white" onclick="agSetView('data')">Calendário</button>
           </div>
           <button class="btn btn-primary btn-sm" onclick="openNewSvc()">+ Novo Serviço</button>
         </div>
       </div>
       <div class="filter-bar ui-filter-panel">
-        <input class="finput" id="ag-search" placeholder="🔍  Buscar cliente, endereço..." oninput="renderAgenda()">
+        <input class="finput" id="ag-search" placeholder="Buscar cliente, endereço ou serviço" oninput="renderAgenda()">
         <button class="ag-filter-toggle" id="ag-filter-toggle" onclick="agToggleFilters()">🔽 Filtros <span id="ag-filter-badge"></span></button>
         <div class="ag-filter-fields" id="ag-filter-fields" style="display:contents">
         <select class="fsel" id="ag-tipo" onchange="renderAgenda()">
@@ -3566,18 +3566,18 @@ async function carregarVeiculos(){
     </div>
 
     <!-- ═══ HOJE ═══ -->
-    <div id="page-hoje" class="page">
+    <div id="page-hoje" class="page active">
       <div class="flex ic sb mb3">
         <div>
           <div class="section-title" id="hoje-title">Painel do Dia</div>
-          <div class="section-sub" id="hoje-sub">Execução em tempo real</div>
+          <div class="section-sub" id="hoje-sub">Serviços de hoje e pendências</div>
         </div>
         <div class="flex gap2" style="align-items:center">
           <button class="btn btn-ghost btn-sm" onclick="hojeMoverDia(-1)">← Anterior</button>
           <button class="btn btn-ghost btn-sm" onclick="hojeIrParaHoje()">Hoje</button>
           <input type="date" class="fsel" id="hoje-date" onchange="renderHoje()">
           <button class="btn btn-ghost btn-sm" onclick="hojeMoverDia(1)">Próximo →</button>
-          <button class="btn btn-primary btn-sm" onclick="openNewSvc()">+ Serviço</button>
+          <button class="btn btn-primary btn-sm" onclick="openNewSvc()">+ Novo Serviço</button>
         </div>
       </div>
       <!-- Barra de progresso do dia -->
@@ -3590,12 +3590,12 @@ async function carregarVeiculos(){
     <div id="page-roteiro" class="page">
       <div class="flex ic sb mb3">
         <div>
-          <div class="section-title">📱 Roteiro do Dia</div>
-            <div class="section-sub">Gerado pelo sistema · agrupa por técnico e exporta para WhatsApp</div>
+          <div class="section-title">Roteiro dos técnicos</div>
+            <div class="section-sub">Escolha a data, monte a sequência e envie para os técnicos.</div>
         </div>
         <div class="flex gap2" style="flex-wrap:wrap;align-items:center">
           <input type="date" class="fsel" id="rot-data" onchange="rotGerarDoSistema()">
-          <button class="btn btn-primary btn-sm" onclick="rotGerarDoSistema()">📋 Gerar Roteiro</button>
+          <button class="btn btn-primary btn-sm" onclick="rotGerarDoSistema()">Montar roteiro do dia</button>
         </div>
       </div>
 
@@ -3629,8 +3629,8 @@ async function carregarVeiculos(){
 
       <!-- Botões globais -->
       <div id="rot-actions" style="display:none;margin-bottom:16px;display:none" class="flex gap2">
-        <button class="btn btn-green" onclick="rotWhatsAppTudo()">📱 Enviar tudo para WhatsApp</button>
-        <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">📋 Copiar Tudo</button>
+        <button class="btn btn-green" onclick="rotWhatsAppTudo()">Enviar roteiro aos técnicos</button>
+        <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">Copiar roteiro</button>
         <button class="btn btn-ghost btn-sm" onclick="rotCopiarLinksPortais()">🔗 Copiar links dos portais</button>
       </div>
 
@@ -3648,7 +3648,7 @@ async function carregarVeiculos(){
       <!-- Empty state -->
       <div id="rot-empty" style="text-align:center;padding:60px 20px;color:var(--text3)">
         <div style="font-size:48px;margin-bottom:16px">📋</div>
-        <div style="font-family:var(--display);font-size:18px;font-weight:700;color:var(--text2);margin-bottom:6px">Selecione uma data para gerar o roteiro</div>
+        <div style="font-family:var(--display);font-size:18px;font-weight:700;color:var(--text2);margin-bottom:6px">Selecione uma data para montar o roteiro</div>
         <div style="font-size:12px;max-width:400px;margin:0 auto;line-height:1.6">
           O roteiro é gerado automaticamente com os serviços cadastrados no sistema,<br>agrupados por técnico e prontos para enviar pelo WhatsApp.
         </div>
@@ -3660,12 +3660,12 @@ async function carregarVeiculos(){
       <div class="ui-page-head com-v2-head">
         <div>
           <div class="ui-page-kicker">WhatsApp operacional</div>
-          <div class="section-title">Comunicação Logística</div>
-          <div class="section-sub">WhatsApp operacional, lembretes e histórico de mensagens</div>
+          <div class="section-title">WhatsApp e Confirmações</div>
+          <div class="section-sub">Confirmações, lembretes e mensagens enviadas.</div>
         </div>
         <div class="ui-page-actions">
           <input type="date" class="fsel" id="com-data" onchange="renderComunicacaoLogistica(true)">
-          <button class="btn btn-primary btn-sm" onclick="comEnviarAgendaTodos()">Enviar agenda para todos</button>
+          <button class="btn btn-primary btn-sm" onclick="comEnviarAgendaTodos()">Enviar agenda aos técnicos</button>
           <button class="btn btn-green btn-sm" onclick="comEnviarLembretes24h()">Enviar lembretes 24h</button>
           <button class="btn btn-ghost btn-sm" onclick="renderComunicacaoLogistica(true)">Atualizar</button>
         </div>
@@ -3764,7 +3764,7 @@ async function carregarVeiculos(){
     <div id="page-checklist" class="page">
       <div class="flex ic sb mb4">
         <div>
-          <div class="section-title">Check List Diário</div>
+          <div class="section-title">Checklist Diário</div>
           <div class="section-sub">Registro de saída e retorno da equipe</div>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="clearCL()">Limpar</button>
@@ -3867,7 +3867,7 @@ async function carregarVeiculos(){
         <div>
           <div class="ui-page-kicker">Frota e manutenção</div>
           <div class="section-title">Controle de Frota</div>
-          <div class="section-sub">Veículos, documentos, manutenções, alertas e KPIs extraídos dos check lists diários</div>
+          <div class="section-sub">Veículos, documentos, manutenções, alertas e resumo dos checklists diários</div>
         </div>
         <div class="ui-page-actions">
           <button class="btn btn-ghost btn-sm" onclick="carregarFrotaV1()">Atualizar frota</button>
@@ -4139,7 +4139,7 @@ async function carregarVeiculos(){
 
     <!-- ═══ CONFIGURAÇÕES ═══ -->
     <div id="page-config" class="page">
-      <div class="section-title">Configurações do Sistema</div>
+      <div class="section-title">Cadastros e Configurações</div>
       <div class="section-sub">Gerencie técnicos, veículos e tipos de serviço</div>
       <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="showConfigTab('tecnicos')" id="cfg-tab-tecnicos">👷 Técnicos</button>
@@ -5087,7 +5087,7 @@ function agruparServicosPorTecnicoCapacidade(servicos) {
     const tecnicos = getServiceTecnicos(s);
     if (!tecnicos.length) {
       if (!byTecnico['sem-equipe']) {
-        byTecnico['sem-equipe'] = { id: 'sem-equipe', nome: '⚠ Sem equipe', svcs: [] };
+        byTecnico['sem-equipe'] = { id: 'sem-equipe', nome: 'Definir técnico', svcs: [] };
       }
       byTecnico['sem-equipe'].svcs.push(s);
       return;
@@ -7150,9 +7150,9 @@ let currentPage = (() => {
   try {
     const saved = localStorage.getItem(CURRENT_PAGE_PREF_KEY);
     const allowed = ['dashboard','agenda','roteiro','comunicacao','rotas','checklist','frota','estoque','equipes','clientes','revisao','historico','hoje','config'];
-    return allowed.includes(saved) ? saved : 'dashboard';
+    return allowed.includes(saved) ? saved : 'hoje';
   } catch(e) {
-    return 'dashboard';
+    return 'hoje';
   }
 })();
 let currentDelId = null;
@@ -7628,20 +7628,20 @@ function bindTiposPreview(previewId, containerId = 'tipos-container') {
 // NAVIGATION
 // ════════════════════════════════════════════════
 const PAGE_META = {
-  dashboard:  { title:'Dashboard',          sub:'Visão geral operacional' },
-  agenda:     { title:'Agenda de Serviços', sub:'Todos os serviços · Ano inteiro 2026' },
-  roteiro:    { title:'Roteiro do Dia',    sub:'Operação do dia → sequência otimizada e WhatsApp por técnico' },
-  comunicacao:{ title:'Comunicação Logística', sub:'WhatsApp operacional, lembretes e histórico de mensagens' },
+  dashboard:  { title:'Dashboard / Gestão', sub:'Resumo gerencial e indicadores' },
+  agenda:     { title:'Agenda de Serviços', sub:'Planeje, cadastre e acompanhe os serviços' },
+  roteiro:    { title:'Roteiro',            sub:'Monte a sequência do dia e envie aos técnicos' },
+  comunicacao:{ title:'WhatsApp e Confirmações', sub:'Confirmações, lembretes e mensagens enviadas' },
   rotas:      { title:'Rotas & KM',          sub:'Eficiência de deslocamento e KM rodados' },
-  checklist:  { title:'Check List Diário',  sub:'Registro de saída e retorno' },
-  frota:      { title:'Controle de Frota',  sub:'KPIs de veículos e motoristas' },
+  checklist:  { title:'Checklist Diário',   sub:'Registro de saída, retorno e conferência' },
+  frota:      { title:'Controle de Frota',  sub:'Veículos, alertas e manutenção' },
   estoque:    { title:'Estoque',            sub:'Produtos, entradas e saídas por veículo' },
-  equipes:    { title:'Indicadores Operacionais',sub:'Visualize a produtividade por técnico, volume por tipo de serviço e taxa de execução no período selecionado.' },
-  clientes:   { title:'Clientes',           sub:'Base extraída da agenda 2026' },
+  equipes:    { title:'Indicadores',        sub:'Produtividade por técnico, tipo de serviço e execução' },
+  clientes:   { title:'Clientes',           sub:'Cadastros, contatos, endereços e contratos' },
   revisao:    { title:'Revisão de Dados',    sub:'Pendências da importação e saneamento da base' },
-  historico:  { title:'Histórico',          sub:'Check lists e registros salvos' },
-  hoje:       { title:'Painel do Dia',        sub:'Execução, alertas e ações pendentes' },
-  config:     { title:'Configurações',        sub:'Gerencie técnicos, veículos e tipos de serviço' }
+  historico:  { title:'Histórico',          sub:'Checklists e registros salvos' },
+  hoje:       { title:'Painel do Dia',       sub:'Serviços de hoje e pendências' },
+  config:     { title:'Cadastros e Configurações', sub:'Técnicos, veículos, tipos de serviço e operação' }
 };
 
 const PAGE_MODULE_KEY = {
@@ -7939,8 +7939,8 @@ function renderDash() {
         <div class="dash-op-critical-title">${riscoCritico ? 'Atenção operacional necessária' : 'Operação sem bloqueios críticos'}</div>
         <div class="dash-op-critical-sub">
           ${riscoCritico
-            ? `Resolva primeiro ${vencidos.length} serviço(s) atrasado(s) e ${semEquipe.length} sem equipe.`
-            : `Nenhum serviço atrasado ou sem equipe no período selecionado.`}
+            ? `Resolva primeiro ${vencidos.length} serviço(s) atrasado(s) e ${semEquipe.length} sem técnico.`
+            : `Nenhum serviço atrasado ou sem técnico no período selecionado.`}
         </div>
       </div>
       <div class="dash-op-critical-metrics">
@@ -7950,7 +7950,7 @@ function renderDash() {
         </div>
         <div class="dash-op-pill">
           <div class="dash-op-pill-value" style="color:${semEquipe.length?'var(--red)':'var(--green)'}">${semEquipe.length}</div>
-          <div class="dash-op-pill-label">Sem equipe</div>
+          <div class="dash-op-pill-label">Sem técnico</div>
         </div>
         <button class="dash-op-btn" onclick="dashResolveNow()">Resolver agora</button>
       </div>
@@ -7966,7 +7966,7 @@ function renderDash() {
   `;
 
   const acoes = [];
-  if (semEquipe.length) acoes.push({ cls:'orange', txt:'Abrir a agenda e atribuir responsáveis aos serviços sem equipe.' });
+  if (semEquipe.length) acoes.push({ cls:'orange', txt:'Abrir a agenda e definir técnico nos serviços sem responsável.' });
   if (vencidos.length) acoes.push({ cls:'red', txt:'Reprogramar ou concluir os serviços atrasados antes de aceitar novos encaixes.' });
   if (reagend) acoes.push({ cls:'blue', txt:`Conferir ${reagend} serviço(s) reagendado(s) e validar a próxima data.` });
   if (pctOcup >= 85) acoes.push({ cls:'orange', txt:'Redistribuir carga entre equipes antes de confirmar novos serviços.' });
@@ -7980,7 +7980,7 @@ function renderDash() {
   // ── ZONA 2A: Problemas Críticos ────────────────────────────
   const criticos = [];
   if (vencidos.length)    criticos.push({ icon:'⏰', cor:'var(--red)',    txt:`${vencidos.length} serviço(s) atrasado(s)` });
-  if (semEquipe.length)   criticos.push({ icon:'👷', cor:'var(--red)',    txt:`${semEquipe.length} serviço(s) sem equipe` });
+  if (semEquipe.length)   criticos.push({ icon:'👷', cor:'var(--red)',    txt:`${semEquipe.length} serviço(s) sem técnico` });
   const conflitoJornada = typeof detectarConflitosJornada==='function' ? detectarConflitosJornada(svcs) : [];
   if (conflitoJornada.length) criticos.push({ icon:'⚡', cor:'var(--red)', txt:`${conflitoJornada.length} conflito(s) noite→manhã detectado(s)` });
 
@@ -8340,7 +8340,7 @@ function renderAgenda() {
         <td colspan="10">
           <div class="ui-empty-state">
             <div class="ui-empty-title">Nenhum serviço encontrado</div>
-            <div>Ajuste os filtros ou cadastre um novo serviço para este período.</div>
+            <div>Limpe os filtros ou cadastre um novo serviço para este período.</div>
           </div>
         </td>
       </tr>`;
@@ -8356,7 +8356,7 @@ function renderAgenda() {
     const dtValue = getServiceDateValue(s);
     const vencido = stKey==='agendado' && dtValue < today2;
     const rowBg   = vencido ? 'background:rgba(220,38,38,.04)' : semEq ? 'background:rgba(234,88,12,.04)' : '';
-    const equipeHtml = semEq ? '<span style="color:var(--orange);font-size:10px;font-weight:600">⚠ sem equipe</span>' : sanitize(equipeLabel).slice(0,24);
+    const equipeHtml = semEq ? '<span style="color:var(--orange);font-size:10px;font-weight:600">Definir técnico</span>' : sanitize(equipeLabel).slice(0,24);
     return `<tr onclick="openEditSvc(${jsArg(s.id)})" style="cursor:pointer;${rowBg}">
       <td class="mono" style="color:var(--text3)">${s.id}</td>
       <td class="mono bold" style="color:${vencido?'var(--red)':'inherit'}">${dtValue?.slice(8,10)}/${dtValue?.slice(5,7)}</td>
@@ -8378,7 +8378,7 @@ function renderServiceCardActions(s, options = {}) {
   const id = jsArg(s.id);
   const stKey = s.status || s.st || 'agendado';
   const after = options.afterStatusChange || '';
-  const primaryLabel = options.primaryLabel || 'Executar';
+  const primaryLabel = options.primaryLabel || 'Marcar executado';
   const doneLabel = options.doneLabel || 'Concluído';
   const canExecute = stKey !== 'executado';
   const canReagendar = stKey === 'agendado';
@@ -8437,7 +8437,7 @@ function renderAgendaKanban(svcs) {
 
       const badges = [
         vencido ? `<span style="font-size:9px;background:rgba(220,38,38,.12);color:var(--red);padding:1px 5px;border-radius:3px;font-family:var(--mono)">⏰ vencido</span>` : '',
-        semEq   ? `<span style="font-size:9px;background:rgba(234,88,12,.12);color:var(--orange);padding:1px 5px;border-radius:3px;font-family:var(--mono)">⚠ sem equipe</span>` : '',
+        semEq   ? `<span style="font-size:9px;background:rgba(234,88,12,.12);color:var(--orange);padding:1px 5px;border-radius:3px;font-family:var(--mono)">definir técnico</span>` : '',
       ].filter(Boolean).join('');
 
       return `<div
@@ -8463,7 +8463,7 @@ function renderAgendaKanban(svcs) {
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
           ${F.equipe.trim()
             ? `<span style="font-size:10px;color:var(--text3);font-family:var(--mono)">👷 ${F.equipe.slice(0,28)}</span>`
-            : `<span style="font-size:10px;color:var(--orange);font-weight:600">⚠ sem equipe</span>`}
+            : `<span style="font-size:10px;color:var(--orange);font-weight:600">Definir técnico</span>`}
           ${F.veiculo?`<span style="font-size:10px;color:var(--text3);font-family:var(--mono)">🚗 ${F.veiculo}</span>`:''}
         </div>
         <!-- Linha 5: badges de alerta -->
@@ -8483,7 +8483,7 @@ function renderAgendaKanban(svcs) {
       <div id="ag-drop-${col.key}" data-status="${col.key}"
         ondragover="agDragOver(event)" ondragleave="agDragLeave(event)" ondrop="agDrop(event,'${col.key}')"
         style="padding:8px;display:flex;flex-direction:column;gap:6px;max-height:620px;overflow-y:auto;flex:1;min-height:60px;transition:background .15s">
-        ${cards||`<div style="text-align:center;padding:28px 16px;color:var(--text3);font-size:12px;border:2px dashed var(--border);border-radius:var(--r2);margin:4px">Arraste aqui</div>`}
+        ${cards||`<div style="text-align:center;padding:28px 16px;color:var(--text3);font-size:12px;border:2px dashed var(--border);border-radius:var(--r2);margin:4px">Solte serviços aqui</div>`}
         ${extra}
       </div>
     </div>`;
@@ -8883,7 +8883,7 @@ function renderAgendaData(svcs, today) {
     // Pips de alerta
     const pips = [
       atrasN ? `<span class="cal-alert-pip" title="${atrasN} atrasado(s)">⏰${atrasN}</span>` : '',
-      semEqN ? `<span class="cal-alert-pip warn" title="${semEqN} sem equipe">⚠${semEqN}</span>` : '',
+      semEqN ? `<span class="cal-alert-pip warn" title="${semEqN} sem técnico">⚠${semEqN}</span>` : '',
       reagN  ? `<span class="cal-alert-pip reag" title="${reagN} reagendado(s)">↻${reagN}</span>` : '',
     ].filter(Boolean).join('');
 
@@ -8922,7 +8922,7 @@ function renderAgendaData(svcs, today) {
     const clickFn = nAll > 0 ? `onclick="showDayDetail('${dt}')"` : '';
 
     cells += `<div class="${cellClass}" ${clickFn}
-      title="${nAll > 0 ? `${nAll} serviço(s) · ${execN} executado(s) · ${atrasN ? atrasN+' atrasado(s) · ' : ''}${semEqN ? semEqN+' sem equipe · ' : ''}clique para detalhar` : 'Dia livre'}">
+      title="${nAll > 0 ? `${nAll} serviço(s) · ${execN} executado(s) · ${atrasN ? atrasN+' atrasado(s) · ' : ''}${semEqN ? semEqN+' sem técnico · ' : ''}clique para detalhar` : 'Dia livre'}">
       <div class="cal-day-header">
         <div class="cal-day-num">${d}</div>
         ${pips ? `<div class="cal-day-alerts">${pips}</div>` : ''}
@@ -8968,7 +8968,7 @@ function renderAgendaData(svcs, today) {
       </div>` : ''}
       ${semEqMes ? `<div class="cal-month-stat-card" style="border-top:2px solid var(--orange)">
         <div class="cal-month-stat-val cv-orange">${semEqMes}</div>
-        <div class="cal-month-stat-lbl">Sem equipe</div>
+        <div class="cal-month-stat-lbl">Sem técnico</div>
       </div>` : ''}
       ${reagMes ? `<div class="cal-month-stat-card" style="border-top:2px solid var(--yellow)">
         <div class="cal-month-stat-val cv-yellow">${reagMes}</div>
@@ -8983,7 +8983,7 @@ function renderAgendaData(svcs, today) {
       <div class="cal-legend-item">🟡 Médio (4–6)</div>
       <div class="cal-legend-item">🔴 Alto (7+)</div>
       <div class="cal-legend-item" style="color:var(--red)">⏰ Atrasados</div>
-      <div class="cal-legend-item" style="color:var(--orange)">⚠ Sem equipe</div>
+      <div class="cal-legend-item" style="color:var(--orange)">Definir técnico</div>
       <div class="cal-legend-item" style="color:var(--yellow)">↻ Reagendados</div>
       <div class="cal-legend-item" style="color:var(--green);margin-left:auto;font-size:10px">— barra verde = % executado no dia</div>
     </div>`;
@@ -9074,7 +9074,7 @@ function showDayDetail(dt) {
         <div class="day-service-meta">
           <span><b>Tipo:</b> ${sanitize(F.tipoLabel || F.tipoRaw || '—')}</span>
           ${F.os&&F.os!=='—'?`<span><b>OS:</b> ${sanitize(F.os)}</span>`:''}
-          ${semEquipe?`<span style="color:#c2410c"><b>Equipe:</b> sem equipe</span>`:`<span><b>Equipe:</b> ${sanitize(F.equipe)}</span>`}
+          ${semEquipe?`<span style="color:#c2410c"><b>Técnico:</b> definir técnico</span>`:`<span><b>Equipe:</b> ${sanitize(F.equipe)}</span>`}
           ${F.veiculo?`<span><b>Veículo:</b> ${sanitize(F.veiculo)}</span>`:''}
           <span style="margin-left:auto;color:#2563eb;font-weight:800">Editar</span>
         </div>
@@ -9152,7 +9152,7 @@ function showDayDetail(dt) {
     atrasN ? `<div style="padding:8px 12px;background:var(--red-bg);border:1px solid rgba(220,38,38,.2);border-radius:var(--r2);font-size:11px;color:var(--red);display:flex;align-items:center;gap:6px">
                 <span>⏰</span><span><b>${atrasN}</b> serviço(s) agendado(s) em data passada sem execução registrada</span></div>` : '',
     semEqN  ? `<div style="padding:8px 12px;background:var(--orange-bg);border:1px solid rgba(234,88,12,.2);border-radius:var(--r2);font-size:11px;color:var(--orange);display:flex;align-items:center;gap:6px">
-                <span>⚠️</span><span><b>${semEqN}</b> serviço(s) sem equipe alocada — requer atenção</span></div>` : '',
+                <span>⚠️</span><span><b>${semEqN}</b> serviço(s) sem técnico definido — requer atenção</span></div>` : '',
     reagN   ? `<div style="padding:8px 12px;background:var(--yellow-bg);border:1px solid rgba(180,83,9,.15);border-radius:var(--r2);font-size:11px;color:var(--yellow);display:flex;align-items:center;gap:6px">
                 <span>↻</span><span><b>${reagN}</b> serviço(s) reagendado(s) neste dia</span></div>` : '',
   ].filter(Boolean).join('');
@@ -9191,7 +9191,7 @@ function showDayDetail(dt) {
       <!-- Linha 4: equipe + veículo -->
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         ${semE
-          ?`<span style="font-size:10px;color:var(--orange);font-weight:600">⚠ sem equipe</span>`
+          ?`<span style="font-size:10px;color:var(--orange);font-weight:600">Definir técnico</span>`
           :`<span style="font-size:10px;color:var(--text3);font-family:var(--mono)">👷 ${sanitize(F.equipe)}</span>`}
         ${F.veiculo?`<span style="font-size:10px;color:var(--text3);font-family:var(--mono)">🚗 ${sanitize(F.veiculo)}</span>`:''}
         <span style="margin-left:auto;font-size:9px;color:var(--text4);font-family:var(--mono)">✏️ clique para editar</span>
@@ -9702,7 +9702,7 @@ function hojeAnalisarDia(daySvcs, d) {
   const equipeMap = {};
   daySvcs.forEach(s => {
     const k = getServiceEquipeGroupKey(s);
-    const equipe = getServiceEquipeLabel(s).trim() || '⚠️ Sem equipe';
+    const equipe = getServiceEquipeLabel(s).trim() || 'Definir técnico';
     if (!equipeMap[k]) equipeMap[k] = { equipe, veiculo: '', svcs: [], semEquipe: !serviceTemEquipe(s), tecnicos_ids: getServiceTecnicosIds(s) };
     equipeMap[k].svcs.push(s);
     if (!equipeMap[k].veiculo && s.veiculo) equipeMap[k].veiculo = s.veiculo;
@@ -9839,17 +9839,17 @@ function renderHoje() {
     summaryEl.style.display = 'none';
     kanbanEl.innerHTML = `<div style="padding:60px 20px;text-align:center;color:var(--text3);grid-column:1/-1">
       <div style="font-size:48px;margin-bottom:16px">📅</div>
-      <div style="font-family:var(--display);font-size:16px;font-weight:700;color:var(--text2);margin-bottom:8px">Nenhum serviço em ${br}</div>
-      <div style="font-size:12px">Use ← Anterior ou → Próximo para navegar, ou adicione um serviço.</div>
+      <div style="font-family:var(--display);font-size:16px;font-weight:700;color:var(--text2);margin-bottom:8px">Nenhum serviço nesta data</div>
+      <div style="font-size:12px">Cadastre um serviço ou escolha outro dia para acompanhar a operação.</div>
     </div>`;
     document.getElementById('hoje-sub').textContent   = 'Sem serviços nesta data';
-    document.getElementById('hoje-title').textContent = `📅 Painel — ${br}`;
+    document.getElementById('hoje-title').textContent = `Painel — ${br}`;
     return;
   }
 
   // ── Análise completa ──
   const A = hojeAnalisarDia(daySvcs, d);
-  document.getElementById('hoje-title').textContent = A.isToday ? `📅 Hoje — ${br}` : `📅 Painel — ${br}`;
+  document.getElementById('hoje-title').textContent = A.isToday ? `O que precisa de atenção hoje — ${br}` : `Painel — ${br}`;
   document.getElementById('hoje-sub').textContent   = `${A.total} serviço(s) · ${A.exec} executado(s) · ${A.pend} pendente(s)`;
 
   const pctColor = A.pct >= 80 ? 'var(--green)' : A.pct >= 50 ? 'var(--orange)' : 'var(--red)';
@@ -9887,10 +9887,10 @@ function renderHoje() {
           return `<div class="today-alert-row">
             <span class="today-alert-time" style="color:var(--red);border-color:rgba(220,38,38,.25);background:rgba(220,38,38,.12)">${F.horario||'—'}</span>
             <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
-            <span class="today-alert-label">${F.equipe||'sem equipe'}</span>
+            <span class="today-alert-label">${F.equipe||'sem técnico'}</span>
             <span class="chip chip-red">+${atrMin}min</span>
             <div class="today-alert-actions">
-              <button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Executar</button>
+              <button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Marcar executado</button>
             </div>
           </div>`;
         }).join('')}
@@ -9931,18 +9931,18 @@ function renderHoje() {
     html += `<div class="today-alert warn">
       <div class="today-alert-head">
         <span class="today-alert-icon">⚠️</span>
-        <span class="today-alert-title">Ação necessária — ${A.semEquipe.length + A.reagendados.length} item(s)</span>
+        <span class="today-alert-title">Pendências de hoje — ${A.semEquipe.length + A.reagendados.length} item(s)</span>
       </div>
       <div class="today-alert-list">
         ${A.semEquipe.map(s => {
           const F = sf(s);
           return `<div class="today-alert-row">
-            <span class="chip chip-orange">Sem equipe</span>
+            <span class="chip chip-orange">Definir técnico</span>
             <span class="today-alert-time">${F.horario||'—'}</span>
             <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
             <span class="today-alert-label">${F.tipo||'—'}</span>
             <div class="today-alert-actions">
-              <button class="svc-btn reagend" style="background:var(--orange);color:white;border-color:var(--orange)" onclick="abrirEdicaoEquipe(${jsArg(s.id)})">Definir equipe</button>
+              <button class="svc-btn reagend" style="background:var(--orange);color:white;border-color:var(--orange)" onclick="abrirEdicaoEquipe(${jsArg(s.id)})">Definir técnico</button>
             </div>
           </div>`;
         }).join('')}
@@ -10120,7 +10120,7 @@ function renderHoje() {
             <div class="team-board-sub">
               ${g.veiculo ? `<span class="team-board-meta">🚗 ${sanitize(g.veiculo)}</span>` : ''}
               ${temSobrecarga ? `<span class="chip chip-yellow">Sobrecarga</span>` : ''}
-              ${g.semEquipe ? `<span class="chip chip-orange">Sem equipe</span>` : ''}
+              ${g.semEquipe ? `<span class="chip chip-orange">Definir técnico</span>` : ''}
             </div>
           </div>
           <div class="team-board-progress">
@@ -10132,7 +10132,7 @@ function renderHoje() {
           <div class="team-board-bar-fill"></div>
         </div>
         ${pendIds.length ? `<div class="team-board-actions">
-          <button class="svc-btn exec" onclick="hojeExecTodos(${execTodosIds})">Executar todos (${pendIds.length})</button>
+          <button class="svc-btn exec" onclick="hojeExecTodos(${execTodosIds})">Marcar executados (${pendIds.length})</button>
         </div>` : ''}
       </div>
 
@@ -10174,7 +10174,7 @@ function renderHoje() {
             ${F.endereco ? `<div class="team-svc-address">📍 ${sanitize(F.endereco)}</div>` : ''}
             ${renderExecutionMini(s, { hideDurations: true })}
             <div class="team-svc-actions" onclick="event.stopPropagation()">
-              ${renderServiceCardActions(s, { afterStatusChange: ';renderHoje()', primaryLabel: 'Executar' })}
+              ${renderServiceCardActions(s, { afterStatusChange: ';renderHoje()', primaryLabel: 'Marcar executado' })}
             </div>
           </div>`;
         }).join('')}
@@ -10196,7 +10196,7 @@ async function hojeExecTodos(ids) {
     }
   });
   saveSvcs(); renderHoje(); renderDash();
-  toast(`✓ ${ids.length} serviço(s) executados`, 'ok');
+      toast(`✓ ${ids.length} serviço(s) marcados como executados`, 'ok');
   // Sincronizar cada serviço atualizado com Supabase
   if (USAR_SUPABASE) {
     const results = await Promise.allSettled(ids.map(async id => {
@@ -10240,7 +10240,7 @@ function renderRotas() {
     <div class="card card-accent" style="grid-column:1/-1">
       <div class="card-label mb2">Rotas & KM reorganizado</div>
       <div style="font-size:12px;color:var(--text2);line-height:1.5">
-        O link de rota completa foi removido. KM rodado, combustível, avarias e eficiência agora ficam consolidados em Frota; o roteiro operacional fica em Roteiro do Dia e Portal do Técnico.
+        O link de rota completa foi removido. KM rodado, combustível, avarias e eficiência agora ficam consolidados em Frota; o roteiro operacional fica em Roteiro e Portal do Técnico.
       </div>
       <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="nav('frota')">Abrir Frota</button>
     </div>
@@ -10251,7 +10251,7 @@ function renderRotas() {
     <div class="card"><div class="card-label">Pico de KM</div><div class="card-value cv-orange">${(rotasMaxKmRec.kmD||0).toLocaleString('pt-BR')}</div><div class="card-trend">${rotasMaxKmRec.date ? rotasMaxKmRec.date.slice(8,10)+'/'+rotasMaxKmRec.date.slice(5,7) : '—'} · ${rotasMaxKmRec.vei||'—'}</div></div>
   `);
   setHtml('km-analysis', '<div class="text-muted">Análise mensal movida para Frota.</div>');
-  setHtml('mapa-simples', '<div class="text-muted" style="padding:18px;text-align:center">Rota multi-endereço desativada. Use Roteiro do Dia para sequência por técnico.</div>');
+  setHtml('mapa-simples', '<div class="text-muted" style="padding:18px;text-align:center">Rota multi-endereço desativada. Use Roteiro para sequência por técnico.</div>');
   setHtml('rotas-eficiencia', '<div class="text-muted">Eficiência por veículo e últimos registros agora ficam em Frota.</div>');
   setHtml('rotas-km-tbody', '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px">Registros de KM movidos para Frota e Histórico.</td></tr>');
   return;
@@ -13321,7 +13321,7 @@ function renderHist(){
 function showCLDetail(id){
   const r=clRecords.find(x=>x.id===id); if(!r) return;
   const eq=Object.entries(r.equip||{}).filter(([,v])=>v.length>0).map(([cat,items])=>`<div class="mb2"><div class="card-label" style="color:${ECAT_COLORS[cat]||'var(--text3)'};margin-bottom:6px">${cat}</div><div style="display:flex;flex-wrap:wrap;gap:5px">${items.map(i=>`<span class="chip chip-green">${i}</span>`).join('')}</div></div>`).join('')||'<div class="text-muted">Equipamentos não registrados</div>';
-  document.getElementById('modal-title').textContent='✅ Check List — '+r.date?.slice(8,10)+'/'+r.date?.slice(5,7);
+  document.getElementById('modal-title').textContent='Checklist — '+r.date?.slice(8,10)+'/'+r.date?.slice(5,7);
   document.getElementById('modal-body').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div><div class="card-label">Motorista</div><div style="font-weight:700;color:var(--text)">${r.motorista||'—'}</div></div>
@@ -13905,7 +13905,7 @@ function rotAgruparPorTecnico(servicos) {
       if (!tecnicoMap['sem-equipe']) {
         tecnicoMap['sem-equipe'] = {
           id: 'sem-equipe',
-          equipe: '⚠ Sem equipe',
+          equipe: 'Definir técnico',
           veiculo: '',
           svcs: [],
           tecnicos_ids: [],
@@ -14581,8 +14581,8 @@ function evolutionStatusAlertHtml() {
     return `<div class="com-status-card ok">
       <span class="com-status-dot"></span>
       <div>
-        <div class="com-status-title">Evolution API conectada${evolutionStatus.instance ? ` · instância ${sanitize(evolutionStatus.instance)}` : ''}</div>
-        <div class="com-status-text">Envios pela API liberados para agenda técnica, confirmações e lembretes.</div>
+        <div class="com-status-title">WhatsApp conectado${evolutionStatus.instance ? ` · instância ${sanitize(evolutionStatus.instance)}` : ''}</div>
+        <div class="com-status-text">Envios liberados para agenda dos técnicos, confirmações e lembretes.</div>
       </div>
     </div>`;
   }
@@ -14590,11 +14590,11 @@ function evolutionStatusAlertHtml() {
     ? (() => {
         const connectedAvailable = (evolutionStatus.available_instances || []).find(item => item.connected);
         if (connectedAvailable?.name && connectedAvailable.name !== evolutionStatus.instance) {
-          return `Evolution configurada para "${sanitize(evolutionStatus.instance)}", mas a instância conectada parece ser "${sanitize(connectedAvailable.name)}". Ajuste EVOLUTION_INSTANCE_NAME no Render.`;
+          return `WhatsApp configurado para "${sanitize(evolutionStatus.instance)}", mas a instância conectada parece ser "${sanitize(connectedAvailable.name)}". Ajuste EVOLUTION_INSTANCE_NAME no Render.`;
         }
-        return `Evolution configurada, mas instância desconectada${evolutionStatus.state ? ` (${sanitize(evolutionStatus.state)})` : ''}.`;
+        return `WhatsApp configurado, mas instância desconectada${evolutionStatus.state ? ` (${sanitize(evolutionStatus.state)})` : ''}.`;
       })()
-    : 'Evolution API ainda não configurada no backend.';
+    : 'WhatsApp ainda não configurado no backend.';
   return `<div class="com-status-card warn">
     <span class="com-status-dot"></span>
     <div>
@@ -15022,7 +15022,7 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-actions').style.display = 'none';
       document.getElementById('rot-sugestao-wrap').style.display = 'none';
       document.getElementById('rot-empty').style.display = 'block';
-      document.getElementById('rot-empty').innerHTML = 'Há serviço(s) na data, mas nenhum possui técnico/equipe definido para roteiro confirmado.';
+      document.getElementById('rot-empty').innerHTML = 'Há serviço(s) na data, mas nenhum possui técnico definido para montar o roteiro.';
       document.getElementById('rot-sugestao-grid').innerHTML = '';
       document.getElementById('rot-equipes-grid').innerHTML = '';
       renderCustomerRemindersPanel(daySvcs, data);
@@ -16087,7 +16087,7 @@ function abrirEdicaoEquipe(id) {
       <div class="field"><label>Veículo</label>
         <select id="eq-edit-vei">${getVeiculosOptions(s.veiculo || '')}</select>
       </div>
-      <div class="field"><label>Status</label>
+      <div class="field"><label>Status do serviço</label>
         <select id="eq-edit-st">
           ${Object.entries(ST_META).map(([k,m])=>`<option value="${k}" ${(s.status||s.st||'agendado')===k?'selected':''}>${m.label}</option>`).join('')}
         </select>
@@ -16103,7 +16103,7 @@ function abrirEdicaoEquipe(id) {
         <textarea id="eq-edit-obs" rows="2" placeholder="Observações...">${s.observacoes||s.obs||''}</textarea>
       </div>
     </div>
-    <button class="btn btn-primary btn-sm" onclick="salvarEdicaoEquipe(${jsArg(id)})">💾 Salvar Alterações</button>
+    <button class="btn btn-primary btn-sm" onclick="salvarEdicaoEquipe(${jsArg(id)})">Salvar alterações</button>
   `;
   document.getElementById('modal-del').style.display = 'inline-flex';
   currentDelId = {type:'svc', id};
@@ -16534,7 +16534,7 @@ function renderOperationalDiagnosticsPanel() {
     <div class="diagnostics-shell">
       <div class="diagnostics-head">
         <div>
-          <div class="diagnostics-title">Diagnóstico Operacional</div>
+          <div class="diagnostics-title">Status do sistema</div>
           <div class="diagnostics-sub">Visibilidade de API, cache local, módulos carregados e fila offline.</div>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
@@ -16619,7 +16619,7 @@ async function fetchOperationalDiagnostics() {
 
 async function openOperationalDiagnostics() {
   const modal = document.getElementById('modal');
-  document.getElementById('modal-title').textContent = 'Diagnóstico Operacional';
+  document.getElementById('modal-title').textContent = 'Status do sistema';
   document.getElementById('modal-body').innerHTML = '<div style="padding:20px;color:var(--text3)">Carregando diagnóstico...</div>';
   document.getElementById('modal-del').style.display = 'none';
   currentDelId = null;
@@ -16669,7 +16669,7 @@ function buildOperationalDiagnosticsText() {
   const snapshot = collectOperationalDiagnosticsSnapshot();
   const remote = operationalDiagnosticsLastResult;
   const lines = [
-    'Diagnóstico Operacional - Letec',
+    'Status do sistema - Letec',
     `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
     `API: ${snapshot.apiBaseUrl}`,
     `Backend: ${operationalDiagnosticsLastError ? 'indisponível' : remote ? (remote.ok ? 'ok' : 'com alertas') : 'não testado'}`,
@@ -17333,7 +17333,7 @@ function carregarOperacionalConfig() {
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
         <div>
           <div class="card-label">📱 Operação de Campo</div>
-          <div class="section-sub" style="font-size:12px;margin-top:4px">Configurações usadas pelo Portal do Técnico e pelos links enviados no Roteiro do Dia.</div>
+          <div class="section-sub" style="font-size:12px;margin-top:4px">Configurações usadas pelo Portal do Técnico e pelos links enviados no Roteiro.</div>
         </div>
       </div>
       <div class="form-row fr-2">
@@ -17346,7 +17346,7 @@ function carregarOperacionalConfig() {
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="salvarSuporteWhatsAppConfig()">Salvar suporte</button>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cfg-suporte-whats').value='';salvarSuporteWhatsAppConfig()">Remover número</button>
-        <button class="btn btn-ghost btn-sm" onclick="openOperationalDiagnostics()">Diagnóstico operacional</button>
+        <button class="btn btn-ghost btn-sm" onclick="openOperationalDiagnostics()">Status do sistema</button>
       </div>
     </div>`;
 }
