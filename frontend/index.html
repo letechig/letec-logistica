@@ -4597,6 +4597,16 @@ async function carregarVeiculos(){
               </div>
             </div>
           </section>
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Unidades / Endereços</div>
+              <div class="client-section-desc">Mantenha um cliente principal com varias unidades. A agenda pode escolher qual endereco usar.</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <button type="button" class="btn btn-primary btn-sm" onclick="addClientAddressFromForm()">Salvar endereço atual como unidade</button>
+            </div>
+            <div id="cli-addresses-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          </section>
         </div>
 
         <div class="client-tab-panel" id="client-panel-operacional" role="tabpanel" aria-labelledby="client-tab-operacional">
@@ -12120,6 +12130,8 @@ let clientesPage = 1;
 let clientesPageSize = 50;
 let clientesTotal = 0;
 let clienteContratosDraft = [];
+let clienteEnderecosDraft = [];
+const servicoEnderecosCache = {};
 let customerLinkAuditData = null;
 
 function normalizeClientePriority(value) {
@@ -12142,6 +12154,16 @@ function normalizeClienteStatus(value) {
   if (key === 'eventual' || key === 'eventual recente' || key === 'eventual antigo') return 'Eventual';
   if (key === 'inativo' || key === 'historico/inativo' || key === 'cancelado') return 'Inativo';
   return raw;
+}
+
+function normalizeAddressText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
 }
 
 function clienteStatusChipClass(status) {
@@ -12606,6 +12628,122 @@ async function saveClientContracts(customerId) {
   }
 }
 
+function clientAddressDraftFromForm() {
+  return {
+    label: 'Principal',
+    endereco: document.getElementById('cli-form-end')?.value.trim() || '',
+    endereco_completo: document.getElementById('cli-form-end')?.value.trim() || '',
+    cep: document.getElementById('cli-form-cep')?.value.trim() || '',
+    rua: document.getElementById('cli-form-rua')?.value.trim() || '',
+    numero: document.getElementById('cli-form-numero')?.value.trim() || '',
+    bairro: document.getElementById('cli-form-bairro')?.value.trim() || '',
+    cidade: document.getElementById('cli-form-cidade')?.value.trim() || '',
+    uf: document.getElementById('cli-form-uf')?.value.trim().toUpperCase() || '',
+    complemento: document.getElementById('cli-form-complemento')?.value.trim() || '',
+    referencia: document.getElementById('cli-form-referencia')?.value.trim() || '',
+    is_primary: true,
+    ativo: true,
+    origem: 'cadastro'
+  };
+}
+
+function renderClientAddressesDraft() {
+  const list = document.getElementById('cli-addresses-list');
+  if (!list) return;
+  if (!clienteEnderecosDraft.length) {
+    list.innerHTML = '<div class="text-muted" style="font-size:12px">Nenhuma unidade cadastrada. Use o endereco principal acima ou adicione uma unidade.</div>';
+    return;
+  }
+  list.innerHTML = clienteEnderecosDraft.map((item, index) => `
+    <div style="border:1px solid var(--border);border-radius:var(--r2);padding:9px;background:var(--bg2);display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+      <div>
+        <div class="bold">${sanitize(item.label || (item.is_primary ? 'Principal' : 'Unidade'))}${item.is_primary ? ' · principal' : ''}</div>
+        <div style="font-size:11px;color:var(--text3)">${sanitize(item.endereco_completo || item.endereco || buildClientAddress(item) || 'Endereco nao informado')}</div>
+      </div>
+      <button class="btn btn-ghost btn-xs" onclick="removeClientAddressDraft(${index})">Remover</button>
+    </div>
+  `).join('');
+}
+
+function addClientAddressFromForm() {
+  const item = clientAddressDraftFromForm();
+  const key = normalizeAddressText(item.endereco_completo || item.endereco || buildClientAddress(item));
+  if (!key) {
+    toast('Preencha um endereco antes de adicionar a unidade', 'warn');
+    return;
+  }
+  const exists = clienteEnderecosDraft.some(address => normalizeAddressText(address.endereco_completo || address.endereco || buildClientAddress(address)) === key);
+  if (exists) {
+    toast('Este endereco ja esta na lista de unidades', 'warn');
+    return;
+  }
+  if (!clienteEnderecosDraft.length) item.is_primary = true;
+  clienteEnderecosDraft.push(item);
+  renderClientAddressesDraft();
+}
+
+function removeClientAddressDraft(index) {
+  clienteEnderecosDraft.splice(index, 1);
+  if (clienteEnderecosDraft.length && !clienteEnderecosDraft.some(item => item.is_primary)) {
+    clienteEnderecosDraft[0].is_primary = true;
+  }
+  renderClientAddressesDraft();
+}
+
+async function loadClientAddresses(customerId) {
+  clienteEnderecosDraft = [];
+  if (!customerId) { renderClientAddressesDraft(); return; }
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(customerId)}/addresses`);
+    if (!response.ok) throw new Error(`Erro ${response.status}`);
+    const payload = await response.json();
+    clienteEnderecosDraft = (Array.isArray(payload) ? payload : []).map(item => ({
+      id: item.id || '',
+      label: item.label || (item.is_primary ? 'Principal' : 'Unidade'),
+      endereco: item.endereco || item.endereco_completo || '',
+      endereco_completo: item.endereco_completo || item.endereco || '',
+      cep: item.cep || '',
+      rua: item.rua || '',
+      numero: item.numero || '',
+      bairro: item.bairro || '',
+      cidade: item.cidade || '',
+      uf: item.uf || '',
+      complemento: item.complemento || '',
+      referencia: item.referencia || '',
+      is_primary: item.is_primary === true,
+      ativo: item.ativo !== false,
+      origem: item.origem || 'cadastro'
+    }));
+  } catch(e) {
+    console.warn('Unidades do cliente indisponiveis:', e.message || e);
+    clienteEnderecosDraft = [];
+  }
+  renderClientAddressesDraft();
+}
+
+async function saveClientAddresses(customerId) {
+  if (!customerId) return;
+  const current = clientAddressDraftFromForm();
+  const currentKey = normalizeAddressText(current.endereco_completo || current.endereco || buildClientAddress(current));
+  if (currentKey && !clienteEnderecosDraft.some(address => normalizeAddressText(address.endereco_completo || address.endereco || buildClientAddress(address)) === currentKey)) {
+    clienteEnderecosDraft.unshift(current);
+  }
+  if (clienteEnderecosDraft.length && !clienteEnderecosDraft.some(item => item.is_primary)) clienteEnderecosDraft[0].is_primary = true;
+  const response = await fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(customerId)}/addresses`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ addresses: clienteEnderecosDraft })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (payload.migration_required) {
+      toast('Cliente salvo. Para salvar unidades, rode migration-clientes-unidades.sql no Supabase.', 'warn');
+      return;
+    }
+    throw new Error(payload.error || `Erro ${response.status}`);
+  }
+}
+
 function openClientModal(clientId = null) {
   if (clientId) {
     // Editar cliente existente
@@ -12667,6 +12805,7 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-historico-section').style.display = 'block';
     loadClientHistory();
     loadClientContracts(clienteEditando.id);
+    loadClientAddresses(clienteEditando.id);
   } else {
     // Novo cliente
     clienteEditando = null;
@@ -12710,7 +12849,9 @@ function openClientModal(clientId = null) {
     // Esconder histórico para novos clientes
     document.getElementById('cli-historico-section').style.display = 'none';
     clienteContratosDraft = [];
+    clienteEnderecosDraft = [];
     renderClientContractsDraft();
+    renderClientAddressesDraft();
   }
   
   document.getElementById('cli-form-error').style.display = 'none';
@@ -13088,6 +13229,7 @@ async function saveClient() {
     const savedCustomer = await response.json();
     if (savedCustomer?.id) {
       await saveClientContracts(savedCustomer.id);
+      await saveClientAddresses(savedCustomer.id);
     }
     closeClientModal();
     await renderClientes();
@@ -13260,6 +13402,71 @@ function selecionarClienteServicoAutocomplete(prefix = 'ns', id) {
     suggestions.innerHTML = '';
   }
   preencherServicoPorCliente(prefix, cliente);
+  carregarEnderecosClienteServico(prefix, cliente.id, document.getElementById(`${prefix}-end`)?.value || '');
+  if (prefix === 'ns') updateNewSvcGuideSummary();
+}
+
+function formatServiceAddressOption(address = {}) {
+  const label = address.label || (address.is_primary ? 'Principal' : 'Unidade');
+  const endereco = address.endereco_completo || address.endereco || buildClientAddress(address) || 'Endereco sem descricao';
+  return `${label}: ${endereco}`;
+}
+
+async function carregarEnderecosClienteServico(prefix = 'ns', customerId, currentAddress = '') {
+  const wrap = document.getElementById(`${prefix}-address-wrap`);
+  const select = document.getElementById(`${prefix}-address-select`);
+  const hint = document.getElementById(`${prefix}-address-hint`);
+  if (!wrap || !select || !customerId) return;
+  wrap.style.display = 'block';
+  select.innerHTML = '<option value="">Carregando unidades...</option>';
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(customerId)}/addresses`);
+    if (!response.ok) throw new Error(`Erro ${response.status}`);
+    const addresses = await response.json();
+    servicoEnderecosCache[String(customerId)] = Array.isArray(addresses) ? addresses : [];
+    renderEnderecosClienteServico(prefix, customerId, currentAddress);
+  } catch (error) {
+    servicoEnderecosCache[String(customerId)] = [];
+    select.innerHTML = '<option value="">Usar endereco digitado</option>';
+    if (hint) hint.textContent = 'Nao foi possivel carregar unidades. O servico usara o endereco digitado.';
+  }
+}
+
+function renderEnderecosClienteServico(prefix = 'ns', customerId, currentAddress = '') {
+  const select = document.getElementById(`${prefix}-address-select`);
+  const hint = document.getElementById(`${prefix}-address-hint`);
+  const saveNew = document.getElementById(`${prefix}-save-address-unit`);
+  if (!select) return;
+  const addresses = servicoEnderecosCache[String(customerId)] || [];
+  const currentKey = normalizeAddressText(currentAddress);
+  const selected = addresses.find(item => normalizeAddressText(item.endereco_completo || item.endereco || buildClientAddress(item)) === currentKey);
+  select.innerHTML = [
+    '<option value="">Usar endereco digitado / nova unidade</option>',
+    ...addresses.map(item => `<option value="${escapeHtmlAttr(item.id)}" ${String(item.id) === String(selected?.id) ? 'selected' : ''}>${sanitize(formatServiceAddressOption(item))}</option>`)
+  ].join('');
+  if (saveNew) saveNew.checked = !selected;
+  if (hint) {
+    hint.textContent = addresses.length
+      ? 'Escolha uma unidade existente ou mantenha o endereco digitado para salvar como nova unidade.'
+      : 'Este cliente ainda nao tem unidades salvas. O endereco digitado sera salvo como primeira unidade.';
+  }
+}
+
+function selecionarEnderecoServico(prefix = 'ns') {
+  const select = document.getElementById(`${prefix}-address-select`);
+  const enderecoInput = document.getElementById(`${prefix}-end`);
+  const hidden = document.getElementById(`${prefix}-client-select`);
+  const saveNew = document.getElementById(`${prefix}-save-address-unit`);
+  const customerId = hidden?.value || enderecoInput?.dataset.clientId || '';
+  const selectedId = select?.value || '';
+  const addresses = servicoEnderecosCache[String(customerId)] || [];
+  const address = addresses.find(item => String(item.id) === String(selectedId));
+  if (address && enderecoInput) {
+    enderecoInput.value = address.endereco_completo || address.endereco || buildClientAddress(address) || '';
+    if (saveNew) saveNew.checked = false;
+  } else if (saveNew) {
+    saveNew.checked = true;
+  }
   if (prefix === 'ns') updateNewSvcGuideSummary();
 }
 
@@ -13277,6 +13484,8 @@ function onServicoClienteManualInput(prefix = 'ns') {
   if (select) select.value = '';
   if (nomeInput) nomeInput.dataset.clientId = '';
   if (enderecoInput) enderecoInput.dataset.clientId = '';
+  const addressWrap = document.getElementById(`${prefix}-address-wrap`);
+  if (addressWrap) addressWrap.style.display = 'none';
   if (hint) {
     hint.textContent = 'Nome editado manualmente. Se for cliente novo, o cadastro será criado ao salvar; se já existir, selecione no autocomplete.';
     hint.style.color = 'var(--orange)';
@@ -13295,6 +13504,9 @@ function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentN
   if (search && currentName) search.value = currentName;
   if (nomeInput) nomeInput.dataset.clientId = resolvedClientId;
   if (enderecoInput) enderecoInput.dataset.clientId = resolvedClientId;
+  if (resolvedClientId) {
+    carregarEnderecosClienteServico(prefix, resolvedClientId, enderecoInput?.value || '');
+  }
 }
 
 function onNovoServicoClienteManualInput() { onServicoClienteManualInput('ns'); }
@@ -13492,11 +13704,13 @@ async function loadDuplicates() {
           <div style="border:1px solid var(--border2);border-radius:var(--r2);padding:16px">
             <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">
               Grupo ${groupIndex + 1} - ${group.group.length} cliente(s)
+              ${group.suggested_primary_id ? `<span class="chip chip-blue" style="margin-left:6px">Principal sugerido: ID ${sanitize(group.suggested_primary_id)}</span>` : ''}
+              ${group.requires_manual ? '<span class="chip chip-orange" style="margin-left:6px">Revisao manual</span>' : ''}
             </div>
             <div style="display:flex;flex-direction:column;gap:8px">
               ${group.group.map(customer => `
                 <label style="display:flex;gap:8px;align-items:center;padding:8px;border-radius:var(--r1);background:${focusIds.includes(Number(customer.id)) ? 'var(--orange-bg)' : 'var(--bg2)'};cursor:pointer">
-                  <input type="radio" name="primary-${groupIndex}" value="${customer.id}" style="margin:0">
+                  <input type="radio" name="primary-${groupIndex}" value="${customer.id}" ${String(customer.id) === String(group.suggested_primary_id || '') ? 'checked' : ''} style="margin:0">
                   <div style="flex:1">
                     <div style="font-weight:600">${customer.nome}${focusIds.includes(Number(customer.id)) ? ' <span style="font-size:10px;color:var(--orange)">Alerta atual</span>' : ''}</div>
                     <div style="font-size:11px;color:var(--text3)">${customer.telefone || 'Sem telefone'} • ${customer.endereco || 'Sem endereço'}</div>
@@ -13504,6 +13718,12 @@ async function loadDuplicates() {
                 </label>
               `).join('')}
             </div>
+            ${(group.addresses_to_create?.length || group.aliases_to_create?.length) ? `
+              <div style="margin-top:10px;padding:10px;border-radius:var(--r1);background:var(--bg2);font-size:11px;color:var(--text2);display:grid;gap:6px">
+                ${group.addresses_to_create?.length ? `<div><b>Virarao unidades:</b> ${group.addresses_to_create.map(item => sanitize(item.endereco || item.label || 'Endereco')).join(' · ')}</div>` : ''}
+                ${group.aliases_to_create?.length ? `<div><b>Virarao aliases:</b> ${group.aliases_to_create.map(item => sanitize(item)).join(' · ')}</div>` : ''}
+              </div>
+            ` : ''}
             <div style="margin-top:12px;text-align:right">
               <button class="btn btn-green btn-xs" onclick="mergeDuplicates(${groupIndex})">
                 🔗 Mesclar Selecionados
@@ -13711,6 +13931,10 @@ function updateNewSvcGuideSummary(){
   const veiculo = document.getElementById('ns-vei')?.value || 'Sem veículo';
   const os = document.getElementById('ns-os')?.value.trim() || 'Sem OS';
   const obs = document.getElementById('ns-obs')?.value.trim();
+  const addressSelect = document.getElementById('ns-address-select');
+  const unidade = addressSelect?.value
+    ? (addressSelect.selectedOptions?.[0]?.textContent || 'Unidade selecionada')
+    : (document.getElementById('ns-save-address-unit')?.checked ? 'Salvar como nova unidade' : 'Endereco digitado');
   const clienteStatus = selectedClientId
     ? `Cliente vinculado #${selectedClientId}`
     : (cliente && cliente !== 'Cliente não informado' ? 'Cliente novo ou não selecionado' : 'Aguardando cliente');
@@ -13719,6 +13943,7 @@ function updateNewSvcGuideSummary(){
     ['Vínculo', clienteStatus],
     ['Data e horário', `${dt}${hr !== 'Sem horário' ? ` às ${hr}` : ''}`],
     ['Endereço', endereco],
+    ['Unidade', unidade],
     ['Serviço', tiposSel.length ? tiposSel.join(' + ') : 'Nenhum tipo selecionado'],
     ['Equipe', equipe],
     ['Veículo', veiculo],
@@ -13733,7 +13958,7 @@ function updateNewSvcGuideSummary(){
 }
 
 function bindNewSvcGuideSummary(){
-  ['ns-dt','ns-hr','ns-client-search','ns-cl','ns-end','ns-vei','ns-os','ns-obs'].forEach(id => {
+  ['ns-dt','ns-hr','ns-client-search','ns-cl','ns-end','ns-address-select','ns-save-address-unit','ns-vei','ns-os','ns-obs'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('input', updateNewSvcGuideSummary);
@@ -13817,7 +14042,18 @@ function openNewSvc(initialData = {}){
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Endereço completo</label>
-                <input type="text" id="ns-end" value="${escapeHtmlAttr(defaults.endereco)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo">
+                <input type="text" id="ns-end" value="${escapeHtmlAttr(defaults.endereco)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo" oninput="renderEnderecosClienteServico('ns', document.getElementById('ns-client-select')?.value || '', this.value);updateNewSvcGuideSummary()">
+              </div>
+              <div class="svc-edit-field full" id="ns-address-wrap" style="display:none">
+                <label class="svc-edit-label">Unidade / endereço do cliente</label>
+                <select id="ns-address-select" onchange="selecionarEnderecoServico('ns')">
+                  <option value="">Use o endereço digitado</option>
+                </select>
+                <label class="client-checkbox-row" style="margin-top:8px" for="ns-save-address-unit">
+                  <input type="checkbox" id="ns-save-address-unit" checked>
+                  <span>Salvar endereço digitado como nova unidade do cliente</span>
+                </label>
+                <div id="ns-address-hint" class="svc-edit-help">Ao selecionar um cliente, as unidades cadastradas aparecem aqui.</div>
               </div>
             </div>
           </section>
@@ -13920,13 +14156,16 @@ async function confirmNewSvc(){
     toast('Cliente não vinculado agora; o serviço será salvo mesmo assim.', 'warn');
     cliente_id = '';
   }
+  const customer_address_id = document.getElementById('ns-address-select')?.value || '';
 
   // Gerar ID único (timestamp numérico compatível com BIGINT PK do Supabase)
   const newId = Date.now();
 
   const newS={
     id: newId, dt, dw, ms,
-    cliente: cl, cliente_id, endereco, horario,
+    cliente: cl, cliente_id, customer_address_id,
+    salvar_unidade_cliente: document.getElementById('ns-save-address-unit')?.checked !== false,
+    endereco, horario,
     tipoServico, tipos: tiposSel,
     tecnicos_ids, equipe, veiculo, os, observacoes,
     pre_agendamento: tecnicos_ids.length === 0,

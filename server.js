@@ -373,6 +373,45 @@ async function runCustomerWriteWithSchemaFallback(buildQuery, payload, context) 
   return buildQuery(workingPayload);
 }
 
+const SERVICE_OPTIONAL_WRITE_COLUMNS = new Set([
+  'customer_address_id'
+]);
+
+async function runServiceWriteWithSchemaFallback(buildQuery, payload, context) {
+  const workingPayload = { ...payload };
+  const removedColumns = [];
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const result = await buildQuery(workingPayload);
+    if (!result.error) {
+      if (removedColumns.length) {
+        console.warn(`[${context}] Ignored service column(s) missing from PostgREST schema cache: ${removedColumns.join(', ')}`);
+      }
+      return result;
+    }
+
+    const missingColumn = getMissingSchemaColumn(result.error);
+    if (!missingColumn || !SERVICE_OPTIONAL_WRITE_COLUMNS.has(missingColumn) || !(missingColumn in workingPayload)) {
+      return result;
+    }
+
+    removedColumns.push(missingColumn);
+    delete workingPayload[missingColumn];
+  }
+
+  return buildQuery(workingPayload);
+}
+
+function isMissingRelationError(error) {
+  if (!error) return false;
+  const text = `${error.code || ''} ${error.message || ''} ${error.details || ''}`.toLowerCase();
+  return text.includes('42p01')
+    || text.includes('pgrst205')
+    || text.includes('does not exist')
+    || text.includes('could not find the table')
+    || text.includes('schema cache');
+}
+
 function hasOwnValue(source, key) {
   return Object.prototype.hasOwnProperty.call(source, key) && source[key] !== undefined;
 }
@@ -446,6 +485,7 @@ function normalizeServicePayload(input = {}, options = {}) {
   }
 
   set('cliente_id', ['cliente_id', 'clienteId', 'customer_id', 'client_id'], cleanNumber, null);
+  set('customer_address_id', ['customer_address_id', 'customerAddressId', 'endereco_id', 'address_id'], value => cleanNullableText(value, 80), null);
   set('cliente', ['cliente', 'cl'], value => cleanText(value, 300), '');
   set('endereco', 'endereco', value => cleanText(value, 500), '');
   set('horario', ['horario', 'hr'], value => cleanText(value, 20), '');
@@ -1061,6 +1101,9 @@ async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, c
   );
 
   const client = db || getSupabaseClient();
+  const aliasMatch = await findCustomerByAlias(client, nome, id);
+  if (aliasMatch) return aliasMatch;
+
   const { data, error } = await client
     .from('customers')
     .select('*')
@@ -1081,6 +1124,7 @@ async function findDuplicateCustomer({ id, nome, telefone, whatsapp, cpf_cnpj, c
     if (telefoneNormalizado && itemTelNorm && itemTelNorm === telefoneNormalizado) return true;
     if (whatsappNormalizado && itemWhatsappNorm && itemWhatsappNorm === whatsappNormalizado) return true;
     if (documentoNormalizado && itemDocumentoNorm === documentoNormalizado) return true;
+    if (nomeNormalizado && itemNomeNorm === nomeNormalizado) return true;
     if (nomeNormalizado && itemNomeNorm === nomeNormalizado && enderecoNormalizado && itemEnderecoNorm === enderecoNormalizado) return true;
     return false;
   });
@@ -1361,6 +1405,181 @@ async function fetchServiceById(db, id) {
   return maybeSingle(db.from('services').select('*').eq('id', id));
 }
 
+function normalizeCustomerAlias(value) {
+  return normalizeCustomerName(value);
+}
+
+function compactCustomerAddress(address = {}) {
+  return {
+    id: address.id || null,
+    customer_id: address.customer_id || null,
+    label: address.label || address.nome_unidade || null,
+    endereco: address.endereco || address.endereco_completo || null,
+    endereco_completo: address.endereco_completo || address.endereco || null,
+    cep: address.cep || null,
+    rua: address.rua || null,
+    numero: address.numero || null,
+    bairro: address.bairro || null,
+    cidade: address.cidade || null,
+    uf: address.uf || null,
+    complemento: address.complemento || null,
+    referencia: address.referencia || null,
+    latitude: address.latitude || null,
+    longitude: address.longitude || null,
+    is_primary: address.is_primary === true,
+    ativo: address.ativo !== false,
+    origem: address.origem || null
+  };
+}
+
+function customerAddressPayload(customerId, input = {}, options = {}) {
+  const ufNormalizada = normalizeUf(input.uf);
+  const enderecoEstruturado = buildCustomerAddress({
+    rua: input.rua,
+    numero: input.numero,
+    bairro: input.bairro,
+    cidade: input.cidade,
+    uf: ufNormalizada,
+    complemento: input.complemento,
+    referencia: input.referencia
+  });
+  const endereco = cleanNullableText(input.endereco || input.endereco_completo || enderecoEstruturado, 500);
+  const enderecoCompleto = cleanNullableText(input.endereco_completo || input.endereco || enderecoEstruturado, 500);
+  return {
+    id: cleanNullableText(input.id, 80) || undefined,
+    customer_id: Number(customerId),
+    label: cleanNullableText(input.label || input.nome_unidade || options.label, 160) || null,
+    endereco,
+    endereco_completo: enderecoCompleto,
+    cep: String(input.cep || '').replace(/\D/g, '') || null,
+    rua: cleanNullableText(input.rua, 200),
+    numero: cleanNullableText(input.numero, 60),
+    bairro: cleanNullableText(input.bairro, 160),
+    cidade: cleanNullableText(input.cidade, 160),
+    uf: ufNormalizada,
+    complemento: cleanNullableText(input.complemento, 200),
+    referencia: cleanNullableText(input.referencia, 300),
+    latitude: cleanNumber(input.latitude),
+    longitude: cleanNumber(input.longitude),
+    is_primary: input.is_primary === true || String(input.is_primary) === 'true' || options.is_primary === true,
+    ativo: input.ativo === false || String(input.ativo) === 'false' ? false : true,
+    origem: cleanNullableText(input.origem || options.origem, 80) || 'sistema'
+  };
+}
+
+function hasUsableAddress(address = {}) {
+  return !!buildCustomerAddressFingerprint(address);
+}
+
+async function listCustomerAddresses(db, customerId, options = {}) {
+  if (!customerId) return [];
+  try {
+    let query = db
+      .from('customer_addresses')
+      .select('*')
+      .eq('customer_id', Number(customerId))
+      .order('is_primary', { ascending: false });
+    if (!options.includeInactive) query = query.eq('ativo', true);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(compactCustomerAddress);
+  } catch (error) {
+    if (!isMissingRelationError(error)) throw error;
+    const customer = await maybeSingle(db.from('customers').select('*').eq('id', Number(customerId))).catch(() => null);
+    return customer && hasUsableAddress(customer)
+      ? [compactCustomerAddress({ ...customer, customer_id: Number(customerId), is_primary: true, origem: 'customers_fallback' })]
+      : [];
+  }
+}
+
+async function findCustomerByAlias(db, alias, ignoreId = null) {
+  const aliasNormalizado = normalizeCustomerAlias(alias);
+  if (!aliasNormalizado) return null;
+  try {
+    const { data, error } = await db
+      .from('customer_aliases')
+      .select('*')
+      .eq('alias_normalizado', aliasNormalizado)
+      .eq('ativo', true)
+      .limit(10);
+    if (error) throw error;
+    const ids = [...new Set((data || [])
+      .map(item => Number(item.customer_id))
+      .filter(id => id && String(id) !== String(ignoreId || '')))];
+    if (!ids.length) return null;
+    const { data: customers, error: customersError } = await db
+      .from('customers')
+      .select('*')
+      .in('id', ids)
+      .eq('ativo', true);
+    if (customersError) throw customersError;
+    return (customers || [])[0] || null;
+  } catch (error) {
+    if (isMissingRelationError(error)) return null;
+    throw error;
+  }
+}
+
+async function ensureCustomerAlias(db, customerId, alias, origem = 'sistema') {
+  const aliasNormalizado = normalizeCustomerAlias(alias);
+  if (!customerId || !aliasNormalizado) return null;
+  try {
+    const existing = await findCustomerByAlias(db, alias, null);
+    if (existing && String(existing.id) === String(customerId)) return existing;
+    const payload = {
+      customer_id: Number(customerId),
+      alias: String(alias || '').trim(),
+      alias_normalizado: aliasNormalizado,
+      origem,
+      ativo: true
+    };
+    const { data, error } = await db.from('customer_aliases').insert([payload]).select();
+    if (error) {
+      if (error.code === '23505') return existing || null;
+      throw error;
+    }
+    return data?.[0] || null;
+  } catch (error) {
+    if (isMissingRelationError(error)) return null;
+    throw error;
+  }
+}
+
+async function ensureCustomerAddress(db, customerId, input = {}, options = {}) {
+  if (!customerId) return null;
+  const payload = customerAddressPayload(customerId, input, options);
+  if (!hasUsableAddress(payload)) return null;
+  try {
+    const existing = await listCustomerAddresses(db, customerId, { includeInactive: false });
+    const fingerprint = buildCustomerAddressFingerprint(payload);
+    const match = existing.find(item => buildCustomerAddressFingerprint(item) === fingerprint);
+    if (match) return match;
+    const insertPayload = {
+      ...payload,
+      is_primary: payload.is_primary || existing.length === 0
+    };
+    delete insertPayload.id;
+    const { data, error } = await db.from('customer_addresses').insert([insertPayload]).select();
+    if (error) throw error;
+    return compactCustomerAddress(data?.[0] || insertPayload);
+  } catch (error) {
+    if (isMissingRelationError(error)) return null;
+    throw error;
+  }
+}
+
+async function ensureServiceCustomerAddress(db, servicePayload = {}, customer = null, origem = 'agenda') {
+  const customerId = servicePayload.cliente_id || customer?.id;
+  if (!customerId || servicePayload.customer_address_id) return null;
+  const address = await ensureCustomerAddress(db, customerId, {
+    endereco: servicePayload.endereco,
+    endereco_completo: servicePayload.endereco,
+    origem
+  }, { origem, label: servicePayload.cliente || customer?.nome || null });
+  if (address?.id) servicePayload.customer_address_id = address.id;
+  return address;
+}
+
 async function fetchServicesByDate(db, date) {
   const { data, error } = await db
     .from('services')
@@ -1405,9 +1624,16 @@ async function fetchCustomerForService(db, service = {}) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-async function ensureCustomerForServicePayload(db, servicePayload = {}) {
-  if (servicePayload.cliente_id || !String(servicePayload.cliente || '').trim()) {
-    return { payload: servicePayload, customer: null, created: false };
+async function ensureCustomerForServicePayload(db, servicePayload = {}, options = {}) {
+  const shouldSaveAddress = options.saveAddress !== false;
+  if (servicePayload.cliente_id) {
+    const customer = await maybeSingle(db.from('customers').select('*').eq('id', servicePayload.cliente_id)).catch(() => null);
+    const address = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, customer, 'agenda') : null;
+    return { payload: servicePayload, customer, address, created: false };
+  }
+
+  if (!String(servicePayload.cliente || '').trim()) {
+    return { payload: servicePayload, customer: null, address: null, created: false };
   }
 
   const name = String(servicePayload.cliente || '').trim();
@@ -1426,7 +1652,8 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}) {
 
   if (exactMatches.length === 1) {
     servicePayload.cliente_id = Number(exactMatches[0].id);
-    return { payload: servicePayload, customer: exactMatches[0], created: false };
+    const addressRecord = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, exactMatches[0], 'agenda') : null;
+    return { payload: servicePayload, customer: exactMatches[0], address: addressRecord, created: false };
   }
 
   if (exactMatches.length > 1) {
@@ -1435,10 +1662,11 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}) {
       ? exactMatches.filter(customer => buildCustomerAddressFingerprint(customer) === serviceAddressFingerprint)
       : [];
 
-    if (addressMatches.length === 1) {
-      servicePayload.cliente_id = Number(addressMatches[0].id);
-      return { payload: servicePayload, customer: addressMatches[0], created: false };
-    }
+  if (addressMatches.length === 1) {
+    servicePayload.cliente_id = Number(addressMatches[0].id);
+    const addressRecord = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, addressMatches[0], 'agenda') : null;
+    return { payload: servicePayload, customer: addressMatches[0], address: addressRecord, created: false };
+  }
 
     throw new CustomerLinkError(
       `Mais de um cliente ativo encontrado para "${name}". Selecione o cliente correto no autocomplete antes de salvar.`
@@ -1453,7 +1681,8 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}) {
   });
   if (duplicate?.id) {
     servicePayload.cliente_id = Number(duplicate.id);
-    return { payload: servicePayload, customer: duplicate, created: false };
+    const addressRecord = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, duplicate, 'agenda') : null;
+    return { payload: servicePayload, customer: duplicate, address: addressRecord, created: false };
   }
 
   const insertPayload = {
@@ -1476,7 +1705,11 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}) {
 
   const created = data?.[0] || null;
   if (created?.id) servicePayload.cliente_id = Number(created.id);
-  return { payload: servicePayload, customer: created, created: true };
+  if (created?.id) {
+    await ensureCustomerAlias(db, created.id, name, 'agenda');
+  }
+  const addressRecord = created?.id && shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, created, 'agenda') : null;
+  return { payload: servicePayload, customer: created, address: addressRecord, created: true };
 }
 
 function serviceCustomerId(service = {}) {
@@ -2227,7 +2460,8 @@ app.post('/api/services', async (req, res) => {
     const payload = normalizeServicePayload(req.body, { includeId: true });
     let customerLink = null;
     try {
-      customerLink = await ensureCustomerForServicePayload(db, payload);
+      const saveAddress = req.body?.salvar_unidade_cliente !== false && req.body?.save_customer_address !== false;
+      customerLink = await ensureCustomerForServicePayload(db, payload, { saveAddress });
     } catch (customerError) {
       console.warn('[POST /api/services] Falha ao criar/vincular cliente automaticamente:', customerError.message);
       if (customerError instanceof CustomerLinkError) {
@@ -2241,10 +2475,11 @@ app.post('/api/services', async (req, res) => {
         code: 'customer_link_failed'
       });
     }
-    const { data, error } = await db
-      .from('services')
-      .insert([payload])
-      .select();
+    const { data, error } = await runServiceWriteWithSchemaFallback(
+      workingPayload => db.from('services').insert([workingPayload]).select(),
+      payload,
+      'POST /api/services'
+    );
 
     if (error) {
       if (error.code === '23505' && payload.id !== undefined && payload.id !== null) {
@@ -2258,7 +2493,8 @@ app.post('/api/services', async (req, res) => {
       ...saved,
       customer_auto_link: customerLink ? {
         created: !!customerLink.created,
-        customer_id: payload.cliente_id || null
+        customer_id: payload.cliente_id || null,
+        customer_address_id: payload.customer_address_id || null
       } : null
     } : null);
   } catch (error) {
@@ -2278,11 +2514,11 @@ app.put('/api/services/:id', async (req, res) => {
       return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
     }
 
-    const { data, error } = await db
-      .from('services')
-      .update(payload)
-      .eq('id', id)
-      .select();
+    const { data, error } = await runServiceWriteWithSchemaFallback(
+      workingPayload => db.from('services').update(workingPayload).eq('id', id).select(),
+      payload,
+      'PUT /api/services/:id'
+    );
 
     if (error) throw error;
     const updated = data?.[0] || null;
@@ -3022,7 +3258,16 @@ app.post('/api/service-types', strictLimiter, async (req, res) => {
       if (error.code === '23505') return res.status(409).json({ error: 'Já existe um tipo com este nome ou sigla' });
       throw error;
     }
-    res.status(201).json(data[0]);
+    const created = data?.[0] || null;
+    if (created?.id) {
+      await ensureCustomerAlias(db, created.id, created.nome || nome, origem || 'cadastro');
+      await ensureCustomerAddress(db, created.id, {
+        ...insertPayload,
+        origem: origem || 'cadastro'
+      }, { origem: origem || 'cadastro', is_primary: true, label: 'Principal' });
+    }
+
+    res.status(201).json(created);
   } catch (error) {
     console.error('[POST /api/service-types] Error:', error.message);
     res.status(500).json({ error: 'Falha ao criar tipo de serviço' });
@@ -3286,8 +3531,10 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     });
     if (duplicate) {
       return res.status(409).json({
+        code: 'possible_duplicate',
         error: `Cliente potencialmente duplicado: ${duplicate.nome}`,
-        duplicateId: duplicate.id
+        duplicateId: duplicate.id,
+        duplicate
       });
     }
 
@@ -3340,8 +3587,16 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       }
       throw error;
     }
-    
-    res.status(201).json(data[0]);
+    const created = data?.[0] || null;
+    if (created?.id) {
+      await ensureCustomerAlias(db, created.id, created.nome || nome, origem || 'cadastro');
+      await ensureCustomerAddress(db, created.id, {
+        ...insertPayload,
+        origem: origem || 'cadastro'
+      }, { origem: origem || 'cadastro', is_primary: true, label: 'Principal' });
+    }
+
+    res.status(201).json(created);
   } catch (error) {
     console.error('[POST /api/customers] Error:', error.message);
     res.status(500).json({ error: 'Falha ao criar cliente' });
@@ -3585,6 +3840,187 @@ app.get('/api/geocode', async (req, res) => {
   }
 });
 
+async function updateServicesCustomerLink(db, duplicateId, primaryId, addressId = null) {
+  const payload = addressId
+    ? { cliente_id: Number(primaryId), customer_address_id: addressId }
+    : { cliente_id: Number(primaryId) };
+  const { error } = await runServiceWriteWithSchemaFallback(
+    workingPayload => db.from('services').update(workingPayload).eq('cliente_id', duplicateId),
+    payload,
+    'merge services customer link'
+  );
+  if (error) throw error;
+}
+
+function chooseCanonicalPrimary(customers = []) {
+  return [...customers].sort((a, b) => {
+    const score = item => {
+      let value = 0;
+      if (item.tipo_cliente === 'Contrato' || item.categoria === 'contrato') value += 30;
+      if (item.status_operacional === 'Ativo') value += 20;
+      if (item.cliente_recorrente) value += 15;
+      if (item.telefone || item.whatsapp) value += 8;
+      if (buildCustomerAddressFingerprint(item)) value += 5;
+      if (item.ativo !== false) value += 3;
+      return value;
+    };
+    return score(b) - score(a) || Number(a.id || 0) - Number(b.id || 0);
+  })[0] || null;
+}
+
+function canonicalMergePreview(customers = [], primaryId = null, type = 'same_name') {
+  const primary = customers.find(item => String(item.id) === String(primaryId)) || chooseCanonicalPrimary(customers);
+  const duplicateIds = customers.filter(item => String(item.id) !== String(primary?.id)).map(item => item.id);
+  const primaryFingerprint = buildCustomerAddressFingerprint(primary || {});
+  const addresses = customers
+    .filter(item => String(item.id) !== String(primary?.id))
+    .filter(item => {
+      const fp = buildCustomerAddressFingerprint(item);
+      return fp && fp !== primaryFingerprint;
+    })
+    .map(item => ({
+      source_customer_id: item.id,
+      label: item.nome || 'Unidade',
+      endereco: item.endereco_completo || item.endereco || buildCustomerAddress(item)
+    }));
+  const aliases = customers
+    .filter(item => item.nome && normalizeCustomerAlias(item.nome) !== normalizeCustomerAlias(primary?.nome))
+    .map(item => item.nome);
+  return {
+    type,
+    requires_manual: type !== 'same_name',
+    suggested_primary_id: primary?.id || null,
+    duplicate_ids: duplicateIds,
+    addresses_to_create: addresses,
+    aliases_to_create: [...new Set(aliases)],
+    group: customers
+  };
+}
+
+async function mergeCustomersCanonical(db, primaryId, duplicateIds = [], options = {}) {
+  if (!primaryId || !Array.isArray(duplicateIds) || duplicateIds.length === 0) {
+    const error = new Error('IDs primário e duplicatas são obrigatórios');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const allIds = [primaryId, ...duplicateIds];
+  const { data: customers, error: fetchError } = await db
+    .from('customers')
+    .select('*')
+    .in('id', allIds);
+
+  if (fetchError) throw fetchError;
+  if ((customers || []).length !== allIds.length) {
+    const error = new Error('Um ou mais clientes não encontrados');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const primary = customers.find(c => String(c.id) === String(primaryId));
+  if (!primary) {
+    const error = new Error('Cliente primário não encontrado');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const duplicates = customers.filter(c => String(c.id) !== String(primaryId));
+  const merged = { ...primary };
+  const createdAddresses = [];
+  const createdAliases = [];
+
+  await ensureCustomerAddress(db, primaryId, primary, { origem: 'merge', is_primary: true, label: 'Principal' });
+  await ensureCustomerAlias(db, primaryId, primary.nome, 'merge');
+
+  for (const dup of duplicates) {
+    if (!merged.endereco && dup.endereco) merged.endereco = dup.endereco;
+    if (!merged.endereco_completo && dup.endereco_completo) merged.endereco_completo = dup.endereco_completo;
+    if (!merged.latitude && dup.latitude) merged.latitude = dup.latitude;
+    if (!merged.longitude && dup.longitude) merged.longitude = dup.longitude;
+    if (!merged.cpf_cnpj && dup.cpf_cnpj) merged.cpf_cnpj = dup.cpf_cnpj;
+    if (!merged.whatsapp && dup.whatsapp) merged.whatsapp = dup.whatsapp;
+    if (!merged.email && dup.email) merged.email = dup.email;
+    if (!merged.uf && dup.uf) merged.uf = dup.uf;
+    if (!merged.observacoes && dup.observacoes) merged.observacoes = dup.observacoes;
+
+    if (dup.observacoes && dup.observacoes !== merged.observacoes) {
+      merged.observacoes = (merged.observacoes || '') + '\n[Merged from duplicate: ' + dup.observacoes + ']';
+    }
+
+    const address = await ensureCustomerAddress(db, primaryId, dup, { origem: 'merge', label: dup.nome || 'Unidade' });
+    if (address?.id) createdAddresses.push(address);
+    const aliasDeactivation = await db
+      .from('customer_aliases')
+      .update({ ativo: false })
+      .eq('customer_id', dup.id);
+    if (aliasDeactivation.error && !isMissingRelationError(aliasDeactivation.error)) throw aliasDeactivation.error;
+    const alias = await ensureCustomerAlias(db, primaryId, dup.nome, 'merge');
+    if (alias) createdAliases.push(alias);
+
+    await updateServicesCustomerLink(db, dup.id, primaryId, address?.id || null);
+  }
+
+  const duplicateNote = `\n[Duplicatas mescladas nesta ficha: ${duplicateIds.join(', ')}]`;
+  const { error: updateError } = await db
+    .from('customers')
+    .update({
+      endereco: merged.endereco,
+      endereco_completo: merged.endereco_completo,
+      latitude: merged.latitude,
+      longitude: merged.longitude,
+      cpf_cnpj: merged.cpf_cnpj,
+      whatsapp: merged.whatsapp,
+      email: merged.email,
+      uf: merged.uf,
+      observacoes: `${merged.observacoes || ''}${duplicateNote}`,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', primaryId);
+
+  if (updateError) throw updateError;
+
+  const relatedUpdates = [
+    ['contracts', 'customer_id'],
+    ['customer_service_history', 'customer_id'],
+    ['data_reviews', 'customer_id'],
+    ['customer_reminders', 'customer_id']
+  ];
+
+  for (const [table, column] of relatedUpdates) {
+    const { error: relatedError } = await db
+      .from(table)
+      .update({ [column]: primaryId })
+      .in(column, duplicateIds);
+    if (relatedError) {
+      const missing = getMissingSchemaColumn(relatedError);
+      if (missing || isMissingRelationError(relatedError)) {
+        console.warn(`[POST /api/customers/merge] Ignorando tabela/coluna ausente: ${table}.${column}`);
+      } else {
+        throw relatedError;
+      }
+    }
+  }
+
+  const { error: deleteError } = await db
+    .from('customers')
+    .update({
+      ativo: false,
+      status_operacional: 'Inativo',
+      observacoes: (merged.observacoes || '') + '\n[Merged into customer ID: ' + primaryId + ']',
+      updated_at: new Date().toISOString()
+    })
+    .in('id', duplicateIds);
+
+  if (deleteError) throw deleteError;
+
+  return {
+    message: `Clientes mesclados com sucesso. ${duplicateIds.length} duplicata(s) removida(s).`,
+    primaryCustomer: merged,
+    addresses_created: createdAddresses.length,
+    aliases_created: createdAliases.length
+  };
+}
+
 // DUPLICATES MANAGEMENT
 app.get('/api/customers/duplicates', async (req, res) => {
   try {
@@ -3623,7 +4059,8 @@ app.get('/api/customers/duplicates', async (req, res) => {
 
       if (groupIndexes.length > 1) {
         const group = groupIndexes.map(index => customers[index]);
-        actualDuplicates.push({ customer: group[0], group });
+        const preview = canonicalMergePreview(group, null, 'same_name');
+        actualDuplicates.push({ customer: group[0], ...preview });
       }
     }
 
@@ -3637,7 +4074,11 @@ app.get('/api/customers/duplicates', async (req, res) => {
 app.post('/api/customers/merge', strictLimiter, async (req, res) => {
   try {
     const db = getSupabaseClient();
-    const { primaryId, duplicateIds, keepFields } = req.body;
+    const { primaryId, duplicateIds } = req.body;
+    const result = await mergeCustomersCanonical(db, primaryId, duplicateIds);
+    return res.json(result);
+    /* Legacy merge kept below as unreachable fallback reference during Clientes V2 rollout. */
+    const legacyMergePayload = req.body;
     
     if (!primaryId || !Array.isArray(duplicateIds) || duplicateIds.length === 0) {
       return res.status(400).json({ error: 'IDs primário e duplicatas são obrigatórios' });
@@ -3742,7 +4183,109 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
     
   } catch (error) {
     console.error('[POST /api/customers/merge] Error:', error.message);
-    res.status(500).json({ error: 'Falha ao mesclar clientes' });
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Falha ao mesclar clientes' });
+  }
+});
+
+app.get('/api/customers/canonical-audit', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const search = String(req.query.search || '').trim();
+    let query = db
+      .from('customers')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (search) {
+      const safe = search.replace(/[%_,]/g, '');
+      query = query.or(`nome.ilike.%${safe}%,endereco.ilike.%${safe}%,endereco_completo.ilike.%${safe}%`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const active = (data || []).filter(customer => customer.ativo !== false);
+    const byName = new Map();
+    for (const customer of active) {
+      const key = normalizeCustomerName(customer.nome);
+      if (!key) continue;
+      if (!byName.has(key)) byName.set(key, []);
+      byName.get(key).push(customer);
+    }
+
+    const groups = [];
+    for (const group of byName.values()) {
+      if (group.length > 1) groups.push(canonicalMergePreview(group, null, 'same_name'));
+    }
+
+    res.json({ total: groups.length, groups, search: search || null });
+  } catch (error) {
+    console.error('[GET /api/customers/canonical-audit] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao auditar clientes canonicos' });
+  }
+});
+
+app.post('/api/customers/canonical-merge', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { primaryId, duplicateIds } = req.body;
+    const result = await mergeCustomersCanonical(db, primaryId, duplicateIds);
+    res.json(result);
+  } catch (error) {
+    console.error('[POST /api/customers/canonical-merge] Error:', error.message);
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Falha ao mesclar clientes canonicos' });
+  }
+});
+
+app.get('/api/customers/:id/addresses', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    if (!customerId) return res.status(400).json({ error: 'Cliente invalido' });
+    const addresses = await listCustomerAddresses(db, customerId, { includeInactive: req.query.include_inactive === 'true' });
+    res.json(addresses);
+  } catch (error) {
+    console.error('[GET /api/customers/:id/addresses] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar unidades do cliente' });
+  }
+});
+
+app.put('/api/customers/:id/addresses', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    if (!customerId) return res.status(400).json({ error: 'Cliente invalido' });
+    const addresses = Array.isArray(req.body?.addresses) ? req.body.addresses : [];
+
+    const deactivated = await db
+      .from('customer_addresses')
+      .update({ ativo: false, updated_at: new Date().toISOString() })
+      .eq('customer_id', customerId);
+    if (deactivated.error) {
+      if (isMissingRelationError(deactivated.error)) {
+        return res.status(503).json({
+          error: 'A migration migration-clientes-unidades.sql ainda nao foi aplicada.',
+          migration_required: true
+        });
+      }
+      throw deactivated.error;
+    }
+
+    for (const item of addresses) {
+      await ensureCustomerAddress(db, customerId, {
+        ...item,
+        origem: item.origem || 'cadastro'
+      }, {
+        origem: item.origem || 'cadastro',
+        is_primary: item.is_primary === true
+      });
+    }
+
+    const updated = await listCustomerAddresses(db, customerId, { includeInactive: false });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/customers/:id/addresses] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao salvar unidades do cliente' });
   }
 });
 
@@ -4266,7 +4809,7 @@ app.put('/api/data-reviews/:id', strictLimiter, async (req, res) => {
     const { data, error } = await db
       .from('data_reviews')
       .update({ status_revisao, updated_at: new Date().toISOString() })
-      .eq('id', Number(id))
+      .eq('id', customerId)
       .select();
 
     if (error) throw error;

@@ -73,6 +73,7 @@ Para banco novo, use `supabase-setup.sql` como base. Para bancos existentes, apl
 10. `migration-customer-reminders.sql`
 11. `migration-logistica-whatsapp-fase1.sql`
 12. `migration-clientes-agenda-ux.sql`
+13. `migration-clientes-unidades.sql`
 
 `supabase-setup.sql` foi alinhado para manter `services.cliente_id` com FK para `customers(id)` usando `ON DELETE SET NULL`.
 

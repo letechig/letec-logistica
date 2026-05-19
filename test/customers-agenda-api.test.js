@@ -20,6 +20,8 @@ function makeState() {
     customer_service_history: [{ id: 30, customer_id: 2, servico: 'DS' }],
     data_reviews: [{ id: 40, customer_id: 2, tipo_problema: 'possivel_duplicidade' }],
     customer_reminders: [{ id: 'rem-1', customer_id: 2, mensagem: 'x' }],
+    customer_addresses: [],
+    customer_aliases: [],
     checklists: [
       { id: 50, date: '2026-05-14', motorista: 'Joao', origem: 'admin' },
       { id: 51, date: '2026-05-15', motorista: 'Maria', origem: 'portal_tecnico' }
@@ -364,6 +366,9 @@ test('POST /api/services vincula cliente existente por nome sem duplicar cadastr
     assert.equal(payload.cliente_id, 1);
     assert.equal(state.customers.length, beforeCustomers);
     assert.equal(state.services.find(service => service.id === 100).cliente_id, 1);
+    assert.equal(state.customer_addresses.length, 1);
+    assert.equal(state.services.find(service => service.id === 100).customer_address_id, state.customer_addresses[0].id);
+    assert.equal(state.customer_addresses[0].customer_id, 1);
   });
 });
 
@@ -398,6 +403,8 @@ test('POST /api/services cria cliente automaticamente quando agenda usa cliente 
     assert.equal(created.origem, 'agenda');
     assert.equal(payload.cliente_id, created.id);
     assert.equal(state.services.find(service => service.id === 101).cliente_id, created.id);
+    assert.equal(state.customer_aliases.some(alias => alias.customer_id === created.id && alias.alias_normalizado === 'CLIENTE NOVO AGENDA'), true);
+    assert.equal(state.customer_addresses.some(address => address.customer_id === created.id && address.endereco === 'Rua Nova, 123'), true);
   });
 });
 
