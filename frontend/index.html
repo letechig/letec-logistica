@@ -832,6 +832,86 @@ textarea:focus-visible,
   flex-direction: column;
   gap: 12px;
 }
+.today-now {
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .07);
+}
+.today-now-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.today-now-title {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 850;
+  color: var(--text);
+}
+.today-now-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.today-now-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.today-now-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 126px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: #fff;
+}
+.today-now-card.critical { border-color: rgba(220,38,38,.24); background: #fff7f7; }
+.today-now-card.warn { border-color: rgba(234,88,12,.25); background: #fffaf3; }
+.today-now-card.info { border-color: rgba(37,99,235,.22); background: #f8fbff; }
+.today-now-card.ok { border-color: rgba(22,163,74,.2); background: #f7fef9; }
+.today-now-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.today-now-card-title {
+  font-weight: 850;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.25;
+}
+.today-now-card-text {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.4;
+}
+.today-now-number {
+  min-width: 34px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--bg2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-weight: 850;
+  font-size: 13px;
+}
+.today-now-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: auto;
+}
 .today-alert {
   background: var(--card);
   border: 1px solid var(--border);
@@ -1356,6 +1436,85 @@ td.bold { color: var(--text); font-weight: 600; }
 .svc-edit-summary-name { font-size:16px; font-weight:850; color:#0f172a; line-height:1.2; }
 .svc-edit-summary-meta { margin-top:4px; font-family:var(--mono); font-size:11px; color:#64748b; }
 .svc-edit-summary-address { margin-top:8px; font-size:12px; color:#475569; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.svc-guide-steps {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  padding:14px 22px 0;
+  background:#fff;
+}
+.svc-guide-step {
+  display:flex;
+  gap:9px;
+  align-items:flex-start;
+  padding:10px;
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  background:#f8fafc;
+  min-width:0;
+}
+.svc-guide-num {
+  width:22px;
+  height:22px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:#dbeafe;
+  color:#1d4ed8;
+  font-family:var(--mono);
+  font-weight:850;
+  font-size:11px;
+  flex-shrink:0;
+}
+.svc-guide-label { font-weight:850; font-size:12px; color:#0f172a; line-height:1.2; }
+.svc-guide-help { margin-top:2px; font-size:11px; color:#64748b; line-height:1.3; }
+.svc-confirm-panel {
+  border:1px solid #dbeafe;
+  border-radius:14px;
+  background:linear-gradient(180deg,#eff6ff,#fff);
+  padding:14px;
+}
+.svc-confirm-title {
+  font-weight:850;
+  font-size:12px;
+  color:#1e40af;
+  text-transform:uppercase;
+  letter-spacing:.07em;
+  margin-bottom:9px;
+}
+.svc-confirm-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.svc-confirm-item {
+  border:1px solid rgba(37,99,235,.12);
+  border-radius:10px;
+  background:rgba(255,255,255,.78);
+  padding:9px 10px;
+  min-width:0;
+}
+.svc-confirm-k {
+  font-family:var(--mono);
+  font-size:10px;
+  color:#64748b;
+  margin-bottom:3px;
+}
+.svc-confirm-v {
+  font-size:12px;
+  font-weight:750;
+  color:#0f172a;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.svc-confirm-note {
+  margin-top:8px;
+  font-size:11px;
+  color:#475569;
+  line-height:1.4;
+}
 .svc-status-badge {
   display:inline-flex; align-items:center; justify-content:center;
   min-height:28px; padding:0 11px; border-radius:999px;
@@ -1485,7 +1644,9 @@ td.bold { color: var(--text); font-weight: 600; }
   .svc-edit-shell { height:94vh; max-height:94vh; }
   .svc-edit-header,.svc-edit-body,.svc-edit-footer { padding-left:16px; padding-right:16px; }
   .svc-edit-title-row,.svc-edit-summary { grid-template-columns:1fr; flex-direction:column; }
+  .svc-guide-steps { grid-template-columns:1fr 1fr; padding-left:16px; padding-right:16px; }
   .svc-edit-grid,.svc-edit-grid-3,.svc-edit-type-grid,.svc-edit-status-wrap { grid-template-columns:1fr; }
+  .svc-confirm-grid { grid-template-columns:1fr; }
   .svc-edit-summary-address { white-space:normal; }
   .svc-edit-footer { flex-wrap:wrap; }
   .svc-edit-footer-spacer { display:none; }
@@ -2035,6 +2196,37 @@ td.bold { color: var(--text); font-weight: 600; }
 }
 .com-status-title { font-size:13px; font-weight:900; color:var(--text); }
 .com-status-text { margin-top:3px; font-size:12px; color:var(--text2); line-height:1.45; }
+.flow-guide {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;
+  margin-bottom:16px;
+}
+.flow-guide-step {
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding:12px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#fff;
+}
+.flow-guide-num {
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--blue-bg);
+  color:var(--blue2);
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:850;
+  flex-shrink:0;
+}
+.flow-guide-title { font-size:12px; font-weight:850; color:var(--text); }
+.flow-guide-text { margin-top:2px; font-size:11px; color:var(--text2); line-height:1.35; }
 .com-msg-dest { min-width:180px; }
 .com-msg-dest strong { display:block; color:var(--text); margin-bottom:2px; }
 .com-msg-preview { max-width:420px; font-size:12px; color:var(--text2); line-height:1.45; }
@@ -3599,6 +3791,13 @@ async function carregarVeiculos(){
         </div>
       </div>
 
+      <div class="flow-guide">
+        <div class="flow-guide-step"><span class="flow-guide-num">1</span><div><div class="flow-guide-title">Escolha a data</div><div class="flow-guide-text">Use a data do dia ou revise um período específico.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">2</span><div><div class="flow-guide-title">Monte o roteiro</div><div class="flow-guide-text">O sistema agrupa por técnico e mostra a sequência.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Revise por técnico</div><div class="flow-guide-text">Confira horários, endereços e alertas antes de enviar.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">4</span><div><div class="flow-guide-title">Enviar ou copiar</div><div class="flow-guide-text">Envie aos técnicos ou use copiar como fallback.</div></div></div>
+      </div>
+
       <!-- KPIs -->
       <div id="rot-kpis" style="display:none;margin-bottom:16px" class="grid-kpi">
         <div class="card card-accent">
@@ -3672,6 +3871,12 @@ async function carregarVeiculos(){
       </div>
 
       <div id="com-evolution-status" class="com-status-slot"></div>
+
+      <div class="flow-guide">
+        <div class="flow-guide-step"><span class="flow-guide-num">1</span><div><div class="flow-guide-title">Ver status</div><div class="flow-guide-text">Confirme se o WhatsApp está conectado antes dos envios.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">2</span><div><div class="flow-guide-title">Enviar mensagens</div><div class="flow-guide-text">Use agenda aos técnicos ou lembretes 24h para clientes.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Corrigir erros</div><div class="flow-guide-text">Mensagens com erro podem ser reenviadas ou copiadas manualmente.</div></div></div>
+      </div>
 
       <div class="grid-kpi com-kpis" id="com-kpis" style="margin-bottom:16px"></div>
 
@@ -8341,6 +8546,7 @@ function renderAgenda() {
           <div class="ui-empty-state">
             <div class="ui-empty-title">Nenhum serviço encontrado</div>
             <div>Limpe os filtros ou cadastre um novo serviço para este período.</div>
+            <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="openNewSvc()">+ Novo Serviço</button></div>
           </div>
         </td>
       </tr>`;
@@ -9804,6 +10010,114 @@ function hojeAnalisarDia(daySvcs, d) {
   };
 }
 
+function hojeAbrirCampo() {
+  const panel = document.getElementById('field-ops-panel');
+  if (panel) panel.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function hojeContarErrosWhatsapp(data) {
+  return (logisticaWhatsappMensagens || []).filter(msg => {
+    if (String(msg.status || '').toLowerCase() !== 'erro') return false;
+    const rawDate = String(msg.created_at || msg.enviado_em || msg.data || '');
+    return !rawDate || rawDate.slice(0, 10) === data;
+  }).length;
+}
+
+function hojeAcoesAgoraHtml(A, data) {
+  const eventosDia = fieldOpsSchemaReady
+    ? (technicianEvents || []).filter(ev => (!ev.date || ev.date === data) && isFieldOpsEventPending(ev))
+    : [];
+  const urgentesCampo = eventosDia.filter(ev => getFieldOpsEventPriority(ev) === 'urgente').length;
+  const errosWhatsapp = hojeContarErrosWhatsapp(data);
+  const cards = [];
+
+  if (A.atrasados.length) {
+    cards.push({
+      cls: 'critical',
+      title: 'Serviços atrasados',
+      count: A.atrasados.length,
+      text: 'Horário já passou e ainda não foi marcado como executado.',
+      action: `<button class="btn btn-primary btn-sm" onclick="showSvcDetail(${jsArg(A.atrasados[0].id)})">Ver primeiro</button>`
+    });
+  }
+  if (A.semEquipe.length) {
+    cards.push({
+      cls: 'warn',
+      title: 'Definir técnico',
+      count: A.semEquipe.length,
+      text: 'Serviços sem responsável podem travar roteiro, confirmação e execução.',
+      action: `<button class="btn btn-primary btn-sm" onclick="abrirEdicaoEquipe(${jsArg(A.semEquipe[0].id)})">Definir agora</button>`
+    });
+  }
+  if (A.reagendados.length) {
+    cards.push({
+      cls: 'warn',
+      title: 'Reagendados',
+      count: A.reagendados.length,
+      text: 'Revise os serviços reagendados para confirmar nova data, equipe ou cliente.',
+      action: `<button class="btn btn-ghost btn-sm" onclick="showSvcDetail(${jsArg(A.reagendados[0].id)})">Revisar</button>`
+    });
+  }
+  if (urgentesCampo) {
+    cards.push({
+      cls: 'critical',
+      title: 'Campo urgente',
+      count: urgentesCampo,
+      text: 'Há evento urgente vindo do portal técnico nesta data.',
+      action: '<button class="btn btn-ghost btn-sm" onclick="hojeAbrirCampo()">Ver central</button>'
+    });
+  } else if (eventosDia.length) {
+    cards.push({
+      cls: 'info',
+      title: 'Pendências de campo',
+      count: eventosDia.length,
+      text: 'Eventos do portal técnico aguardam visualização ou conclusão.',
+      action: '<button class="btn btn-ghost btn-sm" onclick="hojeAbrirCampo()">Abrir central</button>'
+    });
+  }
+  if (errosWhatsapp) {
+    cards.push({
+      cls: 'critical',
+      title: 'Erros no WhatsApp',
+      count: errosWhatsapp,
+      text: 'Mensagens falharam e precisam de reenvio ou fallback por cópia.',
+      action: "<button class=\"btn btn-ghost btn-sm\" onclick=\"nav('comunicacao',null)\">Abrir WhatsApp</button>"
+    });
+  }
+
+  const cardHtml = cards.length
+    ? cards.map(card => `<div class="today-now-card ${card.cls}">
+        <div class="today-now-card-top">
+          <div class="today-now-card-title">${sanitize(card.title)}</div>
+          <div class="today-now-number">${card.count}</div>
+        </div>
+        <div class="today-now-card-text">${sanitize(card.text)}</div>
+        <div class="today-now-actions">${card.action}</div>
+      </div>`).join('')
+    : `<div class="today-now-card ok">
+        <div class="today-now-card-top">
+          <div class="today-now-card-title">Operação sem pendência crítica</div>
+          <div class="today-now-number">0</div>
+        </div>
+        <div class="today-now-card-text">Revise a agenda, cadastre novos serviços ou monte o roteiro do dia quando estiver pronto.</div>
+        <div class="today-now-actions">
+          <button class="btn btn-primary btn-sm" onclick="openNewSvc()">Novo serviço</button>
+          <button class="btn btn-ghost btn-sm" onclick="nav('roteiro',null)">Montar roteiro</button>
+        </div>
+      </div>`;
+
+  return `<div class="today-now">
+    <div class="today-now-head">
+      <div>
+        <div class="today-now-title">Ações de agora</div>
+        <div class="today-now-sub">Comece por aqui para resolver o que pode travar a operação do dia.</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="renderHoje()">Atualizar</button>
+    </div>
+    <div class="today-now-grid">${cardHtml}</div>
+  </div>`;
+}
+
 // ── Navegação de data ──────────────────────────
 function hojeMoverDia(delta) {
   const el = document.getElementById('hoje-date');
@@ -9836,11 +10150,16 @@ function renderHoje() {
 
   // ── Sem serviços ──
   if (!daySvcs.length) {
-    summaryEl.style.display = 'none';
+    summaryEl.style.display = 'block';
+    summaryEl.innerHTML = hojeAcoesAgoraHtml({ atrasados:[], semEquipe:[], reagendados:[] }, d);
     kanbanEl.innerHTML = `<div style="padding:60px 20px;text-align:center;color:var(--text3);grid-column:1/-1">
       <div style="font-size:48px;margin-bottom:16px">📅</div>
       <div style="font-family:var(--display);font-size:16px;font-weight:700;color:var(--text2);margin-bottom:8px">Nenhum serviço nesta data</div>
-      <div style="font-size:12px">Cadastre um serviço ou escolha outro dia para acompanhar a operação.</div>
+      <div style="font-size:12px;margin-bottom:14px">Cadastre um serviço ou escolha outro dia para acompanhar a operação.</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="openNewSvc({data:${jsArg(d)}})">Cadastrar serviço nesta data</button>
+        <button class="btn btn-ghost btn-sm" onclick="hojeIrParaHoje()">Voltar para hoje</button>
+      </div>
     </div>`;
     document.getElementById('hoje-sub').textContent   = 'Sem serviços nesta data';
     document.getElementById('hoje-title').textContent = `Painel — ${br}`;
@@ -9870,6 +10189,7 @@ function renderHoje() {
   // Ordem: críticos → avisos → capacidade + progresso
   // ════════════════════════════════════════════
   let html = '<div class="today-summary-stack">';
+  html += hojeAcoesAgoraHtml(A, d);
 
   // â”€â”€ CRÃTICO 1: Serviços Atrasados ──
   if (A.atrasados.length) {
@@ -12864,11 +13184,11 @@ function preencherServicoPorCliente(prefix = 'ns', cliente) {
   if (endereco) {
     enderecoInput.value = endereco;
     if (hint) {
-      hint.textContent = 'Endereço preenchido pelo cadastro do cliente. Você pode ajustar para este serviço.';
+      hint.textContent = 'Cliente vinculado ao cadastro. Endereço preenchido automaticamente; ajuste se este atendimento for em outro local.';
       hint.style.color = 'var(--green)';
     }
   } else if (hint) {
-    hint.textContent = 'Cliente sem endereço cadastrado.';
+    hint.textContent = 'Cliente vinculado, mas sem endereço cadastrado. Preencha o endereço deste atendimento.';
     hint.style.color = 'var(--orange)';
   }
 }
@@ -12907,6 +13227,10 @@ async function buscarClienteServicoAutocomplete(prefix = 'ns') {
       }
       return;
     }
+    if (hint) {
+      hint.textContent = 'Encontramos clientes parecidos. Selecione o cadastro correto para vincular o histórico.';
+      hint.style.color = 'var(--blue2)';
+    }
     suggestions.innerHTML = results.map(c => `
       <button type="button" class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;margin-bottom:4px;text-align:left" onclick="selecionarClienteServicoAutocomplete('${prefix}', ${jsArg(c.id)})">
         ${sanitize(c.nome || 'Cliente sem nome')} <span class="mono" style="color:var(--text3);font-size:10px">${sanitize(c.telefone || c.whatsapp || '')}</span>
@@ -12936,6 +13260,7 @@ function selecionarClienteServicoAutocomplete(prefix = 'ns', id) {
     suggestions.innerHTML = '';
   }
   preencherServicoPorCliente(prefix, cliente);
+  if (prefix === 'ns') updateNewSvcGuideSummary();
 }
 
 function onServicoClienteManualInput(prefix = 'ns') {
@@ -12953,9 +13278,10 @@ function onServicoClienteManualInput(prefix = 'ns') {
   if (nomeInput) nomeInput.dataset.clientId = '';
   if (enderecoInput) enderecoInput.dataset.clientId = '';
   if (hint) {
-    hint.textContent = 'Nome editado manualmente. O endereço continuará editável e o serviço será salvo sem cliente vinculado.';
-    hint.style.color = 'var(--text3)';
+    hint.textContent = 'Nome editado manualmente. Se for cliente novo, o cadastro será criado ao salvar; se já existir, selecione no autocomplete.';
+    hint.style.color = 'var(--orange)';
   }
+  if (prefix === 'ns') updateNewSvcGuideSummary();
 }
 
 function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentName = '') {
@@ -13367,6 +13693,57 @@ function clearImp(){['imp-dt','imp-mot','imp-ass','imp-kms','imp-kmc','imp-hs','
 // ════════════════════════════════════════════════
 // NEW SERVICE MODAL
 // ════════════════════════════════════════════════
+function updateNewSvcGuideSummary(){
+  const el = document.getElementById('ns-guide-summary');
+  if (!el) return;
+  const dt = document.getElementById('ns-dt')?.value || 'Sem data';
+  const hr = document.getElementById('ns-hr')?.value || 'Sem horário';
+  const cliente = document.getElementById('ns-cl')?.value.trim() || 'Cliente não informado';
+  const endereco = document.getElementById('ns-end')?.value.trim() || 'Endereço não informado';
+  const selectedClientId = String(
+    document.getElementById('ns-client-select')?.value ||
+    document.getElementById('ns-cl')?.dataset.clientId ||
+    ''
+  ).trim();
+  const tiposSel = Array.from(document.querySelectorAll('#ns-tipos-container input:checked')).map(input => input.value);
+  const tecnicosIds = Array.from(document.querySelectorAll('#ns-tecnicos-container input:checked')).map(input => input.value);
+  const equipe = nomesTecnicos(tecnicosIds) || (tecnicosIds.length ? `${tecnicosIds.length} técnico(s)` : 'Sem técnico definido');
+  const veiculo = document.getElementById('ns-vei')?.value || 'Sem veículo';
+  const os = document.getElementById('ns-os')?.value.trim() || 'Sem OS';
+  const obs = document.getElementById('ns-obs')?.value.trim();
+  const clienteStatus = selectedClientId
+    ? `Cliente vinculado #${selectedClientId}`
+    : (cliente && cliente !== 'Cliente não informado' ? 'Cliente novo ou não selecionado' : 'Aguardando cliente');
+  const items = [
+    ['Cliente', cliente],
+    ['Vínculo', clienteStatus],
+    ['Data e horário', `${dt}${hr !== 'Sem horário' ? ` às ${hr}` : ''}`],
+    ['Endereço', endereco],
+    ['Serviço', tiposSel.length ? tiposSel.join(' + ') : 'Nenhum tipo selecionado'],
+    ['Equipe', equipe],
+    ['Veículo', veiculo],
+    ['OS', os]
+  ];
+  el.innerHTML = `<div class="svc-confirm-grid">${items.map(([k,v]) => `
+    <div class="svc-confirm-item">
+      <div class="svc-confirm-k">${sanitize(k)}</div>
+      <div class="svc-confirm-v" title="${escapeHtmlAttr(v)}">${sanitize(v)}</div>
+    </div>
+  `).join('')}</div>${obs ? `<div class="svc-confirm-note"><strong>Observações:</strong> ${sanitize(obs)}</div>` : ''}`;
+}
+
+function bindNewSvcGuideSummary(){
+  ['ns-dt','ns-hr','ns-client-search','ns-cl','ns-end','ns-vei','ns-os','ns-obs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', updateNewSvcGuideSummary);
+    el.addEventListener('change', updateNewSvcGuideSummary);
+  });
+  document.getElementById('ns-tipos-container')?.addEventListener('change', updateNewSvcGuideSummary);
+  document.getElementById('ns-tecnicos-container')?.addEventListener('change', updateNewSvcGuideSummary);
+  updateNewSvcGuideSummary();
+}
+
 function openNewSvc(initialData = {}){
   carregarCatalogosServico();
   const defaults = {
@@ -13395,6 +13772,13 @@ function openNewSvc(initialData = {}){
         </div>
       </div>
 
+      <div class="svc-guide-steps" aria-label="Fluxo guiado do serviço">
+        <div class="svc-guide-step"><span class="svc-guide-num">1</span><div><div class="svc-guide-label">Cliente</div><div class="svc-guide-help">Busque para vincular ou digite novo.</div></div></div>
+        <div class="svc-guide-step"><span class="svc-guide-num">2</span><div><div class="svc-guide-label">Serviço</div><div class="svc-guide-help">Informe data, horário e tipo.</div></div></div>
+        <div class="svc-guide-step"><span class="svc-guide-num">3</span><div><div class="svc-guide-label">Técnico</div><div class="svc-guide-help">Defina equipe e veículo se possível.</div></div></div>
+        <div class="svc-guide-step"><span class="svc-guide-num">4</span><div><div class="svc-guide-label">Confirmar</div><div class="svc-guide-help">Revise o resumo antes de salvar.</div></div></div>
+      </div>
+
       <div class="svc-edit-body">
         <div class="svc-edit-summary">
           <div>
@@ -13408,8 +13792,8 @@ function openNewSvc(initialData = {}){
         <div class="svc-edit-content">
           <section class="svc-edit-section">
             <div class="svc-edit-section-head">
-              <div class="svc-edit-section-title">Dados essenciais</div>
-              <div class="svc-edit-section-desc">Preencha primeiro data, cliente e endereço para evitar serviço solto.</div>
+              <div class="svc-edit-section-title">1. Cliente e data</div>
+              <div class="svc-edit-section-desc">Selecione um cliente cadastrado ou digite um novo para o sistema criar junto com o serviço.</div>
             </div>
             <div class="svc-edit-grid">
               <div class="svc-edit-field">
@@ -13422,10 +13806,10 @@ function openNewSvc(initialData = {}){
               </div>
               <div class="svc-edit-field full">
                 <label class="svc-edit-label">Buscar cliente cadastrado</label>
-                <input type="search" id="ns-client-search" class="finput" placeholder="Digite 3 letras para buscar e vincular..." oninput="buscarClienteServicoAutocomplete('ns')" autocomplete="off">
+                <input type="search" id="ns-client-search" class="finput" placeholder="Digite 3 letras para buscar e vincular..." oninput="buscarClienteServicoAutocomplete('ns');updateNewSvcGuideSummary()" autocomplete="off">
                 <input type="hidden" id="ns-client-select" value="${escapeHtmlAttr(defaults.clientId)}">
                 <div id="ns-client-suggestions" style="margin-top:6px;display:none"></div>
-                <div id="ns-client-hint" class="svc-edit-help">Selecione o cliente no autocomplete quando ele já existir. Se não existir, o sistema cria o cadastro junto com o serviço.</div>
+                <div id="ns-client-hint" class="svc-edit-help">Se o cliente já existir, selecione na lista. Se não existir, ele será criado automaticamente ao salvar.</div>
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Cliente / Condomínio</label>
@@ -13440,8 +13824,8 @@ function openNewSvc(initialData = {}){
 
           <section class="svc-edit-section">
             <div class="svc-edit-section-head">
-              <div class="svc-edit-section-title">Execução</div>
-              <div class="svc-edit-section-desc">Defina tipo de serviço, técnicos e veículo da operação.</div>
+              <div class="svc-edit-section-title">2. Serviço, técnico e veículo</div>
+              <div class="svc-edit-section-desc">Marque o tipo de serviço e, quando possível, já defina quem executa.</div>
             </div>
             <div class="svc-edit-grid">
               <div class="svc-edit-field">
@@ -13467,6 +13851,12 @@ function openNewSvc(initialData = {}){
               </div>
             </div>
           </section>
+
+          <section class="svc-confirm-panel">
+            <div class="svc-confirm-title">4. Conferir antes de salvar</div>
+            <div id="ns-guide-summary"></div>
+            <div class="svc-confirm-note">Ao salvar, o sistema valida a logística e tenta vincular o cliente automaticamente. Se houver mais de um cliente parecido, você será orientado a selecionar o cadastro correto.</div>
+          </section>
         </div>
       </div>
 
@@ -13481,11 +13871,12 @@ function openNewSvc(initialData = {}){
   currentDelId=null;
   modal.classList.add('open');
   renderTecnicos([], 'ns-tecnicos-container');
-  carregarTecnicos().then(() => renderTecnicos([], 'ns-tecnicos-container'));
-  carregarVeiculos().then(() => renderVeiculosSelect('ns-vei'));
+  carregarTecnicos().then(() => { renderTecnicos([], 'ns-tecnicos-container'); updateNewSvcGuideSummary(); });
+  carregarVeiculos().then(() => { renderVeiculosSelect('ns-vei'); updateNewSvcGuideSummary(); });
   renderTiposCheckbox([], 'ns-tipos-container');
   bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
   initServicoClienteSelect('ns', defaults.clientId, defaults.cliente);
+  bindNewSvcGuideSummary();
   if (defaults.focarData) {
     document.getElementById('ns-dt')?.focus();
   }
@@ -14898,7 +15289,7 @@ async function renderComunicacaoLogistica(force = false) {
         <div class="card"><div class="card-label">Erros</div><div class="card-value" style="color:var(--red)">${erros}</div><div class="card-trend">requerem ação</div></div>`;
     }
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="ui-empty-state"><div class="ui-empty-title">Nenhuma mensagem encontrada</div><div>Ajuste os filtros ou envie uma nova comunicação logística.</div></div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6"><div class="ui-empty-state"><div class="ui-empty-title">Nenhuma mensagem encontrada</div><div>Ajuste os filtros ou envie agenda aos técnicos/lembretes para clientes.</div></div></td></tr>';
       return;
     }
     tbody.innerHTML = items.map(msg => {
