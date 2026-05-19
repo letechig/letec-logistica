@@ -439,6 +439,52 @@ async function runServiceWriteWithSchemaFallback(buildQuery, payload, context) {
   return buildQuery(workingPayload);
 }
 
+const CUSTOMER_ADDRESS_OPTIONAL_WRITE_COLUMNS = new Set([
+  'label',
+  'endereco',
+  'endereco_completo',
+  'cep',
+  'rua',
+  'numero',
+  'bairro',
+  'cidade',
+  'uf',
+  'complemento',
+  'referencia',
+  'latitude',
+  'longitude',
+  'is_primary',
+  'ativo',
+  'origem',
+  'created_at',
+  'updated_at'
+]);
+
+async function runCustomerAddressWriteWithSchemaFallback(buildQuery, payload, context) {
+  const workingPayload = { ...payload };
+  const removedColumns = [];
+
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const result = await buildQuery(workingPayload);
+    if (!result.error) {
+      if (removedColumns.length) {
+        console.warn(`[${context}] Ignored customer address column(s) missing from PostgREST schema cache: ${removedColumns.join(', ')}`);
+      }
+      return result;
+    }
+
+    const missingColumn = getMissingSchemaColumn(result.error);
+    if (!missingColumn || !CUSTOMER_ADDRESS_OPTIONAL_WRITE_COLUMNS.has(missingColumn) || !(missingColumn in workingPayload)) {
+      return result;
+    }
+
+    removedColumns.push(missingColumn);
+    delete workingPayload[missingColumn];
+  }
+
+  return buildQuery(workingPayload);
+}
+
 function isMissingRelationError(error) {
   if (!error) return false;
   const text = `${error.code || ''} ${error.message || ''} ${error.details || ''}`.toLowerCase();
@@ -1596,7 +1642,11 @@ async function ensureCustomerAddress(db, customerId, input = {}, options = {}) {
       is_primary: payload.is_primary || existing.length === 0
     };
     delete insertPayload.id;
-    const { data, error } = await db.from('customer_addresses').insert([insertPayload]).select();
+    const { data, error } = await runCustomerAddressWriteWithSchemaFallback(
+      workingPayload => db.from('customer_addresses').insert([workingPayload]).select(),
+      insertPayload,
+      'ensureCustomerAddress'
+    );
     if (error) throw error;
     return compactCustomerAddress(data?.[0] || insertPayload);
   } catch (error) {
@@ -4363,10 +4413,14 @@ app.put('/api/customers/:id/addresses', strictLimiter, async (req, res) => {
     if (!customerId) return res.status(400).json({ error: 'Cliente invalido' });
     const addresses = Array.isArray(req.body?.addresses) ? req.body.addresses : [];
 
-    const deactivated = await db
-      .from('customer_addresses')
-      .update({ ativo: false, updated_at: new Date().toISOString() })
-      .eq('customer_id', customerId);
+    const deactivated = await runCustomerAddressWriteWithSchemaFallback(
+      workingPayload => db
+        .from('customer_addresses')
+        .update(workingPayload)
+        .eq('customer_id', customerId),
+      { ativo: false, updated_at: new Date().toISOString() },
+      'PUT /api/customers/:id/addresses deactivate'
+    );
     if (deactivated.error) {
       if (isMissingRelationError(deactivated.error)) {
         return res.status(503).json({
@@ -4391,7 +4445,11 @@ app.put('/api/customers/:id/addresses', strictLimiter, async (req, res) => {
     res.json(updated);
   } catch (error) {
     console.error('[PUT /api/customers/:id/addresses] Error:', error.message);
-    res.status(500).json({ error: 'Falha ao salvar unidades do cliente' });
+    res.status(500).json({
+      code: 'customer_addresses_save_failed',
+      error: 'Falha ao salvar unidades do cliente',
+      details: publicDbErrorDetails(error)
+    });
   }
 });
 

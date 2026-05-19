@@ -12755,7 +12755,7 @@ async function loadClientAddresses(customerId) {
 }
 
 async function saveClientAddresses(customerId) {
-  if (!customerId) return;
+  if (!customerId) return false;
   const current = clientAddressDraftFromForm();
   const currentKey = normalizeAddressText(current.endereco_completo || current.endereco || buildClientAddress(current));
   if (currentKey && !clienteEnderecosDraft.some(address => normalizeAddressText(address.endereco_completo || address.endereco || buildClientAddress(address)) === currentKey)) {
@@ -12771,10 +12771,13 @@ async function saveClientAddresses(customerId) {
     const payload = await response.json().catch(() => ({}));
     if (payload.migration_required) {
       toast('Cliente salvo. Para salvar unidades, rode migration-clientes-unidades.sql no Supabase.', 'warn');
-      return;
+      return false;
     }
-    throw new Error(payload.error || `Erro ${response.status}`);
+    console.warn('Falha ao salvar unidades do cliente:', payload);
+    toast(`Cliente salvo, mas as unidades não foram atualizadas: ${payload.error || `Erro ${response.status}`}`, 'warn');
+    return false;
   }
+  return true;
 }
 
 function openClientModal(clientId = null) {

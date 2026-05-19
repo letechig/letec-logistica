@@ -308,6 +308,38 @@ test('PUT /api/services/:id retorna service_not_found quando agenda nao existe n
   });
 });
 
+test('PUT /api/customers/:id/addresses ignora colunas opcionais ausentes em schema legado', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.__missingColumns = {
+      customer_addresses: new Set(['updated_at', 'endereco_completo', 'cep', 'rua', 'numero'])
+    };
+
+    const response = await fetch(`${baseUrl}/api/customers/1/addresses`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        addresses: [{
+          label: 'Principal',
+          endereco: 'Rua Legado, 10',
+          endereco_completo: 'Rua Legado, 10',
+          cep: '01001000',
+          rua: 'Rua Legado',
+          numero: '10',
+          is_primary: true
+        }]
+      })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.length, 1);
+    assert.equal(payload[0].customer_id, 1);
+    assert.equal(payload[0].endereco, 'Rua Legado, 10');
+    assert.equal(payload[0].endereco_completo, 'Rua Legado, 10');
+    assert.equal(payload[0].cep, null);
+  });
+});
+
 test('PUT /api/services/:id ignora colunas opcionais ausentes em schema legado', async () => {
   await withServer(async (baseUrl, state) => {
     state.__missingColumns = {
