@@ -7492,6 +7492,12 @@ function dedupeServicesById(list) {
   return outRev.reverse();
 }
 
+function isPendingLocalService(service) {
+  if (!service) return false;
+  if (service._syncStatus === 'pending_create') return true;
+  return offlineQueue.some(item => item?.op === 'insert' && item.service && sameId(item.service.id, service.id));
+}
+
 function syncMesSelects() {
   const info = getAnoInfo();
   const gm = document.getElementById('global-mes');
@@ -8511,8 +8517,9 @@ async function getServices(){
       const remoteIds  = new Set(remoto.map(s => normId(s.id)).filter(Boolean));
       const localSource = hasSupabaseReadyCache() ? services : persistedServices;
       const localExtras = localSource.filter(s => {
-        if (!s || s.id === undefined || s.id === null) return true;
-        return !remoteIds.has(normId(s.id));
+        if (!s) return false;
+        if (s.id === undefined || s.id === null) return isPendingLocalService(s);
+        return !remoteIds.has(normId(s.id)) && isPendingLocalService(s);
       });
       services = dedupeServicesById(localExtras.concat(remoto));
       markSupabaseReadyCache();
