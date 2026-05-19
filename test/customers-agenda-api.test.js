@@ -50,15 +50,29 @@ function makeBuilder(state, table) {
     insert(payload) {
       builder._op = 'insert';
       const rows = Array.isArray(payload) ? payload : [payload];
-      builder._inserted = rows.map((row, index) => ({ id: row.id || state[table].length + index + 1, ...row }));
-      state[table].push(...builder._inserted);
+      builder._pendingInsert = rows;
       return builder;
     },
     update(payload) { builder._op = 'update'; builder._payload = payload; return builder; },
     delete() { builder._op = 'delete'; return builder; },
     then(resolve) { return builder._execute().then(resolve); },
     async _execute() {
-      if (builder._op === 'insert') return { data: builder._inserted, error: null };
+      if (builder._op === 'insert') {
+        const missingColumns = state.__missingColumns?.[table] || new Set();
+        const missingColumn = Object.keys(builder._pendingInsert?.[0] || {}).find(key => missingColumns.has(key));
+        if (missingColumn) {
+          return {
+            data: null,
+            error: {
+              code: 'PGRST204',
+              message: `Could not find the '${missingColumn}' column of '${table}' in the schema cache`
+            }
+          };
+        }
+        builder._inserted = (builder._pendingInsert || []).map((row, index) => ({ id: row.id || state[table].length + index + 1, ...row }));
+        state[table].push(...builder._inserted);
+        return { data: builder._inserted, error: null };
+      }
       let rows = builder._rows();
       if (builder._op === 'update') {
         const missingColumns = state.__missingColumns?.[table] || new Set();
@@ -224,6 +238,32 @@ test('DELETE /api/customers/:id inativa cliente sem apagar histórico', async ()
   });
 });
 
+test('POST /api/customers cria cliente basico mesmo sem colunas opcionais legadas', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.__missingColumns = {
+      customers: new Set(['cep', 'endereco_completo', 'rua', 'numero', 'bairro', 'cidade', 'uf', 'origem', 'observacoes'])
+    };
+
+    const response = await fetch(`${baseUrl}/api/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Cliente Schema Legado',
+        endereco: 'Rua Schema, 10',
+        cep: '01001000',
+        origem: 'teste'
+      })
+    });
+
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.nome, 'Cliente Schema Legado');
+    assert.equal(payload.cep, undefined);
+    assert.equal(payload.origem, undefined);
+    assert.ok(state.customers.some(customer => customer.nome === 'Cliente Schema Legado'));
+  });
+});
+
 test('PUT /api/services/:id atualiza agenda preservando campos operacionais', async () => {
   await withServer(async (baseUrl, state) => {
     state.services[0].tipos = ['DS'];
@@ -251,6 +291,20 @@ test('PUT /api/services/:id atualiza agenda preservando campos operacionais', as
     assert.deepEqual(payload.tecnicos_ids, ['tec-2']);
     assert.equal(payload.status, 'executado');
     assert.equal(payload.exec_status, 'finalizado');
+  });
+});
+
+test('PUT /api/services/:id retorna service_not_found quando agenda nao existe no banco', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/services/999999`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cliente: 'Servico Inexistente' })
+    });
+
+    assert.equal(response.status, 404);
+    const payload = await response.json();
+    assert.equal(payload.code, 'service_not_found');
   });
 });
 

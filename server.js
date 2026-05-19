@@ -338,7 +338,9 @@ const CUSTOMER_OPTIONAL_WRITE_COLUMNS = new Set([
   'tipo_cliente',
   'status_operacional',
   'prioridade',
-  'origem'
+  'origem',
+  'observacoes',
+  'ativo'
 ]);
 
 function getMissingSchemaColumn(error) {
@@ -348,11 +350,20 @@ function getMissingSchemaColumn(error) {
   return match ? match[1] : null;
 }
 
+function publicDbErrorDetails(error) {
+  if (!error) return null;
+  const missingColumn = getMissingSchemaColumn(error);
+  if (missingColumn) return `Coluna ausente no schema: ${missingColumn}`;
+  if (isMissingRelationError(error)) return 'Tabela ou relacao opcional ausente no schema';
+  if (error.code === '23505') return 'Registro duplicado por restricao unica';
+  return error.code ? `Erro do banco: ${error.code}` : null;
+}
+
 async function runCustomerWriteWithSchemaFallback(buildQuery, payload, context) {
   const workingPayload = { ...payload };
   const removedColumns = [];
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
     const result = await buildQuery(workingPayload);
     if (!result.error) {
       if (removedColumns.length) {
@@ -1654,7 +1665,14 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
   const shouldSaveAddress = options.saveAddress !== false;
   if (servicePayload.cliente_id) {
     const customer = await maybeSingle(db.from('customers').select('*').eq('id', servicePayload.cliente_id)).catch(() => null);
-    const address = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, customer, 'agenda') : null;
+    let address = null;
+    if (shouldSaveAddress) {
+      try {
+        address = await ensureServiceCustomerAddress(db, servicePayload, customer, 'agenda');
+      } catch (addressError) {
+        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
+      }
+    }
     return { payload: servicePayload, customer, address, created: false };
   }
 
@@ -1678,7 +1696,14 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
 
   if (exactMatches.length === 1) {
     servicePayload.cliente_id = Number(exactMatches[0].id);
-    const addressRecord = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, exactMatches[0], 'agenda') : null;
+    let addressRecord = null;
+    if (shouldSaveAddress) {
+      try {
+        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, exactMatches[0], 'agenda');
+      } catch (addressError) {
+        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
+      }
+    }
     return { payload: servicePayload, customer: exactMatches[0], address: addressRecord, created: false };
   }
 
@@ -1690,7 +1715,14 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
 
   if (addressMatches.length === 1) {
     servicePayload.cliente_id = Number(addressMatches[0].id);
-    const addressRecord = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, addressMatches[0], 'agenda') : null;
+    let addressRecord = null;
+    if (shouldSaveAddress) {
+      try {
+        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, addressMatches[0], 'agenda');
+      } catch (addressError) {
+        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
+      }
+    }
     return { payload: servicePayload, customer: addressMatches[0], address: addressRecord, created: false };
   }
 
@@ -1707,7 +1739,14 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
   });
   if (duplicate?.id) {
     servicePayload.cliente_id = Number(duplicate.id);
-    const addressRecord = shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, duplicate, 'agenda') : null;
+    let addressRecord = null;
+    if (shouldSaveAddress) {
+      try {
+        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, duplicate, 'agenda');
+      } catch (addressError) {
+        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
+      }
+    }
     return { payload: servicePayload, customer: duplicate, address: addressRecord, created: false };
   }
 
@@ -1732,9 +1771,20 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
   const created = data?.[0] || null;
   if (created?.id) servicePayload.cliente_id = Number(created.id);
   if (created?.id) {
-    await ensureCustomerAlias(db, created.id, name, 'agenda');
+    try {
+      await ensureCustomerAlias(db, created.id, name, 'agenda');
+    } catch (aliasError) {
+      console.warn('[POST /api/services ensure customer] Complemento de alias ignorado:', aliasError.message);
+    }
   }
-  const addressRecord = created?.id && shouldSaveAddress ? await ensureServiceCustomerAddress(db, servicePayload, created, 'agenda') : null;
+  let addressRecord = null;
+  if (created?.id && shouldSaveAddress) {
+    try {
+      addressRecord = await ensureServiceCustomerAddress(db, servicePayload, created, 'agenda');
+    } catch (addressError) {
+      console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
+    }
+  }
   return { payload: servicePayload, customer: created, address: addressRecord, created: true };
 }
 
@@ -2498,7 +2548,8 @@ app.post('/api/services', async (req, res) => {
       }
       return res.status(500).json({
         error: 'Falha ao criar/vincular cliente do serviço',
-        code: 'customer_link_failed'
+        code: 'customer_link_failed',
+        details: publicDbErrorDetails(customerError)
       });
     }
     const { data, error } = await runServiceWriteWithSchemaFallback(
@@ -2525,7 +2576,11 @@ app.post('/api/services', async (req, res) => {
     } : null);
   } catch (error) {
     console.error('[POST /api/services] Error:', error.message);
-    res.status(500).json({ error: 'Falha ao criar serviço' });
+    res.status(500).json({
+      code: 'service_create_failed',
+      error: 'Falha ao criar serviço',
+      details: publicDbErrorDetails(error)
+    });
   }
 });
 
@@ -2548,11 +2603,20 @@ app.put('/api/services/:id', async (req, res) => {
 
     if (error) throw error;
     const updated = data?.[0] || null;
-    if (!updated) return res.status(404).json({ error: 'Serviço não encontrado' });
+    if (!updated) {
+      return res.status(404).json({
+        code: 'service_not_found',
+        error: 'Serviço não encontrado'
+      });
+    }
     res.json(updated);
   } catch (error) {
     console.error('[PUT /api/services/:id] Error:', error.message);
-    res.status(500).json({ error: 'Falha ao atualizar serviço' });
+    res.status(500).json({
+      code: 'service_update_failed',
+      error: 'Falha ao atualizar serviço',
+      details: publicDbErrorDetails(error)
+    });
   }
 });
 
@@ -3615,17 +3679,29 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     }
     const created = data?.[0] || null;
     if (created?.id) {
-      await ensureCustomerAlias(db, created.id, created.nome || nome, origem || 'cadastro');
-      await ensureCustomerAddress(db, created.id, {
-        ...insertPayload,
-        origem: origem || 'cadastro'
-      }, { origem: origem || 'cadastro', is_primary: true, label: 'Principal' });
+      try {
+        await ensureCustomerAlias(db, created.id, created.nome || nome, origem || 'cadastro');
+      } catch (aliasError) {
+        console.warn('[POST /api/customers] Complemento de alias ignorado:', aliasError.message);
+      }
+      try {
+        await ensureCustomerAddress(db, created.id, {
+          ...insertPayload,
+          origem: origem || 'cadastro'
+        }, { origem: origem || 'cadastro', is_primary: true, label: 'Principal' });
+      } catch (addressError) {
+        console.warn('[POST /api/customers] Complemento de endereco ignorado:', addressError.message);
+      }
     }
 
     res.status(201).json(created);
   } catch (error) {
     console.error('[POST /api/customers] Error:', error.message);
-    res.status(500).json({ error: 'Falha ao criar cliente' });
+    res.status(500).json({
+      code: 'customer_create_failed',
+      error: 'Falha ao criar cliente',
+      details: publicDbErrorDetails(error)
+    });
   }
 });
 

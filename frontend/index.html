@@ -3294,7 +3294,9 @@ async function carregarVeiculos(){
     if (!response.ok) {
       const friendlyMessage = payload?.code === 'customer_link_ambiguous'
         ? 'Cliente ambíguo na Agenda: selecione o cliente correto no autocomplete antes de salvar.'
-        : (payload?.error || `HTTP ${response.status}`);
+        : payload?.code === 'service_not_found'
+          ? 'Serviço não encontrado no servidor. Recarregue a Agenda ou sincronize pendências antes de editar novamente.'
+          : (payload?.error || `HTTP ${response.status}`);
       const error = new Error(friendlyMessage);
       error.status = response.status;
       error.payload = payload;
@@ -3305,8 +3307,13 @@ async function carregarVeiculos(){
 
   function mergeServiceFromBackend(record, fallbackService) {
     if (!record) return fallbackService || null;
+    const fallbackId = fallbackService?.id;
     const merged = migrarServicoSupabase({ ...(fallbackService || {}), ...record }, fallbackService || {});
-    const idx = services.findIndex(s => sameId(s.id, merged.id));
+    delete merged._syncStatus;
+    delete merged._syncError;
+    delete merged._queuedAt;
+    merged._syncedAt = new Date().toISOString();
+    const idx = services.findIndex(s => sameId(s.id, merged.id) || (fallbackId !== undefined && sameId(s.id, fallbackId)));
     if (idx === -1) services.unshift(merged);
     else services[idx] = { ...services[idx], ...merged };
     if (typeof dedupeServicesById === 'function') {
@@ -3409,6 +3416,8 @@ async function carregarVeiculos(){
 
   // ── Salvar novo serviço no Supabase ───────────────────────────
   window.salvarServicoSupabase = async function(servico) {
+    servico._syncStatus = servico._syncStatus || 'pending_create';
+    servico._queuedAt = servico._queuedAt || new Date().toISOString();
     const queuedService = cloneServiceState(servico);
     const result = await safeSupabaseAction(
       async () => {
@@ -3418,7 +3427,7 @@ async function carregarVeiculos(){
       },
       { op: 'insert', service: queuedService },
       () => rollbackInsertedService(queuedService?.id),
-      { rollbackOnOffline: false, rollbackOnFailure: false, rollbackOnValidationFailure: true, queueOnFailure: true }
+      { rollbackOnOffline: false, rollbackOnFailure: false, rollbackOnValidationFailure: false, queueOnFailure: true }
     );
     return result;
   };
@@ -3427,9 +3436,26 @@ async function carregarVeiculos(){
   window.atualizarServicoSupabase = async function(servico, previousService) {
     const queuedService = cloneServiceState(servico);
     const rollbackSnapshot = cloneServiceState(previousService);
+    if (queuedService?._syncStatus === 'pending_create' || findQueuedInsertForService(queuedService)) {
+      queuedService._syncStatus = 'pending_create';
+      if (mergeServiceIntoQueuedInsert(queuedService)) {
+        if (navigator.onLine) processOfflineQueue();
+        return true;
+      }
+      return await salvarServicoSupabase(queuedService);
+    }
     return await safeSupabaseAction(
       async () => {
-        const saved = await updateServiceViaBackend(queuedService);
+        let saved;
+        try {
+          saved = await updateServiceViaBackend(queuedService);
+        } catch (error) {
+          if (error?.payload?.code === 'service_not_found' && queuedService?._syncStatus === 'pending_create') {
+            saved = await createServiceViaBackend(queuedService);
+          } else {
+            throw error;
+          }
+        }
         mergeServiceFromBackend(saved, queuedService);
         return saved;
       },
@@ -14144,18 +14170,7 @@ async function confirmNewSvc(){
   const enderecoEl  = document.getElementById('ns-end');
   const endereco    = enderecoEl?.value.trim()||'';
   const horario     = document.getElementById('ns-hr')?.value||'';
-  let cliente_id = '';
-  try {
-    cliente_id = await garantirClienteDoServico('ns');
-  } catch(e) {
-    console.warn('Não foi possível cadastrar/vincular cliente antes do serviço:', e);
-    if (String(e?.message || e).toLowerCase().includes('ambíguo') || String(e?.message || e).toLowerCase().includes('ambiguo')) {
-      toast('Cliente ambíguo: selecione o cliente correto no autocomplete antes de salvar.', 'err');
-      return;
-    }
-    toast('Cliente não vinculado agora; o serviço será salvo mesmo assim.', 'warn');
-    cliente_id = '';
-  }
+  const cliente_id = document.getElementById('ns-client-select')?.value || clienteInput?.dataset.clientId || enderecoEl?.dataset.clientId || '';
   const customer_address_id = document.getElementById('ns-address-select')?.value || '';
 
   // Gerar ID único (timestamp numérico compatível com BIGINT PK do Supabase)
@@ -14170,7 +14185,9 @@ async function confirmNewSvc(){
     tecnicos_ids, equipe, veiculo, os, observacoes,
     pre_agendamento: tecnicos_ids.length === 0,
     status: 'agendado',
-    cl, hr: horario, sc: tipoFirst, eq: '', st: 'agendado', obs: observacoes
+    cl, hr: horario, sc: tipoFirst, eq: '', st: 'agendado', obs: observacoes,
+    _syncStatus: 'pending_create',
+    _queuedAt: new Date().toISOString()
   };
 
   const avaliacao = await validarLogisticaServico(newS);
@@ -16822,6 +16839,59 @@ function enqueueOffline(item) {
   toast('⏳ Aguardando conexão...', 'warn');
 }
 
+function findQueuedInsertForService(service) {
+  if (!service) return null;
+  return offlineQueue.find(item => item?.op === 'insert' && item.service && sameId(item.service.id, service.id)) || null;
+}
+
+function mergeServiceIntoQueuedInsert(service) {
+  const queued = findQueuedInsertForService(service);
+  if (!queued) return false;
+  queued.service = {
+    ...(queued.service || {}),
+    ...cloneServiceState(service),
+    _syncStatus: 'pending_create',
+    _queuedAt: queued.service?._queuedAt || queued.queuedAt || new Date().toISOString()
+  };
+  queued.attempts = 0;
+  queued.blocked = false;
+  delete queued.lastError;
+  delete queued.failedAt;
+  saveOfflineQueue();
+  return true;
+}
+
+function compactOfflineQueue() {
+  const compacted = [];
+  for (const item of offlineQueue || []) {
+    if (!item) continue;
+    const serviceId = item.service?.id ?? item.id;
+    const pendingInsert = compacted.find(existing => existing?.op === 'insert' && existing.service && sameId(existing.service.id, serviceId));
+    if (item.op === 'update' && pendingInsert) {
+      pendingInsert.service = {
+        ...(pendingInsert.service || {}),
+        ...(item.service || {}),
+        _syncStatus: 'pending_create'
+      };
+      pendingInsert.blocked = false;
+      delete pendingInsert.lastError;
+      delete pendingInsert.failedAt;
+      continue;
+    }
+    if (item.op === 'delete' && pendingInsert) {
+      const index = compacted.indexOf(pendingInsert);
+      if (index >= 0) compacted.splice(index, 1);
+      continue;
+    }
+    compacted.push(item);
+  }
+  offlineQueue = [
+    ...compacted.filter(item => item?.op === 'insert'),
+    ...compacted.filter(item => item?.op !== 'insert')
+  ];
+  saveOfflineQueue();
+}
+
 function isNetworkError(error) {
   // Detecta erros de rede/transporte vs erros de aplicação
   if (!error) return false;
@@ -16888,6 +16958,10 @@ async function safeSupabaseAction(actionFn, queueItem, rollbackFn, options) {
             queueItem.lastError = e.message || 'Erro de validação no servidor';
             queueItem.failedAt = new Date().toISOString();
             if (alreadyQueued) saveOfflineQueue();
+            else if (queueOnFailure) {
+              offlineQueue.push(queueItem);
+              saveOfflineQueue();
+            }
           }
           if (rollbackFn && rollbackOnValidationFailure) rollbackFn();
           toast(
@@ -16911,6 +16985,10 @@ async function safeSupabaseAction(actionFn, queueItem, rollbackFn, options) {
           queueItem.lastError = e.message || 'Erro de validação no servidor';
           queueItem.failedAt = new Date().toISOString();
           if (alreadyQueued) saveOfflineQueue();
+          else if (queueOnFailure) {
+            offlineQueue.push(queueItem);
+            saveOfflineQueue();
+          }
         }
         if (rollbackFn && rollbackOnValidationFailure) rollbackFn();
         toast(
@@ -16930,6 +17008,7 @@ async function processOfflineQueue() {
   if (!USAR_SUPABASE || isProcessingQueue || offlineQueue.length === 0) return;
   isProcessingQueue = true;
   setConnectionState('syncing');
+  compactOfflineQueue();
   let syncedCount = 0;
   let inspectedCount = 0;
   const maxInspect = offlineQueue.length;
