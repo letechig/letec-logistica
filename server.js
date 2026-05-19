@@ -3961,21 +3961,23 @@ async function mergeCustomersCanonical(db, primaryId, duplicateIds = [], options
   }
 
   const duplicateNote = `\n[Duplicatas mescladas nesta ficha: ${duplicateIds.join(', ')}]`;
-  const { error: updateError } = await db
-    .from('customers')
-    .update({
-      endereco: merged.endereco,
-      endereco_completo: merged.endereco_completo,
-      latitude: merged.latitude,
-      longitude: merged.longitude,
-      cpf_cnpj: merged.cpf_cnpj,
-      whatsapp: merged.whatsapp,
-      email: merged.email,
-      uf: merged.uf,
-      observacoes: `${merged.observacoes || ''}${duplicateNote}`,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', primaryId);
+  const primaryUpdatePayload = {
+    endereco: merged.endereco,
+    endereco_completo: merged.endereco_completo,
+    latitude: merged.latitude,
+    longitude: merged.longitude,
+    cpf_cnpj: merged.cpf_cnpj,
+    whatsapp: merged.whatsapp,
+    email: merged.email,
+    uf: merged.uf,
+    observacoes: `${merged.observacoes || ''}${duplicateNote}`,
+    updated_at: new Date().toISOString()
+  };
+  const { error: updateError } = await runCustomerWriteWithSchemaFallback(
+    workingPayload => db.from('customers').update(workingPayload).eq('id', primaryId),
+    primaryUpdatePayload,
+    'canonical merge primary customer'
+  );
 
   if (updateError) throw updateError;
 
@@ -4001,15 +4003,17 @@ async function mergeCustomersCanonical(db, primaryId, duplicateIds = [], options
     }
   }
 
-  const { error: deleteError } = await db
-    .from('customers')
-    .update({
-      ativo: false,
-      status_operacional: 'Inativo',
-      observacoes: (merged.observacoes || '') + '\n[Merged into customer ID: ' + primaryId + ']',
-      updated_at: new Date().toISOString()
-    })
-    .in('id', duplicateIds);
+  const duplicateUpdatePayload = {
+    ativo: false,
+    status_operacional: 'Inativo',
+    observacoes: (merged.observacoes || '') + '\n[Merged into customer ID: ' + primaryId + ']',
+    updated_at: new Date().toISOString()
+  };
+  const { error: deleteError } = await runCustomerWriteWithSchemaFallback(
+    workingPayload => db.from('customers').update(workingPayload).in('id', duplicateIds),
+    duplicateUpdatePayload,
+    'canonical merge duplicate customers'
+  );
 
   if (deleteError) throw deleteError;
 
