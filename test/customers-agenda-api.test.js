@@ -61,6 +61,17 @@ function makeBuilder(state, table) {
       if (builder._op === 'insert') return { data: builder._inserted, error: null };
       let rows = builder._rows();
       if (builder._op === 'update') {
+        const missingColumns = state.__missingColumns?.[table] || new Set();
+        const missingColumn = Object.keys(builder._payload || {}).find(key => missingColumns.has(key));
+        if (missingColumn) {
+          return {
+            data: null,
+            error: {
+              code: 'PGRST204',
+              message: `Could not find the '${missingColumn}' column of '${table}' in the schema cache`
+            }
+          };
+        }
         rows.forEach(row => Object.assign(row, builder._payload));
         return { data: rows, error: null };
       }
@@ -240,6 +251,40 @@ test('PUT /api/services/:id atualiza agenda preservando campos operacionais', as
     assert.deepEqual(payload.tecnicos_ids, ['tec-2']);
     assert.equal(payload.status, 'executado');
     assert.equal(payload.exec_status, 'finalizado');
+  });
+});
+
+test('PUT /api/services/:id ignora colunas opcionais ausentes em schema legado', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.__missingColumns = {
+      services: new Set(['date', 'data', 'exec_status', 'customer_address_id', 'tecnicos_ids'])
+    };
+
+    const response = await fetch(`${baseUrl}/api/services/10`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: '2026-05-20',
+        data: '2026-05-20',
+        cliente: 'Cliente Editado',
+        endereco: 'Rua Editada',
+        status: 'executado',
+        exec_status: 'finalizado',
+        customer_address_id: 'addr-1',
+        tecnicos_ids: ['tec-2']
+      })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.cliente, 'Cliente Editado');
+    assert.equal(payload.endereco, 'Rua Editada');
+    assert.equal(payload.status, 'executado');
+    assert.equal(payload.date, undefined);
+    assert.equal(payload.exec_status, undefined);
+    assert.equal(payload.customer_address_id, undefined);
+    assert.equal(payload.tecnicos_ids, undefined);
+    assert.equal(payload.data, undefined);
   });
 });
 

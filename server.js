@@ -374,14 +374,40 @@ async function runCustomerWriteWithSchemaFallback(buildQuery, payload, context) 
 }
 
 const SERVICE_OPTIONAL_WRITE_COLUMNS = new Set([
-  'customer_address_id'
+  'date',
+  'data',
+  'cliente_id',
+  'customer_address_id',
+  'horario',
+  'tiposervico',
+  'tipos',
+  'equipe',
+  'veiculo',
+  'os',
+  'observacoes',
+  'status',
+  'tecnicos_ids',
+  'exec_status',
+  'chegada_hora',
+  'chegada_lat',
+  'chegada_lng',
+  'inicio_hora',
+  'fim_hora',
+  'tempo_espera',
+  'tempo_execucao',
+  'checklist_servico',
+  'problema_descricao',
+  'confirmado_cliente',
+  'confirmado_cliente_em',
+  'agenda_confirmada_tecnico',
+  'agenda_confirmada_tecnico_em'
 ]);
 
 async function runServiceWriteWithSchemaFallback(buildQuery, payload, context) {
   const workingPayload = { ...payload };
   const removedColumns = [];
 
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
     const result = await buildQuery(workingPayload);
     if (!result.error) {
       if (removedColumns.length) {
