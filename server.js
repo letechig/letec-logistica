@@ -7,6 +7,8 @@ const readXlsxFile = require('read-excel-file/node');
 const { createClient } = require('@supabase/supabase-js');
 const { DistanceClient } = require('./src/logistics/distance');
 const { validateService, buildDayRoutes } = require('./src/logistics/engine');
+const { createClientService } = require('./src/services/clientService');
+const { createAppointmentService } = require('./src/services/appointmentService');
 require('dotenv').config();
 
 const app = express();
@@ -340,7 +342,8 @@ const CUSTOMER_OPTIONAL_WRITE_COLUMNS = new Set([
   'prioridade',
   'origem',
   'observacoes',
-  'ativo'
+  'ativo',
+  'is_incomplete'
 ]);
 
 function getMissingSchemaColumn(error) {
@@ -411,7 +414,10 @@ const SERVICE_OPTIONAL_WRITE_COLUMNS = new Set([
   'confirmado_cliente',
   'confirmado_cliente_em',
   'agenda_confirmada_tecnico',
-  'agenda_confirmada_tecnico_em'
+  'agenda_confirmada_tecnico_em',
+  'client_name_snapshot',
+  'address_snapshot',
+  'phone_snapshot'
 ]);
 
 async function runServiceWriteWithSchemaFallback(buildQuery, payload, context) {
@@ -1808,6 +1814,7 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
     tipo: 'PF',
     tipo_cliente: 'Eventual',
     origem: 'agenda',
+    is_incomplete: true,
     ativo: true
   };
 
@@ -1836,6 +1843,43 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
     }
   }
   return { payload: servicePayload, customer: created, address: addressRecord, created: true };
+}
+
+let clientServiceInstance = null;
+function getClientDomainService() {
+  if (!clientServiceInstance) {
+    clientServiceInstance = createClientService({
+      maybeSingle,
+      normalizePhone,
+      normalizeEmail,
+      normalizeUf,
+      normalizeCustomerName,
+      normalizeCustomerOperationalStatus,
+      normalizeCustomerPriority,
+      buildCustomerAddress,
+      findDuplicateCustomer,
+      runCustomerWriteWithSchemaFallback,
+      ensureCustomerAlias,
+      ensureCustomerAddress,
+      listCustomerAddresses,
+      runCustomerAddressWriteWithSchemaFallback,
+      isMissingRelationError,
+      publicDbErrorDetails
+    });
+  }
+  return clientServiceInstance;
+}
+
+let appointmentServiceInstance = null;
+function getAppointmentDomainService() {
+  if (!appointmentServiceInstance) {
+    appointmentServiceInstance = createAppointmentService({
+      normalizeServicePayload,
+      runServiceWriteWithSchemaFallback,
+      ensureCustomerForServicePayload
+    });
+  }
+  return appointmentServiceInstance;
 }
 
 function serviceCustomerId(service = {}) {
@@ -2583,47 +2627,28 @@ app.get('/api/services', async (req, res) => {
 app.post('/api/services', async (req, res) => {
   try {
     const db = getSupabaseClient();
-    const payload = normalizeServicePayload(req.body, { includeId: true });
-    let customerLink = null;
-    try {
-      const saveAddress = req.body?.salvar_unidade_cliente !== false && req.body?.save_customer_address !== false;
-      customerLink = await ensureCustomerForServicePayload(db, payload, { saveAddress });
-    } catch (customerError) {
-      console.warn('[POST /api/services] Falha ao criar/vincular cliente automaticamente:', customerError.message);
-      if (customerError instanceof CustomerLinkError) {
-        return res.status(customerError.statusCode || 409).json({
-          error: customerError.message,
+    const result = await getAppointmentDomainService().createAppointment(db, req.body || {});
+    if (result.error) {
+      if (result.customerLinkFailed && result.error instanceof CustomerLinkError) {
+        return res.status(result.status || 409).json({
+          error: result.error.message,
           code: 'customer_link_ambiguous'
         });
       }
-      return res.status(500).json({
-        error: 'Falha ao criar/vincular cliente do serviço',
-        code: 'customer_link_failed',
-        details: publicDbErrorDetails(customerError)
-      });
-    }
-    const { data, error } = await runServiceWriteWithSchemaFallback(
-      workingPayload => db.from('services').insert([workingPayload]).select(),
-      payload,
-      'POST /api/services'
-    );
-
-    if (error) {
-      if (error.code === '23505' && payload.id !== undefined && payload.id !== null) {
-        const existing = await maybeSingle(db.from('services').select('*').eq('id', payload.id));
+      if (result.error?.code === '23505' && result.payload?.id !== undefined && result.payload?.id !== null) {
+        const existing = await maybeSingle(db.from('services').select('*').eq('id', result.payload.id));
         if (existing) return res.status(200).json(existing);
       }
-      throw error;
+      if (result.customerLinkFailed) {
+        return res.status(result.status || 500).json({
+          error: 'Falha ao criar/vincular cliente do serviço',
+          code: 'customer_link_failed',
+          details: publicDbErrorDetails(result.error)
+        });
+      }
+      throw result.error;
     }
-    const saved = data?.[0] || null;
-    res.status(201).json(saved ? {
-      ...saved,
-      customer_auto_link: customerLink ? {
-        created: !!customerLink.created,
-        customer_id: payload.cliente_id || null,
-        customer_address_id: payload.customer_address_id || null
-      } : null
-    } : null);
+    res.status(result.status || 201).json(result.data || null);
   } catch (error) {
     console.error('[POST /api/services] Error:', error.message);
     res.status(500).json({
@@ -2638,28 +2663,11 @@ app.put('/api/services/:id', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const id = req.params.id;
-    const payload = normalizeServicePayload(req.body, { partial: true });
-    delete payload.id;
-
-    if (!Object.keys(payload).length) {
-      return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
+    const result = await getAppointmentDomainService().updateAppointment(db, id, req.body || {});
+    if (result.error) {
+      return res.status(result.status || 500).json(result.error);
     }
-
-    const { data, error } = await runServiceWriteWithSchemaFallback(
-      workingPayload => db.from('services').update(workingPayload).eq('id', id).select(),
-      payload,
-      'PUT /api/services/:id'
-    );
-
-    if (error) throw error;
-    const updated = data?.[0] || null;
-    if (!updated) {
-      return res.status(404).json({
-        code: 'service_not_found',
-        error: 'Serviço não encontrado'
-      });
-    }
-    res.json(updated);
+    res.json(result.data);
   } catch (error) {
     console.error('[PUT /api/services/:id] Error:', error.message);
     res.status(500).json({
@@ -3592,6 +3600,17 @@ app.get('/api/customers', async (req, res) => {
 app.post('/api/customers', strictLimiter, async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const result = await getClientDomainService().createClient(db, req.body || {});
+    if (result.error) {
+      if (result.error.code === 'possible_duplicate') return res.status(result.status || 409).json(result.error);
+      if (result.error.code === '23505') return res.status(409).json({ error: 'Telefone já cadastrado. Verifique se o cliente já existe.', code: 'customer_unique_violation' });
+      return res.status(result.status || 500).json({
+        code: result.error.code || 'customer_create_failed',
+        error: result.error.error || 'Falha ao criar cliente',
+        details: publicDbErrorDetails(result.error)
+      });
+    }
+    return res.status(result.status || 201).json(result.data);
     const {
       nome,
       telefone,
@@ -3759,6 +3778,16 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
     const db = getSupabaseClient();
     const { id } = req.params;
+    const result = await getClientDomainService().updateClient(db, id, req.body || {});
+    if (result.error) {
+      if (result.error.code === 'possible_duplicate') return res.status(result.status || 409).json(result.error);
+      return res.status(result.status || 500).json({
+        code: result.error.code || 'customer_update_failed',
+        error: result.error.error || 'Falha ao atualizar cliente',
+        details: publicDbErrorDetails(result.error)
+      });
+    }
+    return res.json(result.data);
     const {
       nome,
       telefone,
@@ -4398,7 +4427,7 @@ app.get('/api/customers/:id/addresses', async (req, res) => {
     const db = getSupabaseClient();
     const customerId = Number(req.params.id);
     if (!customerId) return res.status(400).json({ error: 'Cliente invalido' });
-    const addresses = await listCustomerAddresses(db, customerId, { includeInactive: req.query.include_inactive === 'true' });
+    const addresses = await getClientDomainService().listClientLocations(db, customerId, { includeInactive: req.query.include_inactive === 'true' });
     res.json(addresses);
   } catch (error) {
     console.error('[GET /api/customers/:id/addresses] Error:', error.message);
@@ -4412,37 +4441,9 @@ app.put('/api/customers/:id/addresses', strictLimiter, async (req, res) => {
     const customerId = Number(req.params.id);
     if (!customerId) return res.status(400).json({ error: 'Cliente invalido' });
     const addresses = Array.isArray(req.body?.addresses) ? req.body.addresses : [];
-
-    const deactivated = await runCustomerAddressWriteWithSchemaFallback(
-      workingPayload => db
-        .from('customer_addresses')
-        .update(workingPayload)
-        .eq('customer_id', customerId),
-      { ativo: false, updated_at: new Date().toISOString() },
-      'PUT /api/customers/:id/addresses deactivate'
-    );
-    if (deactivated.error) {
-      if (isMissingRelationError(deactivated.error)) {
-        return res.status(503).json({
-          error: 'A migration migration-clientes-unidades.sql ainda nao foi aplicada.',
-          migration_required: true
-        });
-      }
-      throw deactivated.error;
-    }
-
-    for (const item of addresses) {
-      await ensureCustomerAddress(db, customerId, {
-        ...item,
-        origem: item.origem || 'cadastro'
-      }, {
-        origem: item.origem || 'cadastro',
-        is_primary: item.is_primary === true
-      });
-    }
-
-    const updated = await listCustomerAddresses(db, customerId, { includeInactive: false });
-    res.json(updated);
+    const result = await getClientDomainService().updateClientLocation(db, customerId, addresses);
+    if (result.error) return res.status(result.status || 500).json(result.error);
+    res.json(result.data || []);
   } catch (error) {
     console.error('[PUT /api/customers/:id/addresses] Error:', error.message);
     res.status(500).json({

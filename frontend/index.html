@@ -13547,68 +13547,6 @@ function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentN
 
 function onNovoServicoClienteManualInput() { onServicoClienteManualInput('ns'); }
 
-async function garantirClienteDoServico(prefix = 'ns') {
-  const nomeInput = document.getElementById(`${prefix}-cl`);
-  const enderecoInput = document.getElementById(`${prefix}-end`);
-  const hidden = document.getElementById(`${prefix}-client-select`);
-  const nome = String(nomeInput?.value || '').trim();
-  const endereco = String(enderecoInput?.value || '').trim();
-  const selectedId = String(nomeInput?.dataset.clientId || enderecoInput?.dataset.clientId || hidden?.value || '').trim();
-  if (selectedId) return selectedId;
-  if (!nome) return '';
-
-  const existing = await buscarClientesServicoRemoto(nome).catch(() => []);
-  const exactMatches = existing.filter(c => normalizarNome(c.nome || '') === normalizarNome(nome));
-  if (exactMatches.length === 1) {
-    selecionarClienteServicoAutocomplete(prefix, exactMatches[0].id);
-    return String(exactMatches[0].id);
-  }
-  if (exactMatches.length > 1) {
-    const hint = document.getElementById(`${prefix}-client-hint`);
-    if (hint) {
-      hint.textContent = 'Cliente ambíguo: selecione o cadastro correto no autocomplete antes de salvar.';
-      hint.style.color = 'var(--red)';
-    }
-    throw new Error('Cliente ambíguo: selecione o cliente correto no autocomplete antes de salvar.');
-  }
-  if (existing.length) {
-    const useExisting = confirmAction(`Encontramos cliente parecido: "${existing[0].nome}". Deseja usar esse cadastro existente?`);
-    if (useExisting) {
-      selecionarClienteServicoAutocomplete(prefix, existing[0].id);
-      return String(existing[0].id);
-    }
-  }
-
-  const payload = {
-    nome,
-    endereco,
-    endereco_completo: endereco,
-    categoria: 'eventual',
-    tipo_cliente: 'Eventual',
-    origem: 'agenda'
-  };
-  const response = await fetch(`${API_BASE_URL}/api/customers`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const saved = await response.json().catch(() => ({}));
-  if (response.status === 409 && saved.duplicateId) {
-    const usarDuplicado = confirmAction(`${saved.error || 'Cliente semelhante encontrado'}. Usar esse cadastro existente?`);
-    if (usarDuplicado) {
-      const duplicate = existing.find(c => String(c.id) === String(saved.duplicateId)) || { id: saved.duplicateId, nome };
-      clientesData = mergeClientesCache([duplicate]);
-      selecionarClienteServicoAutocomplete(prefix, saved.duplicateId);
-      return String(saved.duplicateId);
-    }
-  }
-  if (!response.ok) throw new Error(saved.error || `Erro ${response.status} ao criar cliente`);
-  clientesData = mergeClientesCache([saved]);
-  selecionarClienteServicoAutocomplete(prefix, saved.id);
-  toast(`Cliente "${saved.nome || nome}" cadastrado automaticamente`, 'ok');
-  return String(saved.id || '');
-}
-
 async function geocodeClientAddress() {
   const enderecoInput = document.getElementById('cli-form-end');
   const endereco = enderecoInput.value.trim();
