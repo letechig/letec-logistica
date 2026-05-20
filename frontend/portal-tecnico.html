@@ -102,15 +102,33 @@
 
     .profile-card {
       margin-top:0;
-      padding:12px;
-      border-radius:var(--radius);
+      padding:14px;
+      border-radius:24px;
       background:#fff;
       border:1px solid rgba(219,228,239,.95);
-      box-shadow:0 4px 14px rgba(15,23,42,.06);
+      box-shadow:0 16px 38px rgba(15,23,42,.08);
     }
     .profile-main { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-    .tech-name { font-size:19px; font-weight:900; }
-    .date-text { margin-top:3px; color:var(--muted); font-size:13px; }
+    .tech-name { font-size:24px; font-weight:950; letter-spacing:-.01em; }
+    .date-text { margin-top:6px; color:var(--muted); font-size:13px; line-height:1.45; }
+    .context-chips {
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-top:8px;
+    }
+    .info-chip {
+      display:inline-flex;
+      align-items:center;
+      min-height:28px;
+      padding:0 10px;
+      border-radius:999px;
+      background:#f8fafc;
+      border:1px solid var(--border);
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:800;
+    }
     .vehicle-chip {
       display:inline-flex;
       align-items:center;
@@ -185,10 +203,10 @@
     }
     .service-card {
       overflow:hidden;
-      border-left:5px solid #94a3b8;
+      border-left:0;
     }
     .service-card.next {
-      border-left-width:7px;
+      border:1px solid rgba(37,99,235,.24);
       box-shadow:0 16px 32px rgba(37,99,235,.14);
     }
     .service-card.em_deslocamento { border-left-color:var(--primary); }
@@ -196,7 +214,7 @@
     .service-card.em_execucao { border-left-color:var(--warning); }
     .service-card.finalizado { border-left-color:var(--success); }
     .service-card.problema { border-left-color:var(--danger); }
-    .service-body { padding:14px; }
+    .service-body { padding:16px; }
     .service-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
     .time-badge {
       display:inline-flex;
@@ -226,7 +244,7 @@
     .status-badge.em_execucao { color:#92400e; background:#fef3c7; }
     .status-badge.finalizado { color:#166534; background:#dcfce7; }
     .status-badge.problema { color:#991b1b; background:#fee2e2; }
-    .client { margin-top:10px; font-size:18px; font-weight:900; line-height:1.2; }
+    .client { margin-top:12px; font-size:20px; font-weight:950; line-height:1.15; letter-spacing:-.01em; }
     .meta { margin-top:7px; color:var(--muted); font-size:13px; line-height:1.35; }
     .route-row { margin-top:9px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .maps-link {
@@ -245,14 +263,14 @@
       text-decoration:none;
     }
     .maps-link:active { transform:translateY(1px); }
-    .service-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+    .service-grid { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
     .mini {
-      padding:8px 10px;
-      border-radius:12px;
+      padding:7px 9px;
+      border-radius:999px;
       background:#f8fafc;
       color:var(--text-2);
-      font-size:12px;
-      font-weight:700;
+      font-size:11px;
+      font-weight:800;
       min-width:0;
     }
     .service-actions {
@@ -261,6 +279,47 @@
       gap:8px;
       padding:0 14px 14px;
     }
+    .quick-actions {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      padding:0 14px 14px;
+    }
+    .action-mini {
+      min-height:42px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#fff;
+      color:var(--text-2);
+      font-size:13px;
+      font-weight:900;
+    }
+    .action-mini.danger { color:#991b1b; background:#fff1f2; border-color:#fecdd3; }
+    .route-item {
+      display:grid;
+      grid-template-columns:auto 1fr auto;
+      gap:10px;
+      align-items:flex-start;
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:18px;
+      background:#fff;
+      box-shadow:var(--shadow-sm);
+    }
+    .route-num {
+      min-width:34px;
+      min-height:34px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:12px;
+      background:#f1f5f9;
+      font-weight:950;
+      color:var(--text);
+      font-size:12px;
+    }
+    .route-main strong { display:block; font-size:14px; line-height:1.2; margin-bottom:4px; }
+    .route-main span { display:block; font-size:12px; color:var(--muted); line-height:1.35; }
     .portal-panel {
       border:1px solid var(--border);
       border-radius:var(--radius);
@@ -851,6 +910,7 @@
       routeExpanded: false,
       selectedWeekDate: params.get('data') || new Date().toISOString().slice(0, 10),
       weekServicesByDate: {},
+      rawServicesCount: 0,
       gps: { saida:null, retorno:null },
       matchedTech: null,
       loading: false,
@@ -869,6 +929,23 @@
         .split(/\s*(?:\/|,|\be\b|\+)\s*/i)
         .map(item => item.trim())
         .filter(Boolean);
+    }
+
+    function parseArrayLike(value) {
+      if (Array.isArray(value)) return value;
+      if (value === null || value === undefined || value === '') return [];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return [];
+        if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed;
+          } catch(e) {}
+        }
+        return trimmed.split(/\s*(?:,|;|\/|\|)\s*/).filter(Boolean);
+      }
+      return [value];
     }
 
     function titleFromSlug(value) {
@@ -892,7 +969,7 @@
       const offline = !navigator.onLine;
       const pending = loadQueue().length;
       pill.classList.toggle('offline', offline);
-      text.textContent = `${offline ? 'Offline' : 'Online'}${pending ? ` Â· ${pending} pendente(s)` : ''}`;
+      text.textContent = `${offline ? 'Offline' : 'Online'}${pending ? ` - ${pending} pendente(s)` : ''}`;
     }
 
     function formatDateLabel(dateStr) {
@@ -1172,23 +1249,40 @@
 
     function technicianAliases(tech) {
       const names = [
+        tech?.id,
         tech?.nome,
         tech?.name,
         tech?.slug,
         portal.tecnicoId,
-        portal.tecnico
+        portal.tecnico,
+        ...splitTeamNames(portal.equipe)
       ].filter(Boolean);
       return Array.from(new Set(names.flatMap(name => [normalizeText(name), slugText(name)]).filter(Boolean)));
     }
 
     function serviceHasPortalTechnician(s) {
-      const ids = Array.isArray(s.tecnicos_ids) ? s.tecnicos_ids.map(String) : [];
+      const ids = parseArrayLike(s.tecnicos_ids || s.tecnicosIds || s.technicians_ids).map(item => String(item).trim()).filter(Boolean);
       if (state.matchedTech?.id && ids.includes(String(state.matchedTech.id))) return true;
+      if (portal.tecnicoId && ids.some(id => id === portal.tecnicoId || slugText(id) === slugText(portal.tecnicoId))) return true;
       const aliases = technicianAliases(state.matchedTech || { nome: portal.tecnicoId || portal.tecnico });
-      const teamText = normalizeText(`${s.equipe || ''} ${s.eq || ''}`);
-      const teamParts = splitTeamNames(`${s.equipe || ''} ${s.eq || ''}`)
+      const serviceTechText = [
+        s.equipe,
+        s.eq,
+        s.tecnico,
+        s.motorista,
+        s.tecnico_nome,
+        ...parseArrayLike(s.tecnicos || s.tecnicos_nomes || s.technicians)
+      ].filter(Boolean).join(' ');
+      const teamText = normalizeText(serviceTechText);
+      const teamSlug = slugText(serviceTechText);
+      const teamParts = splitTeamNames(serviceTechText)
         .flatMap(name => [normalizeText(name), slugText(name)]);
-      return aliases.some(alias => teamParts.includes(alias) || teamText.includes(alias));
+      return aliases.some(alias => {
+        if (!alias) return false;
+        if (teamParts.includes(alias)) return true;
+        if (alias.length >= 3 && (teamText.includes(alias) || teamSlug.includes(alias))) return true;
+        return false;
+      });
     }
 
     function matchTechnician() {
@@ -1207,7 +1301,7 @@
 
     function serviceMatchesPortal(s, expectedDate = portal.data) {
       if (serviceDate(s) !== expectedDate) return false;
-      const ids = Array.isArray(s.tecnicos_ids) ? s.tecnicos_ids.map(String) : [];
+      const ids = parseArrayLike(s.tecnicos_ids || s.tecnicosIds || s.technicians_ids).map(String);
       if (portal.tecnicoId) return serviceHasPortalTechnician(s);
       if (state.matchedTech && ids.includes(String(state.matchedTech.id))) return true;
       const hay = normalizeText(`${s.equipe || ''} ${s.eq || ''}`);
@@ -1268,7 +1362,9 @@
       state.messages = settledData(msgRes, state.messages || []).filter(messageMatchesPortal);
       state.events = settledData(evRes, state.events || []).filter(messageMatchesPortal);
       matchTechnician();
-      state.services = settledData(svcRes, state.services || []).filter(serviceMatchesPortal);
+      const rawServices = settledData(svcRes, state.services || []);
+      state.rawServicesCount = rawServices.length;
+      state.services = rawServices.filter(serviceMatchesPortal);
       state.weekServicesByDate = { ...(state.weekServicesByDate || {}), [portal.data]: state.services };
       await loadWeekServices();
 
@@ -1312,7 +1408,7 @@
 
     function renderAll() {
       document.getElementById('tech-name').textContent = portalDisplayName();
-      document.getElementById('date-text').textContent = portalSubtitle();
+      document.getElementById('date-text').innerHTML = portalSubtitleHtml();
       document.getElementById('vehicle-chip').textContent = portalVehicleForDay() || 'Sem veiculo';
       renderSummary();
       renderServices();
@@ -1334,10 +1430,16 @@
       return state.services.find(s => s.equipe)?.equipe || portal.equipe || portal.tecnico || '';
     }
 
-    function portalSubtitle() {
+    function portalSubtitleHtml() {
       const team = portalTeamForDay();
       const vehicle = portalVehicleForDay();
-      return `${formatDateLabel(portal.data)}${team ? ` Â· Hoje com: ${team}` : ''}${vehicle ? ` Â· Veiculo: ${vehicle}` : ''}`;
+      return `
+        <span>${escapeHtml(formatDateLabel(portal.data))}</span>
+        <div class="context-chips">
+          ${team ? `<span class="info-chip">Hoje com: ${escapeHtml(team)}</span>` : ''}
+          ${vehicle ? `<span class="info-chip">Veiculo: ${escapeHtml(vehicle)}</span>` : ''}
+        </div>
+      `;
     }
 
     function renderSummary() {
@@ -1355,27 +1457,18 @@
       const list = document.getElementById('services-list');
       const ordered = sortServicesByTime(state.services);
       if (!ordered.length) {
-        list.innerHTML = '<div class="empty">Nenhum servico encontrado para este tecnico nesta data.</div>';
+        list.innerHTML = `<div class="empty">Nenhum servico encontrado para ${escapeHtml(portalDisplayName())} nesta data. Foram carregados ${state.rawServicesCount || 0} servico(s) do dia.</div>`;
         return;
       }
       const next = ordered.find(s => !['finalizado','problema'].includes(execStatus(s))) || ordered[0];
       const others = ordered.filter(s => String(s.id) !== String(next.id));
       const routeServices = state.routeExpanded ? ordered : others;
       list.innerHTML = `
-        <div class="portal-panel">
-          <div class="step-title">Resumo do dia</div>
-          <div class="day-summary">
-            <div class="metric blue"><strong>${ordered.length}</strong><span>Total</span></div>
-            <div class="metric ok"><strong>${ordered.filter(s => execStatus(s) === 'finalizado').length}</strong><span>Finalizados</span></div>
-            <div class="metric"><strong>${ordered.filter(s => !['finalizado','problema'].includes(execStatus(s))).length}</strong><span>Pendentes</span></div>
-            <div class="metric warn"><strong>${ordered.filter(s => execStatus(s) === 'problema').length}</strong><span>Problemas</span></div>
-          </div>
-        </div>
-        <div class="step-title">Proximo servico</div>
+        <div class="step-title">Proximo atendimento</div>
         ${renderServiceCard(next, { highlight:true })}
         <button class="secondary route-toggle" type="button" onclick="toggleFullRoute()">${state.routeExpanded ? 'Ocultar roteiro completo' : 'Ver roteiro completo'}</button>
         <div class="step-title">${state.routeExpanded ? 'Roteiro completo' : 'Demais servicos'}</div>
-        ${routeServices.length ? routeServices.map((s, idx) => renderServiceCard(s, { routeIndex: state.routeExpanded ? idx + 1 : null })).join('') : '<div class="empty">Sem outros servicos nesta data.</div>'}
+        ${routeServices.length ? routeServices.map((s, idx) => renderRouteItem(s, state.routeExpanded ? idx + 1 : null)).join('') : '<div class="empty">Sem outros servicos nesta data.</div>'}
       `;
     }
 
@@ -1413,7 +1506,28 @@
             </div>
           </div>
           <div class="service-actions">${renderServiceAction(s, status)}</div>
+          <div class="quick-actions">${renderSecondaryActions(s)}</div>
         </article>`;
+    }
+
+    function renderRouteItem(s, index = null) {
+      const status = execStatus(s);
+      const os = s.os || s.OS || '';
+      return `
+        <div class="route-item">
+          <span class="route-num">${index || (s.horario || s.hr || '--:--')}</span>
+          <div class="route-main">
+            <strong>${escapeHtml(s.horario || s.hr || '--:--')} - ${escapeHtml(s.cliente || s.cl || 'Cliente')}</strong>
+            <span>${escapeHtml(serviceTypes(s))}${os ? ` - OS ${escapeHtml(os)}` : ''}</span>
+            <span>${escapeHtml(shortAddress(serviceAddress(s)))}</span>
+          </div>
+          <span class="status-badge ${status}">${statusLabel(status)}</span>
+        </div>`;
+    }
+
+    function shortAddress(address) {
+      const text = String(address || '').trim();
+      return text.length > 72 ? `${text.slice(0, 69)}...` : text;
     }
 
     function serviceAddress(s) {
@@ -1428,7 +1542,7 @@
       const address = serviceAddress(s);
       if (!address) return '';
       const url = buildGoogleMapsUrl(address);
-      return `<div class="route-row"><a class="maps-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">âŒ– Maps</a></div>`;
+      return `<div class="route-row"><a class="maps-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Maps</a></div>`;
     }
 
     function renderServiceAction(s, status) {
@@ -1439,6 +1553,30 @@
       if (status === 'em_execucao') return `<button class="primary" onclick="openFinishModal('${id}')">Finalizar servico</button>`;
       if (status === 'problema') return '<button class="danger-soft" disabled>Problema registrado</button>';
       return '<button class="secondary" disabled>Finalizado</button>';
+    }
+
+    function renderSecondaryActions(s) {
+      const id = escapeHtml(String(s.id));
+      const maps = serviceAddress(s)
+        ? `<button class="action-mini" type="button" onclick="openMapsForService('${id}')">Maps</button>`
+        : '<button class="action-mini" type="button" disabled>Sem mapa</button>';
+      return `
+        ${maps}
+        <button class="action-mini danger" type="button" onclick="reportProblem('${id}')">Problema</button>
+        <button class="action-mini" type="button" onclick="callSupport('Ajuda no servico')">Ajuda</button>
+      `;
+    }
+
+    function openMapsForService(id) {
+      const service = state.services.find(item => String(item.id) === String(id));
+      const address = serviceAddress(service);
+      if (!address) return toast('Endereco nao informado para este servico.', 'warn');
+      window.open(buildGoogleMapsUrl(address), '_blank');
+    }
+
+    function reportProblem(id) {
+      openFinishModal(id);
+      selectFinishState('problema');
     }
 
     function escapeHtml(value) {
@@ -1477,7 +1615,7 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
-      await recordEvent('chegada', 'Chegada registrada', `${s?.cliente || 'ServiÃ§o'} - ${s?.endereco || ''}`, s, gps);
+      await recordEvent('chegada', 'Chegada registrada', `${s?.cliente || 'Servico'} - ${s?.endereco || ''}`, s, gps);
       addHistory('Chegada registrada no servico.');
     }
 
@@ -1502,7 +1640,7 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, 'Servico iniciado.');
-      await recordEvent('inicio', 'ServiÃ§o iniciado', s?.cliente || 'ServiÃ§o iniciado', s, null);
+      await recordEvent('inicio', 'Servico iniciado', s?.cliente || 'Servico iniciado', s, null);
       addHistory('Inicio de servico registrado.');
     }
 
@@ -1556,8 +1694,8 @@
       await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
       await recordEvent(
         state.finishState === 'ok' ? 'finalizacao' : 'problema',
-        state.finishState === 'ok' ? 'ServiÃ§o finalizado' : 'Problema registrado',
-        state.finishState === 'ok' ? (s?.cliente || 'ServiÃ§o finalizado') : problemText,
+        state.finishState === 'ok' ? 'Servico finalizado' : 'Problema registrado',
+        state.finishState === 'ok' ? (s?.cliente || 'Servico finalizado') : problemText,
         s,
         null
       );
@@ -1589,7 +1727,7 @@
       }).join('');
       const selected = sortServicesByTime(state.weekServicesByDate?.[state.selectedWeekDate] || []);
       weekServices.innerHTML = selected.length
-        ? selected.map((s, idx) => renderServiceCard(s, { routeIndex: idx + 1 })).join('')
+        ? selected.map((s, idx) => renderRouteItem(s, idx + 1)).join('')
         : '<div class="empty">Nenhum servico para este tecnico neste dia.</div>';
     }
 
@@ -1645,7 +1783,7 @@ Portal: ${currentPortalLink()}${location}`;
       }
       list.innerHTML = state.messages.map(msg => `
         <div class="history-card" style="border-left:5px solid ${msg.prioridade === 'alta' ? 'var(--warning)' : 'var(--primary)'}">
-          <strong>${msg.prioridade === 'alta' ? 'Importante' : 'Recado'} Â· ${new Date(msg.created_at || Date.now()).toLocaleString('pt-BR')}</strong>
+          <strong>${msg.prioridade === 'alta' ? 'Importante' : 'Recado'} - ${new Date(msg.created_at || Date.now()).toLocaleString('pt-BR')}</strong>
           <div class="meta">${escapeHtml(msg.mensagem || '')}</div>
           <div style="margin-top:10px">
             ${msg.lido ? '<span class="status-badge finalizado">Lido</span>' : `<button class="secondary" type="button" onclick="markMessageRead('${escapeHtml(String(msg.id))}')">Marcar como lido</button>`}
@@ -1786,7 +1924,7 @@ Portal: ${currentPortalLink()}${location}`;
       try {
         const saved = await createChecklistViaBackend(rec);
         toast('Checklist salvo com sucesso.', 'ok');
-        await recordEvent('checklist', 'Checklist diÃ¡rio salvo', `${vei} - ${motorista}`, null, null);
+        await recordEvent('checklist', 'Checklist diario salvo', `${vei} - ${motorista}`, null, null);
         addHistory('Checklist diario salvo.');
         state.checklists.unshift(saved || rec);
         savePortalCache();
