@@ -225,6 +225,7 @@ function normalizeAddress(value) {
     .replace(/\bDOUTOR\b/g, 'DR')
     .replace(/\bPROFESSOR\b/g, 'PROF')
     .replace(/\bCONDOMINIO\b/g, 'COND')
+    .replace(/\b(DO|DA|DE|DOS|DAS)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -239,6 +240,39 @@ function buildCustomerAddressFingerprint(customer = {}) {
   const normalized = normalizeAddress(structured || fallback);
   if (cep && normalized) return `${cep}|${normalized}`;
   return normalized || cep;
+}
+
+function addressNumberTokens(address = {}) {
+  const text = [address.numero, address.endereco_completo, address.endereco]
+    .filter(Boolean)
+    .join(' ');
+  return [...new Set(String(text).match(/\b\d{1,6}[A-Z]?\b/gi) || [])]
+    .map(item => item.toUpperCase());
+}
+
+function addressCoreTokens(fingerprint = '') {
+  return String(fingerprint || '')
+    .split('|')
+    .pop()
+    .replace(/\b\d{1,6}[A-Z]?\b/g, ' ')
+    .split(/\s+/)
+    .filter(token => token.length >= 3 && !['VILA', 'JARDIM', 'JD', 'PARQUE'].includes(token));
+}
+
+function areEquivalentCustomerAddresses(left = {}, right = {}) {
+  const leftFp = buildCustomerAddressFingerprint(left);
+  const rightFp = buildCustomerAddressFingerprint(right);
+  if (!leftFp || !rightFp) return false;
+  if (leftFp === rightFp) return true;
+
+  const leftNumbers = addressNumberTokens(left);
+  const rightNumbers = addressNumberTokens(right);
+  const sharedNumber = leftNumbers.some(number => rightNumbers.includes(number));
+  const leftCore = addressCoreTokens(leftFp);
+  const rightCore = addressCoreTokens(rightFp);
+  const sharedCore = leftCore.filter(token => rightCore.includes(token));
+  if (sharedNumber) return sharedCore.length >= 2;
+  return sharedCore.length >= 2 && (!leftNumbers.length || !rightNumbers.length);
 }
 
 function hasRelatedCustomerNames(leftName, rightName) {
@@ -343,7 +377,8 @@ const CUSTOMER_OPTIONAL_WRITE_COLUMNS = new Set([
   'origem',
   'observacoes',
   'ativo',
-  'is_incomplete'
+  'is_incomplete',
+  'updated_at'
 ]);
 
 function getMissingSchemaColumn(error) {
@@ -1641,7 +1676,7 @@ async function ensureCustomerAddress(db, customerId, input = {}, options = {}) {
   try {
     const existing = await listCustomerAddresses(db, customerId, { includeInactive: false });
     const fingerprint = buildCustomerAddressFingerprint(payload);
-    const match = existing.find(item => buildCustomerAddressFingerprint(item) === fingerprint);
+    const match = existing.find(item => buildCustomerAddressFingerprint(item) === fingerprint || areEquivalentCustomerAddresses(item, payload));
     if (match) return match;
     const insertPayload = {
       ...payload,
@@ -3603,7 +3638,7 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
     const result = await getClientDomainService().createClient(db, req.body || {});
     if (result.error) {
       if (result.error.code === 'possible_duplicate') return res.status(result.status || 409).json(result.error);
-      if (result.error.code === '23505') return res.status(409).json({ error: 'Telefone já cadastrado. Verifique se o cliente já existe.', code: 'customer_unique_violation' });
+      if (result.error.code === '23505') return res.status(409).json({ error: 'Telefone ja cadastrado. Verifique se o cliente ja existe.', code: 'customer_unique_violation' });
       return res.status(result.status || 500).json({
         code: result.error.code || 'customer_create_failed',
         error: result.error.error || 'Falha ao criar cliente',
@@ -3611,159 +3646,6 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
       });
     }
     return res.status(result.status || 201).json(result.data);
-    const {
-      nome,
-      telefone,
-      whatsapp,
-      email,
-      cep,
-      endereco,
-      endereco_completo,
-      latitude,
-      longitude,
-      categoria,
-      periodicidade,
-      tipo,
-      cpf_cnpj,
-      observacoes,
-      tipo_local,
-      restricoes_operacionais,
-      nivel_urgencia_padrao,
-      observacoes_operacionais,
-      rua,
-      numero,
-      bairro,
-      cidade,
-      uf,
-      complemento,
-      referencia,
-      cliente_recorrente,
-      data_ultimo_servico,
-      contato,
-      zona,
-      tipo_cliente,
-      status_operacional,
-      prioridade,
-      origem
-    } = req.body;
-
-    const telefoneNormalizado = normalizePhone(telefone);
-    const whatsappNormalizado = normalizePhone(whatsapp);
-    const emailNormalizado = normalizeEmail(email);
-    const ufNormalizada = normalizeUf(uf);
-    const nomeNormalizado = normalizeCustomerName(nome);
-    const cepNormalizado = String(cep || '').replace(/\D/g, '') || null;
-    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, uf: ufNormalizada, complemento, referencia });
-    const enderecoFinal = endereco ? endereco.trim() : enderecoEstruturado;
-    const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
-    const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
-    const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
-    const statusOperacionalNormalizado = normalizeCustomerOperationalStatus(status_operacional);
-    const prioridadeNormalizada = normalizeCustomerPriority(prioridade);
-
-    if (!nome) {
-      return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
-    }
-
-    if (categoria === 'contrato' && !periodicidade) {
-      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes de contrato' });
-    }
-
-    if (clienteRecorrente && !periodicidade) {
-      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes recorrentes' });
-    }
-
-    const duplicate = await findDuplicateCustomer({
-      nome,
-      telefone: telefoneNormalizado,
-      whatsapp: whatsappNormalizado,
-      cpf_cnpj,
-      endereco: enderecoFinal,
-      endereco_completo: enderecoCompletoFinal,
-      cep: cepNormalizado,
-      rua,
-      numero,
-      bairro,
-      cidade,
-      uf: ufNormalizada,
-      db
-    });
-    if (duplicate) {
-      return res.status(409).json({
-        code: 'possible_duplicate',
-        error: `Cliente potencialmente duplicado: ${duplicate.nome}`,
-        duplicateId: duplicate.id,
-        duplicate
-      });
-    }
-
-    const insertPayload = {
-      nome: nome.trim(),
-      nome_normalizado: nomeNormalizado,
-      telefone: telefoneNormalizado,
-      whatsapp: whatsappNormalizado || null,
-      email: emailNormalizado,
-      cep: cepNormalizado,
-      endereco: enderecoFinal,
-      endereco_completo: enderecoCompletoFinal,
-      rua: rua ? rua.trim() : null,
-      numero: numero ? String(numero).trim() : null,
-      bairro: bairro ? bairro.trim() : null,
-      cidade: cidade ? cidade.trim() : null,
-      uf: ufNormalizada,
-      complemento: complemento ? complemento.trim() : null,
-      referencia: referencia ? String(referencia).trim() : null,
-      latitude: latitude ? parseFloat(latitude) : null,
-      longitude: longitude ? parseFloat(longitude) : null,
-      tipo_local: tipo_local ? tipo_local.trim() : null,
-      restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
-      nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
-      observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
-      cliente_recorrente: clienteRecorrente,
-      periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
-      data_ultimo_servico: dataUltimoServicoISO,
-      tipo: tipo || 'PF',
-      cpf_cnpj,
-      contato: contato ? String(contato).trim() : null,
-      zona: zona ? String(zona).trim() : null,
-      tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
-      status_operacional: statusOperacionalNormalizado,
-      prioridade: prioridadeNormalizada,
-      origem: origem ? String(origem).trim() : null,
-      observacoes,
-      ativo: statusOperacionalNormalizado === 'Inativo' ? false : true
-    };
-
-    const { data, error } = await runCustomerWriteWithSchemaFallback(
-      payload => db.from('customers').insert([payload]).select(),
-      insertPayload,
-      'POST /api/customers'
-    );
-
-    if (error) {
-      if (error.code === '23505') {
-        return res.status(409).json({ error: 'Telefone já cadastrado. Verifique se o cliente já existe.' });
-      }
-      throw error;
-    }
-    const created = data?.[0] || null;
-    if (created?.id) {
-      try {
-        await ensureCustomerAlias(db, created.id, created.nome || nome, origem || 'cadastro');
-      } catch (aliasError) {
-        console.warn('[POST /api/customers] Complemento de alias ignorado:', aliasError.message);
-      }
-      try {
-        await ensureCustomerAddress(db, created.id, {
-          ...insertPayload,
-          origem: origem || 'cadastro'
-        }, { origem: origem || 'cadastro', is_primary: true, label: 'Principal' });
-      } catch (addressError) {
-        console.warn('[POST /api/customers] Complemento de endereco ignorado:', addressError.message);
-      }
-    }
-
-    res.status(201).json(created);
   } catch (error) {
     console.error('[POST /api/customers] Error:', error.message);
     res.status(500).json({
@@ -3788,148 +3670,13 @@ app.put('/api/customers/:id', strictLimiter, async (req, res) => {
       });
     }
     return res.json(result.data);
-    const {
-      nome,
-      telefone,
-      whatsapp,
-      email,
-      cep,
-      endereco,
-      endereco_completo,
-      latitude,
-      longitude,
-      categoria,
-      periodicidade,
-      tipo,
-      cpf_cnpj,
-      observacoes,
-      tipo_local,
-      restricoes_operacionais,
-      nivel_urgencia_padrao,
-      observacoes_operacionais,
-      rua,
-      numero,
-      bairro,
-      cidade,
-      uf,
-      complemento,
-      referencia,
-      cliente_recorrente,
-      data_ultimo_servico,
-      contato,
-      zona,
-      tipo_cliente,
-      status_operacional,
-      prioridade,
-      origem
-    } = req.body;
-
-    const telefoneNormalizado = normalizePhone(telefone);
-    const whatsappNormalizado = normalizePhone(whatsapp);
-    const emailNormalizado = normalizeEmail(email);
-    const ufNormalizada = normalizeUf(uf);
-    const nomeNormalizado = normalizeCustomerName(nome);
-    const cepNormalizado = String(cep || '').replace(/\D/g, '') || null;
-    const enderecoEstruturado = buildCustomerAddress({ rua, numero, bairro, cidade, uf: ufNormalizada, complemento, referencia });
-    const enderecoFinal = endereco ? endereco.trim() : enderecoEstruturado;
-    const enderecoCompletoFinal = endereco_completo ? endereco_completo.trim() : enderecoEstruturado;
-    const clienteRecorrente = cliente_recorrente === true || String(cliente_recorrente) === 'true';
-    const dataUltimoServicoISO = data_ultimo_servico ? new Date(data_ultimo_servico).toISOString() : null;
-    const statusOperacionalNormalizado = normalizeCustomerOperationalStatus(status_operacional);
-    const prioridadeNormalizada = normalizeCustomerPriority(prioridade);
-
-    if (!nome) {
-      return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
-    }
-
-    if (categoria === 'contrato' && !periodicidade) {
-      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes de contrato' });
-    }
-
-    if (clienteRecorrente && !periodicidade) {
-      return res.status(400).json({ error: 'Periodicidade é obrigatória para clientes recorrentes' });
-    }
-
-    const duplicate = await findDuplicateCustomer({
-      id,
-      nome,
-      telefone: telefoneNormalizado,
-      whatsapp: whatsappNormalizado,
-      cpf_cnpj,
-      endereco: enderecoFinal,
-      endereco_completo: enderecoCompletoFinal,
-      cep: cepNormalizado,
-      rua,
-      numero,
-      bairro,
-      cidade,
-      uf: ufNormalizada,
-      db
-    });
-    if (duplicate) {
-      return res.status(409).json({
-        error: `Cliente potencialmente duplicado: ${duplicate.nome}`,
-        duplicateId: duplicate.id
-      });
-    }
-
-    const updatePayload = {
-      nome: nome.trim(),
-      nome_normalizado: nomeNormalizado,
-      telefone: telefoneNormalizado,
-      whatsapp: whatsappNormalizado || null,
-      email: emailNormalizado,
-      cep: cepNormalizado,
-      endereco: enderecoFinal,
-      endereco_completo: enderecoCompletoFinal,
-      rua: rua ? rua.trim() : null,
-      numero: numero ? String(numero).trim() : null,
-      bairro: bairro ? bairro.trim() : null,
-      cidade: cidade ? cidade.trim() : null,
-      uf: ufNormalizada,
-      complemento: complemento ? complemento.trim() : null,
-      referencia: referencia ? String(referencia).trim() : null,
-      latitude: latitude ? parseFloat(latitude) : null,
-      longitude: longitude ? parseFloat(longitude) : null,
-      tipo_local: tipo_local ? tipo_local.trim() : null,
-      restricoes_operacionais: restricoes_operacionais ? restricoes_operacionais.trim() : null,
-      nivel_urgencia_padrao: nivel_urgencia_padrao || 'normal',
-      observacoes_operacionais: observacoes_operacionais ? observacoes_operacionais.trim() : null,
-      cliente_recorrente: clienteRecorrente,
-      periodicidade: categoria === 'contrato' || clienteRecorrente ? periodicidade : null,
-      data_ultimo_servico: dataUltimoServicoISO,
-      categoria: categoria || 'eventual',
-      tipo,
-      cpf_cnpj,
-      contato: contato ? String(contato).trim() : null,
-      zona: zona ? String(zona).trim() : null,
-      tipo_cliente: tipo_cliente ? String(tipo_cliente).trim() : (categoria === 'contrato' ? 'Contrato' : 'Eventual'),
-      status_operacional: statusOperacionalNormalizado,
-      prioridade: prioridadeNormalizada,
-      origem: origem ? String(origem).trim() : null,
-      observacoes,
-      ativo: statusOperacionalNormalizado === 'Inativo' ? false : true,
-      updated_at: new Date().toISOString()
-    };
-
-    const { data, error } = await runCustomerWriteWithSchemaFallback(
-      payload => db.from('customers').update(payload).eq('id', parseInt(id, 10)).select(),
-      updatePayload,
-      'PUT /api/customers/:id'
-    );
-
-    if (error) {
-      if (error.code === '23505') {
-        return res.status(409).json({ error: 'Telefone já cadastrado por outro cliente' });
-      }
-      throw error;
-    }
-    if (!data.length) return res.status(404).json({ error: 'Cliente não encontrado' });
-    
-    res.json(data[0]);
   } catch (error) {
     console.error('[PUT /api/customers/:id] Error:', error.message);
-    res.status(500).json({ error: 'Falha ao atualizar cliente' });
+    res.status(500).json({
+      code: 'customer_update_failed',
+      error: 'Falha ao atualizar cliente',
+      details: publicDbErrorDetails(error)
+    });
   }
 });
 
@@ -4052,14 +3799,17 @@ function chooseCanonicalPrimary(customers = []) {
 function canonicalMergePreview(customers = [], primaryId = null, type = 'same_name') {
   const primary = customers.find(item => String(item.id) === String(primaryId)) || chooseCanonicalPrimary(customers);
   const duplicateIds = customers.filter(item => String(item.id) !== String(primary?.id)).map(item => item.id);
-  const primaryFingerprint = buildCustomerAddressFingerprint(primary || {});
-  const addresses = customers
+  const knownAddresses = primary && buildCustomerAddressFingerprint(primary) ? [primary] : [];
+  const addresses = [];
+  customers
     .filter(item => String(item.id) !== String(primary?.id))
     .filter(item => {
-      const fp = buildCustomerAddressFingerprint(item);
-      return fp && fp !== primaryFingerprint;
+      if (!buildCustomerAddressFingerprint(item)) return false;
+      const exists = knownAddresses.some(address => areEquivalentCustomerAddresses(address, item));
+      if (!exists) knownAddresses.push(item);
+      return !exists;
     })
-    .map(item => ({
+    .forEach(item => addresses.push({
       source_customer_id: item.id,
       label: item.nome || 'Unidade',
       endereco: item.endereco_completo || item.endereco || buildCustomerAddress(item)
@@ -4262,113 +4012,13 @@ app.post('/api/customers/merge', strictLimiter, async (req, res) => {
     const { primaryId, duplicateIds } = req.body;
     const result = await mergeCustomersCanonical(db, primaryId, duplicateIds);
     return res.json(result);
-    /* Legacy merge kept below as unreachable fallback reference during Clientes V2 rollout. */
-    const legacyMergePayload = req.body;
-    
-    if (!primaryId || !Array.isArray(duplicateIds) || duplicateIds.length === 0) {
-      return res.status(400).json({ error: 'IDs primário e duplicatas são obrigatórios' });
-    }
-    
-    // Get all customers involved
-    const allIds = [primaryId, ...duplicateIds];
-    const { data: customers, error: fetchError } = await db
-      .from('customers')
-      .select('*')
-      .in('id', allIds);
-    
-    if (fetchError) throw fetchError;
-    if (customers.length !== allIds.length) {
-      return res.status(404).json({ error: 'Um ou mais clientes não encontrados' });
-    }
-    
-    const primary = customers.find(c => c.id === primaryId);
-    if (!primary) return res.status(404).json({ error: 'Cliente primário não encontrado' });
-    
-    // Merge data based on keepFields preference
-    const merged = { ...primary };
-    const duplicates = customers.filter(c => c.id !== primaryId);
-    
-    for (const dup of duplicates) {
-      // Merge fields if primary is empty and duplicate has data
-      if (!merged.endereco && dup.endereco) merged.endereco = dup.endereco;
-      if (!merged.endereco_completo && dup.endereco_completo) merged.endereco_completo = dup.endereco_completo;
-      if (!merged.latitude && dup.latitude) merged.latitude = dup.latitude;
-      if (!merged.longitude && dup.longitude) merged.longitude = dup.longitude;
-      if (!merged.cpf_cnpj && dup.cpf_cnpj) merged.cpf_cnpj = dup.cpf_cnpj;
-      if (!merged.whatsapp && dup.whatsapp) merged.whatsapp = dup.whatsapp;
-      if (!merged.email && dup.email) merged.email = dup.email;
-      if (!merged.uf && dup.uf) merged.uf = dup.uf;
-      if (!merged.observacoes && dup.observacoes) merged.observacoes = dup.observacoes;
-      
-      // Append observations
-      if (dup.observacoes && dup.observacoes !== merged.observacoes) {
-        merged.observacoes = (merged.observacoes || '') + '\n[Merged from duplicate: ' + dup.observacoes + ']';
-      }
-    }
-    
-    // Update primary customer
-    const duplicateNote = `\n[Duplicatas mescladas nesta ficha: ${duplicateIds.join(', ')}]`;
-    const { error: updateError } = await db
-      .from('customers')
-      .update({
-        endereco: merged.endereco,
-        endereco_completo: merged.endereco_completo,
-        latitude: merged.latitude,
-        longitude: merged.longitude,
-        cpf_cnpj: merged.cpf_cnpj,
-        whatsapp: merged.whatsapp,
-        email: merged.email,
-        uf: merged.uf,
-        observacoes: `${merged.observacoes || ''}${duplicateNote}`,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', primaryId);
-    
-    if (updateError) throw updateError;
-
-    const relatedUpdates = [
-      ['services', 'cliente_id'],
-      ['contracts', 'customer_id'],
-      ['customer_service_history', 'customer_id'],
-      ['data_reviews', 'customer_id'],
-      ['customer_reminders', 'customer_id']
-    ];
-
-    for (const [table, column] of relatedUpdates) {
-      const { error: relatedError } = await db
-        .from(table)
-        .update({ [column]: primaryId })
-        .in(column, duplicateIds);
-      if (relatedError) {
-        const missing = getMissingSchemaColumn(relatedError);
-        if (missing || relatedError.code === '42P01' || relatedError.code === 'PGRST205') {
-          console.warn(`[POST /api/customers/merge] Ignorando tabela/coluna ausente: ${table}.${column}`);
-        } else {
-          throw relatedError;
-        }
-      }
-    }
-    
-    // Soft delete duplicates
-    const { error: deleteError } = await db
-      .from('customers')
-      .update({ 
-        ativo: false, 
-        observacoes: (merged.observacoes || '') + '\n[Merged into customer ID: ' + primaryId + ']',
-        updated_at: new Date().toISOString()
-      })
-      .in('id', duplicateIds);
-    
-    if (deleteError) throw deleteError;
-    
-    res.json({ 
-      message: `Clientes mesclados com sucesso. ${duplicateIds.length} duplicata(s) removida(s).`,
-      primaryCustomer: merged
-    });
-    
   } catch (error) {
     console.error('[POST /api/customers/merge] Error:', error.message);
-    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Falha ao mesclar clientes' });
+    res.status(error.statusCode || 500).json({
+      code: error.code || 'customers_merge_failed',
+      error: error.statusCode ? error.message : 'Falha ao mesclar clientes',
+      details: publicDbErrorDetails(error)
+    });
   }
 });
 

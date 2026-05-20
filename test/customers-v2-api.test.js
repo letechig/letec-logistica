@@ -138,3 +138,39 @@ test('Clientes V2 merge canonico cria unidades e aliases sem apagar historico te
     assert.equal(state.customer_aliases.some(alias => alias.customer_id === 1 && alias.alias_normalizado === 'REDE MORIAH'), true);
   });
 });
+
+test('Clientes V2 merge canonico deduplica unidades com enderecos equivalentes', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers = [
+      { id: 20, nome: 'Brink Condominio', nome_normalizado: 'BRINK CONDOMINIO', ativo: true, endereco: 'Estrada da Itapecerica, 2100 - Vila Prel', status_operacional: 'Ativo' },
+      { id: 21, nome: 'Brink Condominio', nome_normalizado: 'BRINK CONDOMINIO', ativo: true, endereco: 'Estrada de Itapecerica, 2100 - Vila Prel', status_operacional: 'Ativo' },
+      { id: 22, nome: 'Brink Condominio', nome_normalizado: 'BRINK CONDOMINIO', ativo: true, endereco: 'Estrada Itapecerica, 2100 - Vila Prel', status_operacional: 'Ativo' },
+      { id: 23, nome: 'Brink Condominio', nome_normalizado: 'BRINK CONDOMINIO', ativo: true, endereco: 'Estrada de Itapecerica da Serra', status_operacional: 'Ativo' }
+    ];
+    state.services = [{ id: 40, cliente_id: 21, cliente: 'Brink Condominio', endereco: 'Estrada de Itapecerica, 2100 - Vila Prel' }];
+    state.contracts = [];
+    state.customer_service_history = [];
+    state.data_reviews = [];
+    state.customer_reminders = [];
+    state.customer_addresses = [];
+    state.customer_aliases = [];
+
+    const preview = await fetch(`${baseUrl}/api/customers/duplicates`);
+    assert.equal(preview.status, 200);
+    const groups = await preview.json();
+    const brinkGroup = groups.find(group => group.group.some(customer => customer.id === 20));
+    assert.ok(brinkGroup);
+    assert.equal(brinkGroup.addresses_to_create.length, 0);
+
+    const response = await fetch(`${baseUrl}/api/customers/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ primaryId: 20, duplicateIds: [21, 22, 23] })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(state.services[0].cliente_id, 20);
+    assert.equal(state.customers.filter(customer => customer.ativo !== false).length, 1);
+    assert.equal(state.customer_addresses.length, 1);
+    assert.equal(state.customer_addresses[0].customer_id, 20);
+  });
+});
