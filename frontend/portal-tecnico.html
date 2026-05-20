@@ -146,7 +146,7 @@
 
     .quick-nav {
       display:grid;
-      grid-template-columns:repeat(4,1fr);
+      grid-template-columns:repeat(5,1fr);
       gap:6px;
       margin-top:10px;
     }
@@ -187,6 +187,11 @@
       overflow:hidden;
       border-left:5px solid #94a3b8;
     }
+    .service-card.next {
+      border-left-width:7px;
+      box-shadow:0 16px 32px rgba(37,99,235,.14);
+    }
+    .service-card.em_deslocamento { border-left-color:var(--primary); }
     .service-card.cheguei { border-left-color:var(--primary); }
     .service-card.em_execucao { border-left-color:var(--warning); }
     .service-card.finalizado { border-left-color:var(--success); }
@@ -216,6 +221,7 @@
       color:#475569;
       background:#f1f5f9;
     }
+    .status-badge.em_deslocamento { color:#1d4ed8; background:#dbeafe; }
     .status-badge.cheguei { color:#1d4ed8; background:#dbeafe; }
     .status-badge.em_execucao { color:#92400e; background:#fef3c7; }
     .status-badge.finalizado { color:#166534; background:#dcfce7; }
@@ -254,6 +260,70 @@
       grid-template-columns:1fr;
       gap:8px;
       padding:0 14px 14px;
+    }
+    .portal-panel {
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      background:var(--surface);
+      box-shadow:var(--shadow-sm);
+      padding:14px;
+      margin-bottom:12px;
+    }
+    .day-summary {
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin:10px 0 12px;
+    }
+    .day-summary .metric { min-height:64px; padding:10px 8px; }
+    .route-toggle {
+      width:100%;
+      margin:2px 0 12px;
+    }
+    .week-days {
+      display:grid;
+      grid-template-columns:1fr;
+      gap:8px;
+    }
+    .week-day {
+      width:100%;
+      min-height:58px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#fff;
+      padding:10px 12px;
+      text-align:left;
+      font-weight:900;
+      color:var(--text);
+    }
+    .week-day.active {
+      border-color:rgba(37,99,235,.45);
+      background:#eff6ff;
+      color:#1d4ed8;
+    }
+    .week-count {
+      min-width:32px;
+      min-height:28px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:999px;
+      background:#f1f5f9;
+      color:var(--text-2);
+      font-size:12px;
+    }
+    .help-grid {
+      display:grid;
+      grid-template-columns:1fr;
+      gap:10px;
+    }
+    .help-grid button {
+      justify-content:flex-start;
+      text-align:left;
     }
     .primary, .secondary, .danger-soft {
       border:0;
@@ -349,7 +419,7 @@
       transform:translateX(-50%);
       width:min(calc(100% - 24px), 720px);
       display:grid;
-      grid-template-columns:repeat(4,1fr);
+      grid-template-columns:repeat(5,1fr);
       gap:8px;
       padding:8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
       border:1px solid rgba(219,228,239,.95);
@@ -512,23 +582,33 @@
           <div class="metric"><strong id="m-pendentes">0</strong><span>Pendentes</span></div>
         </div>
         <nav class="quick-nav" aria-label="Atalhos do portal">
-          <button id="tab-servicos" class="active" onclick="showSection('servicos')">Meus servicos</button>
-          <button id="tab-checklist" onclick="showSection('checklist')">Checklist diario</button>
-          <button id="tab-recados" onclick="showSection('recados')">Recados</button>
-          <button id="tab-historico" onclick="showSection('historico')">Historico do dia</button>
+          <button id="tab-servicos" class="active" onclick="showSection('servicos')">Hoje</button>
+          <button id="tab-semana" onclick="showSection('semana')">Semana</button>
+          <button id="tab-checklist" onclick="showSection('checklist')">Checklist</button>
+          <button id="tab-ajuda" onclick="showSection('ajuda')">Ajuda</button>
+          <button id="tab-mais" onclick="showSection('mais')">Mais</button>
         </nav>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-          <button class="danger-soft" type="button" onclick="callSupport()">Chamar ajuda</button>
+          <button class="danger-soft" type="button" onclick="showSection('ajuda')">Chamar ajuda</button>
           <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
         </div>
         <div id="message-highlight"></div>
       </div>
       <section class="section active" id="section-servicos">
         <div class="section-head">
-          <div class="section-title">Meus servicos</div>
-          <div class="section-sub">Use os botoes grandes para registrar cada etapa do atendimento.</div>
+          <div class="section-title">Hoje</div>
+          <div class="section-sub">Proximo atendimento, roteiro completo e acoes rapidas.</div>
         </div>
         <div id="services-list" class="service-list"><div class="loading">Carregando servicos...</div></div>
+      </section>
+
+      <section class="section" id="section-semana">
+        <div class="section-head">
+          <div class="section-title">Semana</div>
+          <div class="section-sub">Agenda semanal do tecnico individual quando o link usa tecnicoId.</div>
+        </div>
+        <div id="week-list" class="week-days"></div>
+        <div id="week-services" class="service-list" style="margin-top:12px"></div>
       </section>
 
       <section class="section" id="section-checklist">
@@ -629,18 +709,47 @@
     <section class="section" id="section-recados">
       <div class="section-head">
         <div class="section-title">Recados e lembretes</div>
-        <div class="section-sub">Mensagens enviadas pela operação para sua equipe.</div>
+        <div class="section-sub">Mensagens enviadas pela operacao para sua equipe.</div>
       </div>
       <div id="messages-list" class="history-list"></div>
+    </section>
+
+    <section class="section" id="section-ajuda">
+      <div class="section-head">
+        <div class="section-title">Ajuda</div>
+        <div class="section-sub">Use quando algo impedir ou atrasar o atendimento.</div>
+      </div>
+      <div class="help-grid">
+        <button class="danger-soft" type="button" onclick="callSupport('Chamar supervisor')">Chamar supervisor</button>
+        <button class="secondary" type="button" onclick="callSupport('Problema com cliente')">Problema com cliente</button>
+        <button class="secondary" type="button" onclick="callSupport('Falta de produto/equipamento')">Falta de produto/equipamento</button>
+        <button class="secondary" type="button" onclick="callSupport('Atraso no roteiro')">Atraso no roteiro</button>
+        <button class="secondary" type="button" onclick="callSupport('Problema no veiculo')">Problema no veiculo</button>
+      </div>
+    </section>
+
+    <section class="section" id="section-mais">
+      <div class="section-head">
+        <div class="section-title">Mais</div>
+        <div class="section-sub">Recados, historico, equipe e diagnostico.</div>
+      </div>
+      <div id="team-info" class="portal-panel"></div>
+      <div class="help-grid">
+        <button class="secondary" type="button" onclick="showSection('recados')">Recados do dia</button>
+        <button class="secondary" type="button" onclick="showSection('historico')">Historico do dia</button>
+        <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
+        <button class="danger-soft" type="button" onclick="callSupport('Enviar observacao')">Enviar observacao</button>
+      </div>
     </section>
     </div>
   </main>
 
   <nav class="bottom-nav" aria-label="Navegacao principal">
-    <button class="active" data-bottom="servicos" onclick="showSection('servicos')">Servicos</button>
+    <button class="active" data-bottom="servicos" onclick="showSection('servicos')">Hoje</button>
+    <button data-bottom="semana" onclick="showSection('semana')">Semana</button>
     <button data-bottom="checklist" onclick="showSection('checklist')">Checklist</button>
-    <button data-bottom="recados" onclick="showSection('recados')">Recados</button>
-    <button data-bottom="historico" onclick="showSection('historico')">Historico</button>
+    <button data-bottom="ajuda" onclick="showSection('ajuda')">Ajuda</button>
+    <button data-bottom="mais" onclick="showSection('mais')">Mais</button>
   </nav>
 
   <div class="modal-bg" id="finish-modal" onclick="if(event.target===event.currentTarget)closeFinishModal()">
@@ -714,6 +823,7 @@
     })();
 
     const portal = {
+      tecnicoId: params.get('tecnicoId') || '',
       tecnico: params.get('tecnico') || params.get('motorista') || 'Tecnico',
       data: params.get('data') || new Date().toISOString().slice(0, 10),
       veiculo: params.get('veiculo') || '',
@@ -738,6 +848,9 @@
       finalDailyState: 'ok',
       finishState: 'ok',
       finishServiceId: null,
+      routeExpanded: false,
+      selectedWeekDate: params.get('data') || new Date().toISOString().slice(0, 10),
+      weekServicesByDate: {},
       gps: { saida:null, retorno:null },
       matchedTech: null,
       loading: false,
@@ -745,6 +858,23 @@
 
     function normalizeText(value) {
       return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function slugText(value) {
+      return normalizeText(value).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    function splitTeamNames(value) {
+      return String(value || '')
+        .split(/\s*(?:\/|,|\be\b|\+)\s*/i)
+        .map(item => item.trim())
+        .filter(Boolean);
+    }
+
+    function titleFromSlug(value) {
+      const raw = String(value || '').replace(/[-_]+/g, ' ').trim();
+      if (!raw) return 'Tecnico';
+      return raw.split(/\s+/).map(part => part ? part[0].toUpperCase() + part.slice(1).toLowerCase() : '').join(' ');
     }
 
     function toast(message, type = '') {
@@ -762,7 +892,7 @@
       const offline = !navigator.onLine;
       const pending = loadQueue().length;
       pill.classList.toggle('offline', offline);
-      text.textContent = `${offline ? 'Offline' : 'Online'}${pending ? ` · ${pending} pendente(s)` : ''}`;
+      text.textContent = `${offline ? 'Offline' : 'Online'}${pending ? ` Â· ${pending} pendente(s)` : ''}`;
     }
 
     function formatDateLabel(dateStr) {
@@ -801,13 +931,13 @@
 
     function addHistory(text) {
       const all = loadHistory();
-      all.unshift({ id: Date.now(), date: portal.data, tecnico: portal.tecnico, text, at: nowIso() });
+      all.unshift({ id: Date.now(), date: portal.data, tecnico: portalDisplayName(), text, at: nowIso() });
       localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, 80)));
       renderHistory();
     }
 
     function portalCacheId() {
-      return `${portal.data}|${normalizeText(portal.tecnico)}|${normalizeText(portal.equipe)}`;
+      return `${portal.data}|${slugText(portal.tecnicoId || portal.tecnico)}|${normalizeText(portal.equipe)}`;
     }
 
     function loadPortalCache() {
@@ -829,7 +959,8 @@
           vehicles: state.vehicles || [],
           checklists: state.checklists || [],
           messages: state.messages || [],
-          events: state.events || []
+          events: state.events || [],
+          weekServicesByDate: state.weekServicesByDate || {}
         };
         localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(all));
       } catch(e) {}
@@ -859,7 +990,7 @@
         `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
         `API: ${API_BASE_URL}`,
         `Navegador: ${navigator.onLine ? 'online' : 'offline'}`,
-        `Tecnico/equipe: ${portal.tecnico}`,
+        `Tecnico/equipe: ${portalDisplayName()}${portal.tecnicoId ? ` (${portal.tecnicoId})` : ''}`,
         `Data: ${portal.data}`,
         `Veiculo: ${portal.veiculo || 'nao informado'}`,
         `Fila local: ${queue.length} item(ns)`,
@@ -985,17 +1116,18 @@
     function messageMatchesPortal(msg) {
       const target = normalizeText(`${msg.tecnico || ''} ${msg.equipe || ''}`);
       if (!target) return true;
-      const tech = normalizeText(portal.tecnico);
+      const tech = normalizeText(portalDisplayName());
+      const techId = normalizeText(portal.tecnicoId);
       const equipe = normalizeText(portal.equipe);
-      return (tech && target.includes(tech)) || (equipe && target.includes(equipe)) || (tech && tech.includes(target));
+      return (techId && target.includes(techId)) || (tech && target.includes(tech)) || (equipe && target.includes(equipe)) || (tech && tech.includes(target));
     }
 
     async function recordEvent(tipo, titulo, detalhes = '', service = null, gps = null) {
       const rec = {
         id: Date.now() + Math.floor(Math.random() * 1000),
         date: portal.data,
-        tecnico: portal.tecnico,
-        equipe: portal.equipe || portal.tecnico,
+        tecnico: portalDisplayName(),
+        equipe: portal.equipe || portalDisplayName(),
         service_id: service?.id ? Number(service.id) : null,
         tipo,
         titulo,
@@ -1026,6 +1158,7 @@
     function statusLabel(status) {
       return {
         agendado:'Agendado',
+        em_deslocamento:'Em deslocamento',
         cheguei:'Cheguei',
         em_execucao:'Em execucao',
         finalizado:'Finalizado',
@@ -1033,14 +1166,49 @@
       }[status] || 'Agendado';
     }
 
-    function matchTechnician() {
-      const wanted = normalizeText(portal.tecnico);
-      state.matchedTech = state.technicians.find(t => normalizeText(t.nome).includes(wanted) || wanted.includes(normalizeText(t.nome))) || null;
+    function portalDisplayName() {
+      return state.matchedTech?.nome || (portal.tecnicoId ? titleFromSlug(portal.tecnicoId) : portal.tecnico);
     }
 
-    function serviceMatchesPortal(s) {
-      if (serviceDate(s) !== portal.data) return false;
+    function technicianAliases(tech) {
+      const names = [
+        tech?.nome,
+        tech?.name,
+        tech?.slug,
+        portal.tecnicoId,
+        portal.tecnico
+      ].filter(Boolean);
+      return Array.from(new Set(names.flatMap(name => [normalizeText(name), slugText(name)]).filter(Boolean)));
+    }
+
+    function serviceHasPortalTechnician(s) {
       const ids = Array.isArray(s.tecnicos_ids) ? s.tecnicos_ids.map(String) : [];
+      if (state.matchedTech?.id && ids.includes(String(state.matchedTech.id))) return true;
+      const aliases = technicianAliases(state.matchedTech || { nome: portal.tecnicoId || portal.tecnico });
+      const teamText = normalizeText(`${s.equipe || ''} ${s.eq || ''}`);
+      const teamParts = splitTeamNames(`${s.equipe || ''} ${s.eq || ''}`)
+        .flatMap(name => [normalizeText(name), slugText(name)]);
+      return aliases.some(alias => teamParts.includes(alias) || teamText.includes(alias));
+    }
+
+    function matchTechnician() {
+      const wantedId = String(portal.tecnicoId || '').trim();
+      const wantedSlug = slugText(wantedId || portal.tecnico);
+      const wantedName = normalizeText(portal.tecnico);
+      state.matchedTech = state.technicians.find(t => {
+        const id = String(t.id || '').trim();
+        const nome = normalizeText(t.nome || t.name || '');
+        const slug = slugText(t.nome || t.name || id);
+        if (wantedId && id && id === wantedId) return true;
+        if (wantedSlug && slug === wantedSlug) return true;
+        return wantedName && (nome.includes(wantedName) || wantedName.includes(nome));
+      }) || null;
+    }
+
+    function serviceMatchesPortal(s, expectedDate = portal.data) {
+      if (serviceDate(s) !== expectedDate) return false;
+      const ids = Array.isArray(s.tecnicos_ids) ? s.tecnicos_ids.map(String) : [];
+      if (portal.tecnicoId) return serviceHasPortalTechnician(s);
       if (state.matchedTech && ids.includes(String(state.matchedTech.id))) return true;
       const hay = normalizeText(`${s.equipe || ''} ${s.eq || ''}`);
       const tech = normalizeText(portal.tecnico);
@@ -1052,6 +1220,10 @@
 
     async function fetchPortalServices() {
       return await requestBackendJson(`/api/services?date=${encodeURIComponent(portal.data)}&limit=500`);
+    }
+
+    async function fetchPortalServicesByDate(date) {
+      return await requestBackendJson(`/api/services?date=${encodeURIComponent(date)}&limit=500`);
     }
 
     async function fetchPortalTechnicians() {
@@ -1079,6 +1251,7 @@
         state.messages = cached.messages || state.messages || [];
         state.events = cached.events || state.events || [];
         state.services = cached.services || state.services || [];
+        state.weekServicesByDate = cached.weekServicesByDate || state.weekServicesByDate || {};
       }
       const [tecRes, veiRes, svcRes, clRes, msgRes, evRes] = await Promise.allSettled([
         fetchPortalTechnicians(),
@@ -1096,6 +1269,8 @@
       state.events = settledData(evRes, state.events || []).filter(messageMatchesPortal);
       matchTechnician();
       state.services = settledData(svcRes, state.services || []).filter(serviceMatchesPortal);
+      state.weekServicesByDate = { ...(state.weekServicesByDate || {}), [portal.data]: state.services };
+      await loadWeekServices();
 
       const failed = [tecRes, veiRes, svcRes, clRes, msgRes, evRes].filter(result => result.status === 'rejected');
       if (failed.length && !state.services.length) {
@@ -1109,23 +1284,65 @@
       renderAll();
     }
 
+    function weekDatesFrom(dateStr) {
+      const base = new Date(`${dateStr}T12:00:00`);
+      const day = base.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(base);
+      monday.setDate(base.getDate() + mondayOffset);
+      return Array.from({ length: 7 }, (_, idx) => {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + idx);
+        return d.toISOString().slice(0, 10);
+      });
+    }
+
+    async function loadWeekServices() {
+      const dates = weekDatesFrom(portal.data);
+      const missing = dates.filter(date => date !== portal.data);
+      const results = await Promise.allSettled(missing.map(date => fetchPortalServicesByDate(date)));
+      results.forEach((result, idx) => {
+        const date = missing[idx];
+        const raw = settledData(result, state.weekServicesByDate?.[date] || []);
+        state.weekServicesByDate[date] = raw.filter(service => serviceMatchesPortal(service, date));
+      });
+      state.weekServicesByDate[portal.data] = state.services || [];
+      if (!state.selectedWeekDate || !dates.includes(state.selectedWeekDate)) state.selectedWeekDate = portal.data;
+    }
+
     function renderAll() {
-      document.getElementById('tech-name').textContent = portal.tecnico;
-      document.getElementById('date-text').textContent = formatDateLabel(portal.data);
-      document.getElementById('vehicle-chip').textContent = portal.veiculo || 'Sem veiculo';
+      document.getElementById('tech-name').textContent = portalDisplayName();
+      document.getElementById('date-text').textContent = portalSubtitle();
+      document.getElementById('vehicle-chip').textContent = portalVehicleForDay() || 'Sem veiculo';
       renderSummary();
       renderServices();
+      renderWeek();
       renderVehicles();
       renderFuel();
       renderEquipment();
       renderChecklistDefaults();
       renderMessages();
       renderHistory();
+      renderTeamInfo();
+    }
+
+    function portalVehicleForDay() {
+      return portal.veiculo || state.services.find(s => s.veiculo)?.veiculo || '';
+    }
+
+    function portalTeamForDay() {
+      return state.services.find(s => s.equipe)?.equipe || portal.equipe || portal.tecnico || '';
+    }
+
+    function portalSubtitle() {
+      const team = portalTeamForDay();
+      const vehicle = portalVehicleForDay();
+      return `${formatDateLabel(portal.data)}${team ? ` Â· Hoje com: ${team}` : ''}${vehicle ? ` Â· Veiculo: ${vehicle}` : ''}`;
     }
 
     function renderSummary() {
       const total = state.services.length;
-      const emExec = state.services.filter(s => ['cheguei','em_execucao'].includes(execStatus(s))).length;
+      const emExec = state.services.filter(s => ['em_deslocamento','cheguei','em_execucao'].includes(execStatus(s))).length;
       const finalizados = state.services.filter(s => execStatus(s) === 'finalizado').length;
       const pendentes = state.services.filter(s => !['finalizado','problema'].includes(execStatus(s))).length;
       document.getElementById('m-agendados').textContent = total;
@@ -1136,33 +1353,67 @@
 
     function renderServices() {
       const list = document.getElementById('services-list');
-      if (!state.services.length) {
+      const ordered = sortServicesByTime(state.services);
+      if (!ordered.length) {
         list.innerHTML = '<div class="empty">Nenhum servico encontrado para este tecnico nesta data.</div>';
         return;
       }
-      list.innerHTML = state.services.map(s => {
-        const status = execStatus(s);
-        const os = s.os || s.OS || '';
-        return `
-          <article class="service-card ${status}">
-            <div class="service-body">
-              <div class="service-top">
+      const next = ordered.find(s => !['finalizado','problema'].includes(execStatus(s))) || ordered[0];
+      const others = ordered.filter(s => String(s.id) !== String(next.id));
+      const routeServices = state.routeExpanded ? ordered : others;
+      list.innerHTML = `
+        <div class="portal-panel">
+          <div class="step-title">Resumo do dia</div>
+          <div class="day-summary">
+            <div class="metric blue"><strong>${ordered.length}</strong><span>Total</span></div>
+            <div class="metric ok"><strong>${ordered.filter(s => execStatus(s) === 'finalizado').length}</strong><span>Finalizados</span></div>
+            <div class="metric"><strong>${ordered.filter(s => !['finalizado','problema'].includes(execStatus(s))).length}</strong><span>Pendentes</span></div>
+            <div class="metric warn"><strong>${ordered.filter(s => execStatus(s) === 'problema').length}</strong><span>Problemas</span></div>
+          </div>
+        </div>
+        <div class="step-title">Proximo servico</div>
+        ${renderServiceCard(next, { highlight:true })}
+        <button class="secondary route-toggle" type="button" onclick="toggleFullRoute()">${state.routeExpanded ? 'Ocultar roteiro completo' : 'Ver roteiro completo'}</button>
+        <div class="step-title">${state.routeExpanded ? 'Roteiro completo' : 'Demais servicos'}</div>
+        ${routeServices.length ? routeServices.map((s, idx) => renderServiceCard(s, { routeIndex: state.routeExpanded ? idx + 1 : null })).join('') : '<div class="empty">Sem outros servicos nesta data.</div>'}
+      `;
+    }
+
+    function sortServicesByTime(items) {
+      return [...(items || [])].sort((a, b) => String(a.horario || a.hr || '').localeCompare(String(b.horario || b.hr || '')));
+    }
+
+    function toggleFullRoute() {
+      state.routeExpanded = !state.routeExpanded;
+      renderServices();
+    }
+
+    function renderServiceCard(s, options = {}) {
+      const status = execStatus(s);
+      const os = s.os || s.OS || '';
+      const prefix = options.routeIndex ? `<span class="time-badge">${options.routeIndex}</span>` : '';
+      return `
+        <article class="service-card ${status}${options.highlight ? ' next' : ''}">
+          <div class="service-body">
+            <div class="service-top">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                ${prefix}
                 <span class="time-badge">${s.horario || s.hr || '--:--'}</span>
-                <span class="status-badge ${status}">${statusLabel(status)}</span>
               </div>
-              <div class="client">${escapeHtml(s.cliente || s.cl || 'Cliente')}</div>
-              <div class="meta">${escapeHtml(s.endereco || 'Endereco nao informado')}</div>
-              ${renderMapsAction(s)}
-              <div class="service-grid">
-                <div class="mini">Tipo: ${escapeHtml(serviceTypes(s))}</div>
-                <div class="mini">OS: ${escapeHtml(os || '-')}</div>
-                <div class="mini">Equipe: ${escapeHtml(s.equipe || '-')}</div>
-                <div class="mini">Veiculo: ${escapeHtml(s.veiculo || '-')}</div>
-              </div>
+              <span class="status-badge ${status}">${statusLabel(status)}</span>
             </div>
-            <div class="service-actions">${renderServiceAction(s, status)}</div>
-          </article>`;
-      }).join('');
+            <div class="client">${escapeHtml(s.cliente || s.cl || 'Cliente')}</div>
+            <div class="meta">${escapeHtml(s.endereco || 'Endereco nao informado')}</div>
+            ${renderMapsAction(s)}
+            <div class="service-grid">
+              <div class="mini">Tipo: ${escapeHtml(serviceTypes(s))}</div>
+              <div class="mini">OS: ${escapeHtml(os || '-')}</div>
+              <div class="mini">Equipe: ${escapeHtml(s.equipe || '-')}</div>
+              <div class="mini">Veiculo: ${escapeHtml(s.veiculo || '-')}</div>
+            </div>
+          </div>
+          <div class="service-actions">${renderServiceAction(s, status)}</div>
+        </article>`;
     }
 
     function serviceAddress(s) {
@@ -1177,12 +1428,13 @@
       const address = serviceAddress(s);
       if (!address) return '';
       const url = buildGoogleMapsUrl(address);
-      return `<div class="route-row"><a class="maps-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">⌖ Maps</a></div>`;
+      return `<div class="route-row"><a class="maps-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">âŒ– Maps</a></div>`;
     }
 
     function renderServiceAction(s, status) {
       const id = escapeHtml(String(s.id));
-      if (status === 'agendado') return `<button class="primary" onclick="markArrived('${id}')">Cheguei no local</button>`;
+      if (status === 'agendado') return `<button class="primary" onclick="startDisplacement('${id}')">Iniciar deslocamento</button>`;
+      if (status === 'em_deslocamento') return `<button class="primary" onclick="markArrived('${id}')">Cheguei no local</button>`;
       if (status === 'cheguei') return `<button class="primary" onclick="startService('${id}')">Iniciar servico</button>`;
       if (status === 'em_execucao') return `<button class="primary" onclick="openFinishModal('${id}')">Finalizar servico</button>`;
       if (status === 'problema') return '<button class="danger-soft" disabled>Problema registrado</button>';
@@ -1198,6 +1450,7 @@
       savePortalCache();
       renderSummary();
       renderServices();
+      renderWeek();
       renderHistory();
     }
 
@@ -1224,8 +1477,19 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
-      await recordEvent('chegada', 'Chegada registrada', `${s?.cliente || 'Serviço'} - ${s?.endereco || ''}`, s, gps);
+      await recordEvent('chegada', 'Chegada registrada', `${s?.cliente || 'ServiÃ§o'} - ${s?.endereco || ''}`, s, gps);
       addHistory('Chegada registrada no servico.');
+    }
+
+    async function startDisplacement(id) {
+      const s = state.services.find(item => String(item.id) === String(id));
+      const payload = {
+        exec_status:'em_deslocamento',
+      };
+      updateLocalService(id, payload);
+      await persistService(id, payload, 'Deslocamento iniciado.');
+      await recordEvent('deslocamento', 'Deslocamento iniciado', s?.cliente || 'Deslocamento iniciado', s, null);
+      addHistory('Deslocamento iniciado.');
     }
 
     async function startService(id) {
@@ -1238,7 +1502,7 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, 'Servico iniciado.');
-      await recordEvent('inicio', 'Serviço iniciado', s?.cliente || 'Serviço iniciado', s, null);
+      await recordEvent('inicio', 'ServiÃ§o iniciado', s?.cliente || 'ServiÃ§o iniciado', s, null);
       addHistory('Inicio de servico registrado.');
     }
 
@@ -1292,8 +1556,8 @@
       await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
       await recordEvent(
         state.finishState === 'ok' ? 'finalizacao' : 'problema',
-        state.finishState === 'ok' ? 'Serviço finalizado' : 'Problema registrado',
-        state.finishState === 'ok' ? (s?.cliente || 'Serviço finalizado') : problemText,
+        state.finishState === 'ok' ? 'ServiÃ§o finalizado' : 'Problema registrado',
+        state.finishState === 'ok' ? (s?.cliente || 'ServiÃ§o finalizado') : problemText,
         s,
         null
       );
@@ -1309,17 +1573,56 @@
       document.querySelector('.app-scroll')?.scrollTo({ top:0, behavior:'auto' });
     }
 
-    async function callSupport() {
+    function renderWeek() {
+      const weekList = document.getElementById('week-list');
+      const weekServices = document.getElementById('week-services');
+      if (!weekList || !weekServices) return;
+      const dates = weekDatesFrom(portal.data);
+      weekList.innerHTML = dates.map(date => {
+        const count = (state.weekServicesByDate?.[date] || []).length;
+        const d = new Date(`${date}T12:00:00`);
+        const label = d.toLocaleDateString('pt-BR', { weekday:'short', day:'2-digit', month:'2-digit' });
+        return `<button class="week-day ${state.selectedWeekDate === date ? 'active' : ''}" type="button" onclick="selectWeekDate('${date}')">
+          <span>${escapeHtml(label)}</span>
+          <span class="week-count">${count}</span>
+        </button>`;
+      }).join('');
+      const selected = sortServicesByTime(state.weekServicesByDate?.[state.selectedWeekDate] || []);
+      weekServices.innerHTML = selected.length
+        ? selected.map((s, idx) => renderServiceCard(s, { routeIndex: idx + 1 })).join('')
+        : '<div class="empty">Nenhum servico para este tecnico neste dia.</div>';
+    }
+
+    function selectWeekDate(date) {
+      state.selectedWeekDate = date;
+      renderWeek();
+    }
+
+    function renderTeamInfo() {
+      const box = document.getElementById('team-info');
+      if (!box) return;
+      const team = portalTeamForDay() || 'Equipe nao informada';
+      const vehicle = portalVehicleForDay() || 'Veiculo nao informado';
+      box.innerHTML = `
+        <div class="step-title">Dados da equipe</div>
+        <div class="meta">Tecnico: ${escapeHtml(portalDisplayName())}</div>
+        <div class="meta">Equipe de hoje: ${escapeHtml(team)}</div>
+        <div class="meta">Veiculo: ${escapeHtml(vehicle)}</div>
+        <div class="meta">Data: ${escapeHtml(formatDateLabel(portal.data))}</div>
+      `;
+    }
+
+    async function callSupport(reason = 'Pedido de ajuda') {
       const gps = await getGps();
-      const active = state.services.find(s => ['cheguei','em_execucao'].includes(execStatus(s))) || state.services[0] || null;
-      const location = gps ? `\nLocalização: https://maps.google.com/?q=${encodeURIComponent(`${gps.lat},${gps.lng}`)}` : '';
-      const msg = `Pedido de ajuda - Portal do Técnico
-Técnico/equipe: ${portal.tecnico}
+      const active = state.services.find(s => ['em_deslocamento','cheguei','em_execucao'].includes(execStatus(s))) || state.services[0] || null;
+      const location = gps ? `\nLocalizacao: https://maps.google.com/?q=${encodeURIComponent(`${gps.lat},${gps.lng}`)}` : '';
+      const msg = `${reason} - Portal do Tecnico
+Tecnico/equipe: ${portalDisplayName()}
 Data: ${portal.data}
-Serviço: ${active ? `${active.cliente || 'Cliente'} - ${active.endereco || 'sem endereço'}` : 'sem serviço selecionado'}
+Servico: ${active ? `${active.cliente || 'Cliente'} - ${active.endereco || 'sem endereco'}` : 'sem servico selecionado'}
 Status: ${active ? statusLabel(execStatus(active)) : 'sem status'}
 Portal: ${currentPortalLink()}${location}`;
-      await recordEvent('ajuda', 'Pedido de ajuda', msg, active, gps);
+      await recordEvent('ajuda', reason, msg, active, gps);
       const target = portal.suporte ? `55${portal.suporte.replace(/^55/, '')}` : '';
       const url = target
         ? `https://wa.me/${target}?text=${encodeURIComponent(msg)}`
@@ -1342,7 +1645,7 @@ Portal: ${currentPortalLink()}${location}`;
       }
       list.innerHTML = state.messages.map(msg => `
         <div class="history-card" style="border-left:5px solid ${msg.prioridade === 'alta' ? 'var(--warning)' : 'var(--primary)'}">
-          <strong>${msg.prioridade === 'alta' ? 'Importante' : 'Recado'} · ${new Date(msg.created_at || Date.now()).toLocaleString('pt-BR')}</strong>
+          <strong>${msg.prioridade === 'alta' ? 'Importante' : 'Recado'} Â· ${new Date(msg.created_at || Date.now()).toLocaleString('pt-BR')}</strong>
           <div class="meta">${escapeHtml(msg.mensagem || '')}</div>
           <div style="margin-top:10px">
             ${msg.lido ? '<span class="status-badge finalizado">Lido</span>' : `<button class="secondary" type="button" onclick="markMessageRead('${escapeHtml(String(msg.id))}')">Marcar como lido</button>`}
@@ -1483,7 +1786,7 @@ Portal: ${currentPortalLink()}${location}`;
       try {
         const saved = await createChecklistViaBackend(rec);
         toast('Checklist salvo com sucesso.', 'ok');
-        await recordEvent('checklist', 'Checklist diário salvo', `${vei} - ${motorista}`, null, null);
+        await recordEvent('checklist', 'Checklist diÃ¡rio salvo', `${vei} - ${motorista}`, null, null);
         addHistory('Checklist diario salvo.');
         state.checklists.unshift(saved || rec);
         savePortalCache();

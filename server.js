@@ -2484,6 +2484,10 @@ app.get('/portal-tecnico.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'frontend', 'portal-tecnico.html'));
 });
 
+app.get('/portal-tecnico', (req, res) => {
+  res.sendFile(path.join(__dirname, 'frontend', 'portal-tecnico.html'));
+});
+
 app.get('/api/maps/distance-matrix', async (req, res) => {
   try {
     if (!process.env.GOOGLE_MAPS_API_KEY) {

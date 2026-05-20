@@ -15393,17 +15393,72 @@ function rotPortalTecnicoNome(eq) {
   return nome || 'Tecnico';
 }
 
+function rotPortalSlugTecnico(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function rotPortalSplitEquipe(value) {
+  return String(value || '')
+    .replace(/^⚠\s*/, '')
+    .split(/\s*(?:\/|,|\be\b|\+)\s*/i)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function rotPortalTecnicosDoGrupo(eq) {
+  const map = new Map();
+  const add = (tecnico) => {
+    const nome = String(tecnico?.nome || tecnico || '').trim();
+    const id = String(tecnico?.id || '').trim();
+    if (!nome && !id) return;
+    const slug = rotPortalSlugTecnico(nome || id);
+    const key = id || slug;
+    if (!key || map.has(key)) return;
+    map.set(key, { id, nome: nome || id, slug });
+  };
+  (eq?.sequencia || eq?.svcs || []).forEach(servico => {
+    try {
+      extrairTecnicosOperacionais(servico).forEach(add);
+    } catch(e) {}
+  });
+  if (!map.size) rotPortalSplitEquipe(rotPortalTecnicoNome(eq)).forEach(add);
+  return Array.from(map.values());
+}
+
+function rotPortalTecnicoPrincipal(eq) {
+  return rotPortalTecnicosDoGrupo(eq)[0] || null;
+}
+
+function rotPortalLinksIndividuais(eq, data) {
+  return rotPortalTecnicosDoGrupo(eq)
+    .filter(t => t.slug || t.id)
+    .map(t => ({
+      nome: t.nome || t.id || 'Tecnico',
+      link: rotMontarLinkPortal(eq, data, t)
+    }));
+}
+
 function rotPortalDisponivel(eq) {
   return !!eq && !String(eq.equipe || '').startsWith('⚠');
 }
 
-function rotMontarLinkPortal(eq, data) {
+function rotMontarLinkPortal(eq, data, tecnicoRef = null) {
   if (!rotPortalDisponivel(eq)) return '';
   const params = new URLSearchParams();
-  params.set('tecnico', rotPortalTecnicoNome(eq));
+  const equipe = rotPortalTecnicoNome(eq);
+  const tecnico = tecnicoRef || rotPortalTecnicoPrincipal(eq);
+  const tecnicoNome = tecnico?.nome || equipe;
+  const tecnicoId = tecnico?.slug || rotPortalSlugTecnico(tecnicoNome);
+  if (tecnicoId) params.set('tecnicoId', tecnicoId);
+  params.set('tecnico', tecnicoNome);
   params.set('data', data || document.getElementById('rot-data')?.value || new Date().toISOString().split('T')[0]);
   if (eq.veiculo && eq.veiculo !== '—') params.set('veiculo', eq.veiculo);
-  params.set('equipe', rotPortalTecnicoNome(eq));
+  params.set('equipe', equipe);
   if (API_BASE_URL) params.set('api_base', String(API_BASE_URL).replace(/\/$/, ''));
   const suporte = rotSuporteWhatsApp();
   if (suporte) params.set('suporte', suporte);
@@ -15414,6 +15469,10 @@ function rotMontarTextoPortal(eq, data) {
   if (!rotPortalDisponivel(eq)) return '';
   const paradas = groupConsecutiveOperationalStops(eq.sequencia || []);
   const portalLink = rotMontarLinkPortal(eq, data);
+  const linksIndividuais = rotPortalLinksIndividuais(eq, data);
+  const linksTxt = linksIndividuais.length > 1
+    ? `\n\nLinks individuais:\n${linksIndividuais.map(item => `${item.nome}: ${item.link}`).join('\n')}`
+    : '';
   const linhas = paradas.map(parada => {
     const base = sf(parada.servicoBase);
     const tarefas = parada.items.map(item => {
@@ -15437,7 +15496,7 @@ Sequência resumida:
 ${linhas || 'Sem serviços listados.'}
 
 Acesse o Portal do Técnico para registrar chegada, início, finalização e checklist:
-${portalLink}`;
+${portalLink}${linksTxt}`;
 }
 
 function normalizeReminderText(value) {
@@ -16811,7 +16870,11 @@ function rotCopiarLinksPortais() {
   const data = document.getElementById('rot-data')?.value;
   const linhas = rotDados
     .filter(rotPortalDisponivel)
-    .map(eq => `${rotPortalTecnicoNome(eq)}: ${eq.portalLink || rotMontarLinkPortal(eq, data)}`);
+    .flatMap(eq => {
+      const individuais = rotPortalLinksIndividuais(eq, data);
+      if (individuais.length > 1) return individuais.map(item => `${item.nome}: ${item.link}`);
+      return [`${rotPortalTecnicoNome(eq)}: ${eq.portalLink || rotMontarLinkPortal(eq, data)}`];
+    });
   if (!linhas.length) {
     toast('Nenhuma equipe definida para gerar portal', 'warn');
     return;
