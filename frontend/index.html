@@ -4436,8 +4436,18 @@ async function carregarVeiculos(){
           <button class="btn btn-ghost btn-sm" id="cli-next-page" onclick="clientesGoPage(1)">Próxima</button>
         </div>
       </div>
+      <div id="barra-massa-clientes" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:10px;align-items:center;gap:10px">
+        <span style="display:flex;color:#1d4ed8"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg></span>
+        <span id="massa-count-clientes" style="font-size:13px;font-weight:700;color:#1d4ed8">0 selecionados</span>
+        <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+          <button onclick="acaoMassaClientes('renovar')" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #bfdbfe;background:#fff;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2"></path><path d="M3 12A9 9 0 0 1 18.5 5.8"></path><path d="M18 2v4h4"></path><path d="M6 22v-4H2"></path></svg> Renovar contratos</button>
+          <button onclick="acaoMassaClientes('whatsapp')" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #bfdbfe;background:#fff;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg> WhatsApp em lote</button>
+          <button onclick="acaoMassaClientes('exportar')" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #bfdbfe;background:#fff;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg> Exportar</button>
+          <button onclick="acaoMassaClientes('excluir')" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #fecaca;background:#fef2f2;color:#dc2626;cursor:pointer;display:flex;align-items:center;gap:5px" title="Exclusão em lote bloqueada nesta versão"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button>
+        </div>
+      </div>
       <div class="tbl-wrap ui-table-card"><table>
-        <thead><tr><th style="width:42px"></th><th>Cliente</th><th>Status</th><th>Prioridade</th><th style="width:80px;text-align:center">Ações</th></tr></thead>
+        <thead><tr><th style="width:42px;padding:10px 12px"><input type="checkbox" id="select-all-clientes" onchange="toggleSelecionarTudoClientes(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:#1d4ed8"></th><th>Cliente</th><th>Status</th><th>Prioridade</th><th style="width:80px;text-align:center">Ações</th></tr></thead>
         <tbody id="cli-tbody"></tbody>
       </table></div>
     </div>
@@ -12680,6 +12690,97 @@ function verHistoricoCliente(clientId) {
 
 document.addEventListener('click', fecharMenusClientes);
 
+function toggleSelecionarTudoClientes(marcado) {
+  document.querySelectorAll('#cli-tbody .row-check').forEach(cb => {
+    if (cb.closest('tr')?.style.display !== 'none') cb.checked = !!marcado;
+  });
+  atualizarSelecaoClientes();
+}
+
+function getIdsClientesSelecionados() {
+  return Array.from(document.querySelectorAll('#cli-tbody .row-check:checked')).map(cb => String(cb.dataset.id || ''));
+}
+
+function getClientesSelecionados() {
+  const ids = new Set(getIdsClientesSelecionados());
+  return (clientesData || []).filter(cliente => ids.has(String(cliente.id)));
+}
+
+function atualizarSelecaoClientes() {
+  const selecionados = getIdsClientesSelecionados();
+  const barra = document.getElementById('barra-massa-clientes');
+  const count = document.getElementById('massa-count-clientes');
+  const selectAll = document.getElementById('select-all-clientes');
+  const checks = Array.from(document.querySelectorAll('#cli-tbody .row-check'));
+  if (count) {
+    count.textContent = `${selecionados.length} cliente${selecionados.length !== 1 ? 's' : ''} selecionado${selecionados.length !== 1 ? 's' : ''}`;
+  }
+  if (barra) barra.style.display = selecionados.length > 0 ? 'flex' : 'none';
+  if (selectAll) {
+    selectAll.checked = checks.length > 0 && checks.every(cb => cb.checked);
+    selectAll.indeterminate = selecionados.length > 0 && !selectAll.checked;
+  }
+}
+
+function csvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function exportarClientesSelecionados(clientes) {
+  if (!clientes.length) return toast('Selecione ao menos um cliente para exportar.', 'warn');
+  const header = ['id', 'nome', 'telefone', 'whatsapp', 'endereco', 'status', 'prioridade', 'tipo', 'recorrente'];
+  const rows = clientes.map(c => [
+    c.id,
+    c.nome,
+    c.telefone,
+    c.whatsapp,
+    c.endereco || c.endereco_completo,
+    normalizeClienteStatus(c.status_operacional || (c.ativo === false ? 'Inativo' : '')),
+    normalizeClientePriority(c.prioridade),
+    c.tipo_cliente || c.categoria || '',
+    c.cliente_recorrente ? 'Sim' : 'Não'
+  ]);
+  const csv = [header, ...rows].map(row => row.map(csvCell).join(';')).join('\r\n');
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `clientes-selecionados-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  toast(`${clientes.length} cliente(s) exportado(s).`, 'ok');
+}
+
+async function copiarWhatsAppClientesSelecionados(clientes) {
+  const linhas = clientes
+    .map(c => {
+      const numero = normalizarTelefoneWhatsApp(c.whatsapp || c.telefone || '');
+      if (!numero) return null;
+      return `${c.nome || 'Cliente'}: https://wa.me/${numero}`;
+    })
+    .filter(Boolean);
+  if (!linhas.length) return toast('Nenhum cliente selecionado tem WhatsApp válido.', 'warn');
+  const texto = linhas.join('\n');
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast(`${linhas.length} contato(s) copiado(s) para WhatsApp.`, 'ok');
+  } catch (error) {
+    console.warn('Falha ao copiar WhatsApp em lote:', error);
+    window.prompt('Copie os contatos de WhatsApp:', texto);
+  }
+}
+
+function acaoMassaClientes(tipo) {
+  const clientes = getClientesSelecionados();
+  if (!clientes.length) return toast('Selecione ao menos um cliente.', 'warn');
+  if (tipo === 'exportar') return exportarClientesSelecionados(clientes);
+  if (tipo === 'whatsapp') return copiarWhatsAppClientesSelecionados(clientes);
+  if (tipo === 'renovar') return toast('Renovação em lote precisa de confirmação/API própria. Use edição individual por enquanto.', 'warn');
+  if (tipo === 'excluir') return toast('Exclusão em lote bloqueada nesta versão para evitar remoção acidental. Use exclusão individual.', 'warn');
+}
+
 async function renderClientes(){
   try {
     const search = (document.getElementById('cli-search')?.value||'').toLowerCase();
@@ -12721,6 +12822,13 @@ async function renderClientes(){
     const totalPages = Math.max(Math.ceil(clientesTotal / clientesPageSize), 1);
     document.getElementById('cli-count').textContent = `${filtered.length} nesta página · ${clientesTotal} total`;
     renderClientesFilterChips();
+    const selectAllClientes = document.getElementById('select-all-clientes');
+    if (selectAllClientes) {
+      selectAllClientes.checked = false;
+      selectAllClientes.indeterminate = false;
+    }
+    const barraMassaClientes = document.getElementById('barra-massa-clientes');
+    if (barraMassaClientes) barraMassaClientes.style.display = 'none';
     const pageInfo = document.getElementById('cli-page-info');
     if (pageInfo) pageInfo.textContent = `Página ${clientesPage} de ${totalPages} · 50 por página`;
     const prevBtn = document.getElementById('cli-prev-page');
@@ -12768,7 +12876,7 @@ async function renderClientes(){
         data-local="${escapeHtmlAttr(c.tipo_local || '')}"
         data-recorrencia="${escapeHtmlAttr(rowRecorrencia)}"
         data-nivel="${escapeHtmlAttr(rowNivel)}">
-        <td style="text-align:center"><input type="checkbox" aria-label="Selecionar cliente ${escapeHtmlAttr(nome)}" style="width:14px;height:14px"></td>
+        <td style="text-align:center"><input type="checkbox" class="row-check" data-id="${escapeHtmlAttr(c.id || '')}" onchange="atualizarSelecaoClientes()" aria-label="Selecionar cliente ${escapeHtmlAttr(nome)}" style="width:15px;height:15px;cursor:pointer;accent-color:#1d4ed8"></td>
         <td class="client-rich-cell" title="${escapeHtmlAttr(endereco)}">
           <div class="client-rich-wrap">
             <div class="client-avatar" style="background:${corAvatarCliente(statusText)};color:${corTextoAvatarCliente(statusText)}">${sanitize(iniciaisCliente(nome))}</div>
