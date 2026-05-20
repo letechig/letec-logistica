@@ -1260,22 +1260,34 @@
       return Array.from(new Set(names.flatMap(name => [normalizeText(name), slugText(name)]).filter(Boolean)));
     }
 
-    function serviceHasPortalTechnician(s) {
-      const ids = parseArrayLike(s.tecnicos_ids || s.tecnicosIds || s.technicians_ids).map(item => String(item).trim()).filter(Boolean);
-      if (state.matchedTech?.id && ids.includes(String(state.matchedTech.id))) return true;
-      if (portal.tecnicoId && ids.some(id => id === portal.tecnicoId || slugText(id) === slugText(portal.tecnicoId))) return true;
-      const aliases = technicianAliases(state.matchedTech || { nome: portal.tecnicoId || portal.tecnico });
-      const serviceTechText = [
+    function serviceTechnicianIds(s) {
+      return parseArrayLike(
+        s.tecnicos_ids
+        || s.tecnicosIds
+        || s.technicians_ids
+        || s.technician_ids
+        || s.tecnico_ids
+        || s.tecnico_id
+      ).map(item => String(item).trim()).filter(Boolean);
+    }
+
+    function serviceTechnicianText(s) {
+      return [
         s.equipe,
         s.eq,
         s.tecnico,
         s.motorista,
         s.tecnico_nome,
-        ...parseArrayLike(s.tecnicos || s.tecnicos_nomes || s.technicians)
+        s.technician,
+        s.technician_name,
+        ...parseArrayLike(s.tecnicos || s.tecnicos_nomes || s.technicians || s.technician_names)
       ].filter(Boolean).join(' ');
-      const teamText = normalizeText(serviceTechText);
-      const teamSlug = slugText(serviceTechText);
-      const teamParts = splitTeamNames(serviceTechText)
+    }
+
+    function textMatchesTechnicianAliases(text, aliases) {
+      const teamText = normalizeText(text);
+      const teamSlug = slugText(text);
+      const teamParts = splitTeamNames(text)
         .flatMap(name => [normalizeText(name), slugText(name)]);
       return aliases.some(alias => {
         if (!alias) return false;
@@ -1283,6 +1295,16 @@
         if (alias.length >= 3 && (teamText.includes(alias) || teamSlug.includes(alias))) return true;
         return false;
       });
+    }
+
+    function serviceHasPortalTechnician(s) {
+      const ids = serviceTechnicianIds(s);
+      const wantedIds = [state.matchedTech?.id, portal.tecnicoId]
+        .filter(Boolean)
+        .map(item => String(item).trim());
+      if (wantedIds.some(wanted => ids.some(id => id === wanted || slugText(id) === slugText(wanted)))) return true;
+      const aliases = technicianAliases(state.matchedTech || { nome: portal.tecnicoId || portal.tecnico });
+      return textMatchesTechnicianAliases(serviceTechnicianText(s), aliases);
     }
 
     function matchTechnician() {
@@ -1301,14 +1323,15 @@
 
     function serviceMatchesPortal(s, expectedDate = portal.data) {
       if (serviceDate(s) !== expectedDate) return false;
-      const ids = parseArrayLike(s.tecnicos_ids || s.tecnicosIds || s.technicians_ids).map(String);
-      if (portal.tecnicoId) return serviceHasPortalTechnician(s);
+      const ids = serviceTechnicianIds(s);
+      if (portal.tecnicoId && serviceHasPortalTechnician(s)) return true;
       if (state.matchedTech && ids.includes(String(state.matchedTech.id))) return true;
-      const hay = normalizeText(`${s.equipe || ''} ${s.eq || ''}`);
+      const hay = normalizeText(serviceTechnicianText(s));
       const tech = normalizeText(portal.tecnico);
       const equipe = normalizeText(portal.equipe);
       if (tech && hay.includes(tech)) return true;
       if (equipe && hay.includes(equipe)) return true;
+      if (portal.tecnicoId) return false;
       return !tech && !equipe;
     }
 
@@ -1364,7 +1387,7 @@
       matchTechnician();
       const rawServices = settledData(svcRes, state.services || []);
       state.rawServicesCount = rawServices.length;
-      state.services = rawServices.filter(serviceMatchesPortal);
+      state.services = rawServices.filter(service => serviceMatchesPortal(service));
       state.weekServicesByDate = { ...(state.weekServicesByDate || {}), [portal.data]: state.services };
       await loadWeekServices();
 
