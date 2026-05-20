@@ -2081,6 +2081,68 @@ td.bold { color: var(--text); font-weight: 600; }
 .client-name-cell { min-width:170px; }
 .client-name-cell .client-name { font-weight:850; color:var(--text); }
 .client-name-cell .client-sub { margin-top:2px; font-family:var(--mono); font-size:10px; color:var(--text3); }
+.client-rich-cell { min-width:340px; }
+.client-rich-wrap { display:flex; align-items:center; gap:10px; }
+.client-avatar {
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:800;
+  flex-shrink:0;
+}
+.client-rich-name { font-size:13px; font-weight:850; color:var(--text); margin-bottom:2px; }
+.client-rich-meta { font-size:11px; color:var(--text3); display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.client-rich-meta span { display:inline-flex; align-items:center; gap:3px; }
+.client-rich-badges { display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
+.client-kpi-card { transition:transform .15s, box-shadow .15s, border-color .15s; }
+.client-kpi-card:hover { transform:translateY(-1px); box-shadow:var(--shadow-sm); }
+.ctx-wrap { position:relative; display:flex; justify-content:center; }
+.ctx-button {
+  width:32px;
+  height:32px;
+  border-radius:8px;
+  border:1px solid #e5e7eb;
+  background:#fff;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#6b7280;
+}
+.ctx-menu {
+  display:none;
+  position:absolute;
+  right:0;
+  top:36px;
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  box-shadow:0 4px 16px rgba(0,0,0,.08);
+  min-width:180px;
+  z-index:100;
+  overflow:hidden;
+}
+.ctx-menu.open { display:block; }
+.ctx-item {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 14px;
+  font-size:12px;
+  color:#111827;
+  cursor:pointer;
+  border:none;
+  background:none;
+  width:100%;
+  text-align:left;
+}
+.ctx-item:hover { background:#f9fafb; }
+.ctx-item.danger { color:#dc2626; }
+.ctx-separator { height:1px; background:#f3f4f6; margin:4px 0; }
 .new-service-shell .svc-edit-section { background:#fff; }
 .new-service-shell #ns-client-suggestions {
   border:1px solid var(--border);
@@ -4260,6 +4322,26 @@ async function carregarVeiculos(){
           <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Gerenciar Duplicatas</button>
         </div>
       </div>
+      <div id="kpi-clientes" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px">
+        <div class="client-kpi-card" onclick="aplicarFiltroRapidoCliente('status','Ativo')" style="background:#f9fafb;border:1px solid #e5e7eb;border-left:3px solid #22c55e;border-radius:0 12px 12px 0;padding:14px;cursor:pointer">
+          <div style="font-size:11px;color:#6b7280;margin-bottom:4px">Ativos nesta página</div>
+          <div id="num-ativos" style="font-size:24px;font-weight:700;color:#111827">—</div>
+          <div id="trend-ativos" style="font-size:11px;color:#16a34a;margin-top:4px;display:flex;align-items:center;gap:3px">
+            <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            total ativo carregado
+          </div>
+        </div>
+        <div class="client-kpi-card" onclick="aplicarFiltroRapidoCliente('status','A renovar')" style="background:#fef2f2;border:1px solid #fecaca;border-left:3px solid #ef4444;border-radius:0 12px 12px 0;padding:14px;cursor:pointer">
+          <div style="font-size:11px;color:#6b7280;margin-bottom:4px">A renovar nesta página</div>
+          <div id="num-vencendo" style="font-size:24px;font-weight:700;color:#dc2626">—</div>
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">clique para filtrar</div>
+        </div>
+        <div class="client-kpi-card" style="background:#f9fafb;border:1px solid #e5e7eb;border-left:3px solid #f59e0b;border-radius:0 12px 12px 0;padding:14px">
+          <div style="font-size:11px;color:#6b7280;margin-bottom:4px">Recorrência nesta página</div>
+          <div id="num-recorrencia" style="font-size:24px;font-weight:700;color:#111827">—</div>
+          <div id="sub-recorrencia" style="font-size:11px;color:#9ca3af;margin-top:4px">de ? clientes</div>
+        </div>
+      </div>
       <div id="filter-bar" class="clients-filter-panel" style="margin-bottom:16px">
         <div style="display:flex;gap:8px;margin-bottom:10px;align-items:stretch">
           <div style="flex:1;display:flex;align-items:center;gap:8px;border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;background:#fff;min-width:0">
@@ -4355,7 +4437,7 @@ async function carregarVeiculos(){
         </div>
       </div>
       <div class="tbl-wrap ui-table-card"><table>
-        <thead><tr><th>#</th><th>Cliente</th><th>Telefone</th><th>Endereço</th><th>Tipo</th><th>Status</th><th>Prior.</th><th>Local</th><th>Recorr.</th><th>Último</th><th>Ações</th></tr></thead>
+        <thead><tr><th style="width:42px"></th><th>Cliente</th><th>Status</th><th>Prioridade</th><th style="width:80px;text-align:center">Ações</th></tr></thead>
         <tbody id="cli-tbody"></tbody>
       </table></div>
     </div>
@@ -12464,6 +12546,140 @@ function limparFiltrosClientes() {
   clientesResetPage();
 }
 
+function aplicarFiltroRapidoCliente(campo, valor) {
+  const targetByCampo = {
+    status: 'cli-status-filter',
+    prioridade: 'cli-prioridade-filter',
+    categoria: 'cli-categoria-filter'
+  };
+  const el = document.getElementById(targetByCampo[campo] || campo);
+  if (!el) return;
+  el.value = valor;
+  clientesResetPage();
+  const painel = document.getElementById('painel-filtros-clientes');
+  if (painel) painel.style.display = 'none';
+  const bar = document.getElementById('filter-bar');
+  if (bar) window.scrollTo({ top: Math.max(bar.offsetTop - 20, 0), behavior: 'smooth' });
+}
+
+function calcularKPIsClientes(todosClientes = []) {
+  const items = Array.isArray(todosClientes) ? todosClientes : [];
+  const ativos = items.filter(c => normalizeClienteStatus(c.status_operacional || (c.ativo === false ? 'Inativo' : '')) === 'Ativo').length;
+  const aRenovar = items.filter(c => normalizeClienteStatus(c.status_operacional || '') === 'A renovar').length;
+  const recorrentes = items.filter(c => c.cliente_recorrente === true || String(c.recorrente || '').toLowerCase() === 'sim').length;
+  const total = items.length;
+  const pct = total > 0 ? Math.round((recorrentes / total) * 100) : 0;
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  setText('num-ativos', ativos.toLocaleString('pt-BR'));
+  setText('num-vencendo', aRenovar.toLocaleString('pt-BR'));
+  setText('num-recorrencia', `${pct}%`);
+  setText('sub-recorrencia', `${recorrentes} de ${total} clientes`);
+}
+
+function iniciaisCliente(nome) {
+  if (!nome) return '?';
+  const partes = String(nome).trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return '?';
+  if (partes.length === 1) return partes[0].substring(0, 2).toUpperCase();
+  return `${partes[0][0]}${partes[partes.length - 1][0]}`.toUpperCase();
+}
+
+function corAvatarCliente(status) {
+  const map = {
+    'Ativo': '#eff6ff',
+    'A renovar': '#fffbeb',
+    'Vencido': '#fef2f2',
+    'Eventual': '#f3f4f6'
+  };
+  return map[status] || '#f3f4f6';
+}
+
+function corTextoAvatarCliente(status) {
+  const map = {
+    'Ativo': '#1d4ed8',
+    'A renovar': '#b45309',
+    'Vencido': '#b91c1c',
+    'Eventual': '#374151'
+  };
+  return map[status] || '#374151';
+}
+
+function badgeTipoCliente(categoria, tipoCliente) {
+  const isContrato = categoria === 'contrato' || tipoCliente === 'Contrato';
+  return isContrato
+    ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:#f0fdf4;color:#166534">Contrato</span>'
+    : '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:#f3f4f6;color:#374151">Eventual</span>';
+}
+
+function badgePessoaCliente(tipo) {
+  if (!tipo) return '';
+  const label = tipo === 'PJ' || tipo === 'Pessoa jurídica' ? 'PJ' : 'PF';
+  return `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:#eff6ff;color:#1d4ed8">${label}</span>`;
+}
+
+function inlineIcon(name, color = 'currentColor') {
+  const attrs = `width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const icons = {
+    more: `<svg ${attrs}><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>`,
+    plus: `<svg ${attrs}><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>`,
+    edit: `<svg ${attrs}><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>`,
+    message: `<svg ${attrs}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
+    history: `<svg ${attrs}><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 3v6h6"></path><path d="M12 7v5l4 2"></path></svg>`,
+    trash: `<svg ${attrs}><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>`,
+    phone: `<svg ${attrs}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.9.32 1.77.57 2.61a2 2 0 0 1-.45 2.11L8 9.62a16 16 0 0 0 6.38 6.38l1.18-1.18a2 2 0 0 1 2.11-.45c.84.25 1.71.45 2.61.57A2 2 0 0 1 22 16.92z"></path></svg>`,
+    pin: `<svg ${attrs}><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>`,
+    refresh: `<svg ${attrs}><path d="M21 12a9 9 0 0 1-15.5 6.2"></path><path d="M3 12A9 9 0 0 1 18.5 5.8"></path><path d="M18 2v4h4"></path><path d="M6 22v-4H2"></path></svg>`
+  };
+  return icons[name] || '';
+}
+
+function criarMenuContextualCliente(clienteId) {
+  return `
+    <div class="ctx-menu" id="menu-cliente-${escapeHtmlAttr(clienteId)}">
+      <div style="padding:4px">
+        <button class="ctx-item" onclick="openServiceFromClient(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('plus', '#3b82f6')} Agendar serviço</button>
+        <button class="ctx-item" onclick="openClientModal(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('edit', '#6b7280')} Editar cadastro</button>
+        <button class="ctx-item" onclick="abrirWhatsAppCliente(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('message', '#22c55e')} Enviar WhatsApp</button>
+        <button class="ctx-item" onclick="verHistoricoCliente(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('history', '#6b7280')} Ver histórico</button>
+      </div>
+      <div class="ctx-separator"></div>
+      <div style="padding:4px">
+        <button class="ctx-item danger" onclick="deleteClientDirectly(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('trash')} Excluir cliente</button>
+      </div>
+    </div>`;
+}
+
+function toggleMenuCliente(event, id) {
+  event.stopPropagation();
+  fecharMenusClientes();
+  const menu = document.getElementById(`menu-cliente-${id}`);
+  if (menu) menu.classList.add('open');
+}
+
+function fecharMenusClientes() {
+  document.querySelectorAll('.ctx-menu.open').forEach(menu => menu.classList.remove('open'));
+}
+
+function abrirWhatsAppCliente(clientId) {
+  const cliente = clientesData.find(c => String(c.id) === String(clientId));
+  if (!cliente) return toast('Cliente não encontrado', 'err');
+  const numero = normalizarTelefoneWhatsApp(cliente.whatsapp || cliente.telefone || '');
+  if (!numero) return toast('Cliente sem WhatsApp válido', 'warn');
+  window.open(`https://wa.me/${numero}`, '_blank', 'noopener,noreferrer');
+}
+
+function verHistoricoCliente(clientId) {
+  openClientModal(clientId);
+  setTimeout(() => {
+    if (typeof switchClientTab === 'function') switchClientTab('historico');
+  }, 80);
+}
+
+document.addEventListener('click', fecharMenusClientes);
+
 async function renderClientes(){
   try {
     const search = (document.getElementById('cli-search')?.value||'').toLowerCase();
@@ -12489,6 +12705,7 @@ async function renderClientes(){
     const payload = await response.json();
     clientesData = Array.isArray(payload) ? payload : (payload.items || []);
     clientesTotal = Array.isArray(payload) ? clientesData.length : (payload.total || clientesData.length);
+    calcularKPIsClientes(clientesData);
     
     let filtered = clientesData;
     if (categoriaFilter) filtered = filtered.filter(c => c.categoria === categoriaFilter);
@@ -12515,7 +12732,7 @@ async function renderClientes(){
     if (!filtered.length) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="11">
+          <td colspan="5">
             <div class="ui-empty-state">
               <div class="ui-empty-title">Nenhum cliente encontrado</div>
               <div>Ajuste a busca ou os filtros para localizar o cadastro.</div>
@@ -12526,25 +12743,22 @@ async function renderClientes(){
     }
 
     tbody.innerHTML = filtered.map((c,i) => {
-      const tipoChip = c.tipo === 'PJ' ? '<span class="chip chip-blue">PJ</span>' : '<span class="chip chip-cyan">PF</span>';
-      const categoriaChip = c.tipo_cliente
-        ? (c.tipo_cliente === 'Contrato' ? '<span class="chip chip-green">Contrato</span>' : `<span class="chip chip-gray">${sanitize(c.tipo_cliente)}</span>`)
-        : (c.categoria === 'contrato' ? '<span class="chip chip-green">Contrato</span>' : '<span class="chip chip-yellow">Sem class.</span>');
       const statusText = normalizeClienteStatus(c.status_operacional) || (c.ativo === false ? 'Inativo' : '—');
       const statusClass = clienteStatusChipClass(statusText);
       const prioridadeText = normalizeClientePriority(c.prioridade);
       const prioridadeClass = clientePrioridadeChipClass(prioridadeText);
-      const localChip = c.tipo_local ? `<span class="chip chip-slate">${sanitize(c.tipo_local)}</span>` : '—';
-      const recorrenteChip = c.cliente_recorrente ? '<span class="chip chip-green">Sim</span>' : '<span class="chip chip-gray">Não</span>';
-      const ultimoServico = c.data_ultimo_servico ? c.data_ultimo_servico.slice(0, 10) : '—';
       const nome = c.nome || 'Cliente sem nome';
       const telefone = c.telefone || c.whatsapp || '—';
       const endereco = c.endereco || c.endereco_completo || '';
-      const enderecoCurto = endereco ? `${sanitize(endereco.substring(0,42))}${endereco.length > 42 ? '...' : ''}` : '—';
+      const bairro = c.bairro || extrairBairroProxy(endereco || '') || '';
+      const periodicidade = c.periodicidade || '';
       const rowSearch = [nome, telefone, endereco].join(' ').toLowerCase();
       const rowCategoria = c.categoria || (c.tipo_cliente === 'Contrato' ? 'contrato' : '');
       const rowRecorrencia = c.cliente_recorrente ? 'true' : 'false';
       const rowNivel = c.nivel_urgencia_padrao || '';
+      const metaTelefone = (telefone && telefone !== '—') ? `<span>${inlineIcon('phone', '#9ca3af')} ${sanitize(telefone)}</span>` : '';
+      const metaBairro = bairro ? `<span>${inlineIcon('pin', '#9ca3af')} ${sanitize(bairro)}</span>` : '';
+      const metaPeriodicidade = periodicidade ? `<span>${inlineIcon('refresh', '#9ca3af')} ${sanitize(periodicidade)}</span>` : '';
       
       return `<tr class="cliente-row"
         data-search="${escapeHtmlAttr(rowSearch)}"
@@ -12554,24 +12768,23 @@ async function renderClientes(){
         data-local="${escapeHtmlAttr(c.tipo_local || '')}"
         data-recorrencia="${escapeHtmlAttr(rowRecorrencia)}"
         data-nivel="${escapeHtmlAttr(rowNivel)}">
-        <td class="mono" style="color:var(--text3)">${i+1}</td>
-        <td class="client-name-cell">
-          <div class="client-name">${sanitize(nome)}</div>
-          <div class="client-sub">ID ${sanitize(c.id || '—')}</div>
+        <td style="text-align:center"><input type="checkbox" aria-label="Selecionar cliente ${escapeHtmlAttr(nome)}" style="width:14px;height:14px"></td>
+        <td class="client-rich-cell" title="${escapeHtmlAttr(endereco)}">
+          <div class="client-rich-wrap">
+            <div class="client-avatar" style="background:${corAvatarCliente(statusText)};color:${corTextoAvatarCliente(statusText)}">${sanitize(iniciaisCliente(nome))}</div>
+            <div>
+              <div class="client-rich-name">${sanitize(nome)} <span style="font-family:var(--mono);font-size:10px;color:var(--text3);font-weight:600">ID ${sanitize(c.id || '—')}</span>${c.duplicata ? '<span style="font-size:10px;color:#dc2626;font-weight:600"> · possível duplicata</span>' : ''}</div>
+              <div class="client-rich-meta">${metaTelefone}${metaBairro}${metaPeriodicidade || (!metaTelefone && !metaBairro ? '<span>Sem contato/endereço</span>' : '')}</div>
+              <div class="client-rich-badges">${badgeTipoCliente(c.categoria, c.tipo_cliente)}${badgePessoaCliente(c.tipo)}</div>
+            </div>
+          </div>
         </td>
-        <td class="mono">${sanitize(telefone)}</td>
-        <td style="font-size:12px;color:var(--text2)" title="${escapeHtmlAttr(endereco)}">${enderecoCurto}</td>
-        <td>${categoriaChip} ${tipoChip}</td>
         <td><span class="chip ${statusClass}">${sanitize(statusText)}</span></td>
         <td>${prioridadeText ? `<span class="chip ${prioridadeClass}">${sanitize(prioridadeText)}</span>` : '—'}</td>
-        <td>${localChip}</td>
-        <td style="text-align:center">${recorrenteChip}</td>
-        <td>${ultimoServico}</td>
         <td>
-          <div class="client-actions">
-            <button class="btn btn-ghost btn-xs" onclick="openServiceFromClient(${jsArg(c.id)})" style="padding:4px 8px;font-size:11px" title="Criar serviço para este cliente">➕</button>
-            <button class="btn btn-ghost btn-xs" onclick="openClientModal(${jsArg(c.id)})" style="padding:4px 8px;font-size:11px" title="Editar cliente">✏️</button>
-            <button class="btn btn-ghost btn-xs" onclick="deleteClientDirectly(${jsArg(c.id)})" style="padding:4px 8px;font-size:11px" title="Remover cliente">🗑️</button>
+          <div class="ctx-wrap">
+            <button class="ctx-button" onclick="toggleMenuCliente(event, ${jsArg(c.id)})" aria-label="Ações do cliente">${inlineIcon('more')}</button>
+            ${criarMenuContextualCliente(c.id)}
           </div>
         </td>
       </tr>`;
@@ -12581,7 +12794,7 @@ async function renderClientes(){
     console.error('Erro renderClientes:', error);
     document.getElementById('cli-tbody').innerHTML = `
       <tr>
-        <td colspan="11">
+          <td colspan="5">
           <div class="ui-empty-state" style="border-color:rgba(220,38,38,.32);background:#fef2f2;color:#991b1b">
             <div class="ui-empty-title" style="color:#991b1b">Erro ao carregar clientes</div>
             <div>${sanitize(error.message)}</div>
