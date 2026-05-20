@@ -102,6 +102,44 @@
       font-size:13px;
       font-weight:800;
     }
+    .top-actions {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+    .btn {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      min-height:38px;
+      padding:0 13px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#fff;
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:900;
+      text-decoration:none;
+    }
+    .btn.primary {
+      border-color:#111827;
+      background:#111827;
+      color:#fff;
+    }
+    .btn.soft {
+      background:#f8fafc;
+    }
+    .btn svg,
+    .inline-icon {
+      width:14px;
+      height:14px;
+      flex:0 0 auto;
+      stroke:currentColor;
+    }
 
     .status-pill {
       display:inline-flex;
@@ -179,6 +217,12 @@
       gap:8px;
       padding-left:6px;
     }
+    .decision-actions {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      padding-left:6px;
+    }
     .mini-box {
       min-width:0;
       padding:10px;
@@ -231,6 +275,9 @@
       color:var(--muted);
       font-size:11px;
       margin-top:6px;
+    }
+    .kpi-card.alert {
+      cursor:pointer;
     }
 
     .capacity-box {
@@ -315,6 +362,57 @@
       display:grid;
       gap:8px;
     }
+    .team-list {
+      display:grid;
+      gap:8px;
+    }
+    .team-row {
+      display:grid;
+      grid-template-columns:34px 1fr auto;
+      gap:10px;
+      align-items:center;
+      padding:10px;
+      border:1px solid #edf2f7;
+      border-radius:14px;
+      background:#fff;
+    }
+    .avatar {
+      width:34px;
+      height:34px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#eff6ff;
+      color:#1d4ed8;
+      font-size:11px;
+      font-weight:950;
+    }
+    .team-name {
+      display:block;
+      font-size:13px;
+      font-weight:950;
+      line-height:1.2;
+    }
+    .team-sub {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      margin-top:3px;
+    }
+    .team-load {
+      min-width:58px;
+      text-align:center;
+      border-radius:999px;
+      padding:5px 8px;
+      background:#f1f5f9;
+      color:#475569;
+      font-size:11px;
+      font-weight:950;
+    }
+    .team-load.ok { background:#f0fdf4; color:#166534; }
+    .team-load.warn { background:#fffbeb; color:#92400e; }
+    .team-load.danger { background:#fef2f2; color:#991b1b; }
     .week-item {
       width:100%;
       border:1px solid var(--border);
@@ -512,6 +610,9 @@
     }
 
     .alert-item {
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
       padding:12px;
       border:1px solid var(--border);
       border-radius:16px;
@@ -520,9 +621,38 @@
       font-size:13px;
       line-height:1.4;
     }
+    .alert-item .inline-icon { margin-top:1px; color:var(--danger); }
     .alert-item strong { color:var(--text); }
     .alert-item.danger { background:#fef2f2; border-color:#fecaca; }
     .alert-item.warn { background:#fffbeb; border-color:#fde68a; }
+    .quick-actions {
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin-top:8px;
+    }
+    .action-card {
+      min-height:88px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:14px 10px;
+      border:1px solid var(--border);
+      border-radius:16px;
+      background:#fff;
+      color:var(--text);
+      font-size:12px;
+      font-weight:900;
+      text-align:center;
+    }
+    .action-card:hover { background:#f8fafc; }
+    .action-card svg {
+      width:22px;
+      height:22px;
+      stroke:currentColor;
+    }
     .empty-state {
       padding:18px;
       border:1px dashed #cbd5e1;
@@ -568,6 +698,8 @@
       .decision-meta, .thermo-grid { grid-template-columns:1fr; }
       .kpi-grid { grid-template-columns:repeat(2,1fr); }
       .distribution-grid { grid-template-columns:1fr; }
+      .desktop-grid { display:grid; grid-template-columns:1fr; gap:0; }
+      .quick-actions { grid-template-columns:repeat(2,1fr); }
       .panel { padding:14px; border-radius:22px; }
     }
 
@@ -601,11 +733,15 @@
           <input id="radar-date" type="date" onchange="handleDateChange(this.value)">
         </div>
       </div>
-      <div style="margin-top:10px">
+      <div class="top-actions">
         <span id="status-pill" class="status-pill">
           <span class="status-dot"></span>
           Carregando
         </span>
+        <button id="btn-atualizar" class="btn soft" type="button" onclick="initRadar()">
+          <span data-icon="refresh"></span>
+          Atualizar
+        </button>
       </div>
     </header>
 
@@ -617,6 +753,16 @@
         <div class="mini-box"><span>Equipe sugerida</span><strong>--</strong></div>
         <div class="mini-box"><span>Melhor janela</span><strong>--</strong></div>
         <div class="mini-box"><span>Risco</span><strong>--</strong></div>
+      </div>
+      <div class="decision-actions">
+        <button class="btn primary" type="button" onclick="abrirEncaixeServico()">
+          <span data-icon="calendar-plus"></span>
+          Encaixar servico
+        </button>
+        <button class="btn" type="button" onclick="verRoteiros()">
+          <span data-icon="route"></span>
+          Ver roteiros
+        </button>
       </div>
     </section>
 
@@ -635,23 +781,33 @@
       <section>
         <div class="section-title">
           <div>
-            <h2>Termometro Comercial</h2>
-            <p>Oportunidade operacional, sem valores financeiros.</p>
+            <h2>Atencao agora</h2>
+            <p>Sinais que mudam a decisao.</p>
           </div>
         </div>
-        <div id="thermo-card" class="panel"></div>
+        <div id="alerts-list" class="alert-list"></div>
       </section>
 
       <section>
         <div class="section-title">
           <div>
-            <h2>Alertas importantes</h2>
-            <p>Somente sinais que mudam a decisao.</p>
+            <h2>Equipes hoje</h2>
+            <p>Carga operacional por equipe.</p>
           </div>
         </div>
-        <div id="alerts-list" class="alert-list"></div>
+        <div id="teams-list" class="team-list"></div>
       </section>
     </div>
+
+    <section>
+      <div class="section-title">
+        <div>
+          <h2>Termometro Comercial</h2>
+          <p>Oportunidade operacional, sem valores financeiros.</p>
+        </div>
+      </div>
+      <div id="thermo-card" class="panel"></div>
+    </section>
 
     <section>
       <div class="section-title">
@@ -672,6 +828,33 @@
         </div>
       </div>
       <div id="week-list" class="week-list"></div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <div>
+          <h2>Acoes rapidas</h2>
+          <p>Atalhos seguros para orientar a operacao.</p>
+        </div>
+      </div>
+      <div class="quick-actions">
+        <button class="action-card" type="button" onclick="abrirEncaixeServico()">
+          <span data-icon="calendar-plus"></span>
+          <span>Encaixar servico</span>
+        </button>
+        <button class="action-card" type="button" onclick="verRoteiros()">
+          <span data-icon="route"></span>
+          <span>Ver roteiros</span>
+        </button>
+        <button class="action-card" type="button" onclick="copyRadarSummary()">
+          <span data-icon="copy"></span>
+          <span>Copiar resumo</span>
+        </button>
+        <button class="action-card" type="button" onclick="initRadar()">
+          <span data-icon="refresh"></span>
+          <span>Atualizar radar</span>
+        </button>
+      </div>
     </section>
 
     <p class="muted-note">
@@ -829,6 +1012,28 @@
 
     function normalizeText(value) {
       return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function iconSvg(name, size = 14) {
+      const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+      const icons = {
+        refresh:`<path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/>`,
+        'calendar-plus':`<path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M12 14v5"/><path d="M9.5 16.5h5"/>`,
+        route:`<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h4a5 5 0 0 0 0-10h-2a5 5 0 0 1 0-10h1"/>`,
+        copy:`<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>`,
+        alert:`<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>`,
+        check:`<path d="M20 6 9 17l-5-5"/>`,
+        users:`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>`
+      };
+      return `<svg class="inline-icon" ${attrs}>${icons[name] || icons.check}</svg>`;
+    }
+
+    function hydrateInlineIcons(root = document) {
+      root.querySelectorAll('[data-icon]').forEach(el => {
+        const name = el.getAttribute('data-icon');
+        const size = Number(el.getAttribute('data-size') || 14);
+        el.outerHTML = iconSvg(name, size);
+      });
     }
 
     function getServiceTeam(service) {
@@ -1064,7 +1269,7 @@
     function getRecommendationMeta(radar) {
       if (radar.recomendacaoEncaixe === 'pode') {
         return {
-          answer:'Pode encaixar',
+          answer:'Sim, da',
           text:'Existe capacidade disponivel e pelo menos uma equipe com demanda menor.',
           potential:'Alto',
           orientation:'Pode buscar novos encaixes',
@@ -1073,7 +1278,7 @@
       }
       if (radar.recomendacaoEncaixe === 'cuidado') {
         return {
-          answer:'Pode, mas com cuidado',
+          answer:'Com cuidado',
           text:'Existe oportunidade, mas a operacao pede encaixes curtos e proximos da rota.',
           potential:'Medio',
           orientation:'Buscar apenas encaixes proximos',
@@ -1082,7 +1287,7 @@
       }
       if (radar.recomendacaoEncaixe === 'nao_recomendado') {
         return {
-          answer:'Nao recomendado',
+          answer:'Nao hoje',
           text:'A operacao esta cheia ou com risco elevado para assumir novos atendimentos.',
           potential:'Baixo',
           orientation:'Evitar novos encaixes',
@@ -1125,8 +1330,10 @@
       renderCapacity(radar);
       renderTermometroComercial(meta);
       renderAlertasImportantes(radar);
+      renderEquipesHoje(state.dayServices);
       renderMapaSemana();
       renderSemanaOperacional();
+      hydrateInlineIcons();
     }
 
     function renderStatus(radar) {
@@ -1147,22 +1354,28 @@
           <div class="mini-box"><span>Melhor janela</span><strong>${escapeHtml(radar.melhorJanela || 'Verificar com logistica')}</strong></div>
           <div class="mini-box"><span>Risco</span><strong>${escapeHtml(riskLabel(radar.riscoOperacional))}</strong></div>
         </div>
+        <div class="decision-actions">
+          <button class="btn primary" type="button" onclick="abrirEncaixeServico()">
+            ${iconSvg('calendar-plus')}
+            Encaixar servico
+          </button>
+          <button class="btn" type="button" onclick="verRoteiros()">
+            ${iconSvg('route')}
+            Ver roteiros
+          </button>
+        </div>
       `;
     }
 
     function renderKpis(radar) {
       const items = [
-        ['Servicos hoje', radar.totalServicos, `${radar.capacidadeTotal || 0} capacidade estimada`],
-        ['Finalizados', radar.finalizados, 'atendimentos concluidos'],
-        ['Em execucao', radar.emExecucao, 'em andamento ou deslocamento'],
-        ['Pendentes', radar.pendentes, 'ainda exigem atencao'],
-        ['Equipes na rua', radar.equipesNaRua, 'identificadas na agenda'],
-        ['Encaixes do dia', radar.encaixes || '0', radar.encaixes ? 'identificados nos dados' : 'nao identificado'],
-        ['Problemas', radar.problemas, 'pendencias operacionais'],
-        ['Capacidade', `${radar.capacidadePercentual}%`, 'estimativa simples']
+        ['Servicos hoje', radar.totalServicos, `${radar.equipesNaRua} equipe(s) na rua`, ''],
+        ['Executados', radar.finalizados, 'atendimentos concluidos', ''],
+        ['Pendentes', radar.pendentes, 'ainda hoje', ''],
+        ['Alertas', radar.problemas + (radar.capacidadePercentual > 85 ? 1 : 0) + (radar.encaixes >= 2 ? 1 : 0), 'clique para ver', 'alert']
       ];
-      document.getElementById('kpi-grid').innerHTML = items.map(([label, value, note]) => `
-        <article class="kpi-card">
+      document.getElementById('kpi-grid').innerHTML = items.map(([label, value, note, cls]) => `
+        <article class="kpi-card ${cls}" ${cls ? 'onclick="scrollParaAlertas()"' : ''}>
           <span>${escapeHtml(label)}</span>
           <strong>${escapeHtml(value)}</strong>
           <small>${escapeHtml(note)}</small>
@@ -1205,8 +1418,39 @@
 
       const unique = Array.from(new Map(alerts.map(item => [item[1], item])).values()).slice(0, 7);
       document.getElementById('alerts-list').innerHTML = unique.length
-        ? unique.map(([type, text]) => `<div class="alert-item ${type}">${escapeHtml(text)}</div>`).join('')
-        : '<div class="empty-state">Sem alertas criticos no momento.</div>';
+        ? unique.map(([type, text]) => `<div class="alert-item ${type}">${type === 'danger' ? iconSvg('alert') : ''}${escapeHtml(text)}</div>`).join('')
+        : `<div class="empty-state">${iconSvg('check')} Nenhum alerta critico agora.</div>`;
+    }
+
+    function renderEquipesHoje(servicos) {
+      const container = document.getElementById('teams-list');
+      if (!container) return;
+      const groups = agruparServicosPorEquipe(servicos);
+      if (!groups.size) {
+        container.innerHTML = '<div class="empty-state">Nenhuma equipe com servicos hoje.</div>';
+        return;
+      }
+      container.innerHTML = Array.from(groups.entries()).map(([team, services]) => {
+        const radar = calcularRadarOperacional(services, state.date);
+        const loadClass = radar.totalServicos >= CAPACIDADE_SERVICOS_POR_EQUIPE ? 'danger' : radar.totalServicos >= 3 ? 'warn' : 'ok';
+        const status = loadClass === 'danger' ? 'Cheia' : loadClass === 'warn' ? 'Atencao' : 'Com espaco';
+        return `
+          <div class="team-row">
+            <div class="avatar">${escapeHtml(teamInitials(team))}</div>
+            <div>
+              <span class="team-name">${escapeHtml(team)}</span>
+              <span class="team-sub">${services.length} servico(s) - ${radar.finalizados} executado(s), ${radar.pendentes} pendente(s)</span>
+            </div>
+            <span class="team-load ${loadClass}">${escapeHtml(status)}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function teamInitials(team) {
+      const parts = String(team || '').split(/[\/\s]+/).map(part => part.trim()).filter(Boolean);
+      if (!parts.length) return '?';
+      return parts.slice(0, 2).map(part => part[0]).join('').toUpperCase();
     }
 
     function renderMapaSemana() {
@@ -1462,6 +1706,42 @@
       showToast.timer = setTimeout(() => toast.classList.remove('show'), 3500);
     }
 
+    function scrollParaAlertas() {
+      document.getElementById('alerts-list')?.scrollIntoView({ behavior:'smooth', block:'center' });
+    }
+
+    function abrirEncaixeServico() {
+      showToast('Para encaixar, abra a Agenda no sistema principal e use Novo servico.');
+    }
+
+    function verRoteiros() {
+      showToast('Para revisar rotas, abra Roteiro do Dia no sistema principal.');
+    }
+
+    async function copyRadarSummary() {
+      const radar = calcularRadarOperacional(state.dayServices, state.date);
+      const meta = getRecommendationMeta(radar);
+      const lines = [
+        'LetecLog - Radar do Gestor',
+        `Data: ${formatDateBr(state.date)}`,
+        `Decisao: ${meta.answer}`,
+        `Detalhe: ${meta.text}`,
+        `Servicos: ${radar.totalServicos}`,
+        `Executados: ${radar.finalizados}`,
+        `Pendentes: ${radar.pendentes}`,
+        `Equipes: ${radar.equipesNaRua}`,
+        `Capacidade: ${radar.capacidadePercentual}%`,
+        `Equipe sugerida: ${radar.equipeSugerida || 'Sem sugestao'}`,
+        `Janela: ${radar.melhorJanela || 'Verificar com logistica'}`
+      ];
+      try {
+        await navigator.clipboard.writeText(lines.join('\n'));
+        showToast('Resumo do Radar copiado.');
+      } catch(error) {
+        showToast('Nao foi possivel copiar automaticamente.');
+      }
+    }
+
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({
         '&':'&amp;',
@@ -1473,6 +1753,7 @@
     }
 
     document.getElementById('radar-date').value = state.date;
+    hydrateInlineIcons();
     initRadar();
   </script>
 </body>
