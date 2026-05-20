@@ -2488,6 +2488,14 @@ app.get('/portal-tecnico', (req, res) => {
   res.sendFile(path.join(__dirname, 'frontend', 'portal-tecnico.html'));
 });
 
+app.get('/radar-gestor.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'frontend', 'radar-gestor.html'));
+});
+
+app.get('/radar-gestor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'frontend', 'radar-gestor.html'));
+});
+
 app.get('/api/maps/distance-matrix', async (req, res) => {
   try {
     if (!process.env.GOOGLE_MAPS_API_KEY) {

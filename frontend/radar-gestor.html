@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Radar do Gestor - LetecLog</title>
+  <style>
+    :root {
+      --primary:#2563eb;
+      --primary-dark:#1d4ed8;
+      --success:#16a34a;
+      --warning:#d97706;
+      --danger:#dc2626;
+      --muted:#64748b;
+      --text:#0f172a;
+      --text-2:#334155;
+      --border:#dbe4ef;
+      --surface:#ffffff;
+      --surface-2:#f8fafc;
+      --bg:#eef4fb;
+      --radius:18px;
+      --shadow:0 16px 42px rgba(15,23,42,.1);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing:border-box; }
+    html, body { min-height:100%; }
+    body {
+      margin:0;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.14), transparent 28rem),
+        linear-gradient(180deg,#f8fbff,#eef4fb 48%,#e8f0fa);
+    }
+    button, input { font:inherit; }
+    button { cursor:pointer; }
+    button:disabled { cursor:not-allowed; opacity:.62; }
+    :focus-visible { outline:3px solid rgba(37,99,235,.25); outline-offset:2px; }
+
+    .app {
+      width:min(100%, 980px);
+      min-height:100dvh;
+      margin:0 auto;
+      padding:12px 14px 28px;
+    }
+    .hero {
+      position:sticky;
+      top:0;
+      z-index:10;
+      margin:-12px -14px 12px;
+      padding:14px;
+      background:rgba(248,251,255,.94);
+      border-bottom:1px solid rgba(219,228,239,.9);
+      backdrop-filter:blur(16px);
+    }
+    .brand-row {
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .brand-kicker {
+      margin:0 0 4px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.02em;
+    }
+    h1 {
+      margin:0;
+      font-size:26px;
+      line-height:1.08;
+      letter-spacing:-.01em;
+    }
+    .hero-subtitle {
+      margin:7px 0 0;
+      color:var(--text-2);
+      font-size:13px;
+      line-height:1.45;
+    }
+    .date-control {
+      flex:0 0 auto;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      align-items:flex-end;
+    }
+    .date-control label {
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .date-control input {
+      min-height:38px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:#fff;
+      color:var(--text);
+      padding:0 10px;
+      font-size:13px;
+      font-weight:800;
+    }
+
+    .status-pill {
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      min-height:32px;
+      padding:0 11px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:#fff;
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .status-dot { width:9px; height:9px; border-radius:50%; background:#94a3b8; }
+    .status-pill.tranquilo { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
+    .status-pill.tranquilo .status-dot { background:var(--success); }
+    .status-pill.atencao { background:#fffbeb; border-color:#fde68a; color:#92400e; }
+    .status-pill.atencao .status-dot { background:#f59e0b; }
+    .status-pill.critico { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+    .status-pill.critico .status-dot { background:var(--danger); }
+
+    .panel {
+      background:rgba(255,255,255,.94);
+      border:1px solid rgba(219,228,239,.95);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      padding:16px;
+    }
+    .decision-card {
+      display:grid;
+      grid-template-columns:1fr;
+      gap:13px;
+      margin-bottom:12px;
+      overflow:hidden;
+      position:relative;
+    }
+    .decision-card::before {
+      content:"";
+      position:absolute;
+      inset:0 auto 0 0;
+      width:5px;
+      background:#94a3b8;
+    }
+    .decision-card.tranquilo::before { background:var(--success); }
+    .decision-card.atencao::before { background:#f59e0b; }
+    .decision-card.critico::before { background:var(--danger); }
+    .decision-title {
+      margin:0;
+      padding-left:6px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .decision-answer {
+      margin:0;
+      padding-left:6px;
+      font-size:30px;
+      line-height:1.05;
+      letter-spacing:-.02em;
+    }
+    .decision-text {
+      margin:0;
+      padding-left:6px;
+      color:var(--text-2);
+      font-size:14px;
+      line-height:1.5;
+    }
+    .decision-meta {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      padding-left:6px;
+    }
+    .mini-box {
+      min-width:0;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:var(--surface-2);
+    }
+    .mini-box span {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      margin-bottom:4px;
+    }
+    .mini-box strong {
+      display:block;
+      color:var(--text);
+      font-size:13px;
+      line-height:1.25;
+    }
+
+    .kpi-grid {
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin:12px 0;
+    }
+    .kpi-card {
+      min-width:0;
+      padding:13px;
+      border:1px solid var(--border);
+      border-radius:18px;
+      background:#fff;
+    }
+    .kpi-card span {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      margin-bottom:6px;
+    }
+    .kpi-card strong {
+      display:block;
+      color:var(--text);
+      font-size:26px;
+      line-height:1;
+    }
+    .kpi-card small {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      margin-top:6px;
+    }
+
+    .capacity-box {
+      display:grid;
+      gap:8px;
+      margin:12px 0;
+      padding:14px;
+      border:1px solid var(--border);
+      border-radius:18px;
+      background:#fff;
+    }
+    .capacity-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      color:var(--text-2);
+      font-size:13px;
+      font-weight:900;
+    }
+    .bar {
+      height:12px;
+      border-radius:999px;
+      background:#e2e8f0;
+      overflow:hidden;
+    }
+    .bar-fill {
+      height:100%;
+      width:0;
+      border-radius:999px;
+      background:#94a3b8;
+      transition:width .25s ease;
+    }
+    .bar-fill.tranquilo { background:var(--success); }
+    .bar-fill.atencao { background:#f59e0b; }
+    .bar-fill.critico { background:var(--danger); }
+
+    .section-title {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin:18px 2px 9px;
+    }
+    .section-title h2 {
+      margin:0;
+      font-size:18px;
+      line-height:1.2;
+      letter-spacing:-.01em;
+    }
+    .section-title p {
+      margin:4px 0 0;
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .thermo-grid {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+    .thermo-item {
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:16px;
+      background:#fff;
+    }
+    .thermo-item span {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      margin-bottom:5px;
+    }
+    .thermo-item strong {
+      display:block;
+      font-size:14px;
+      line-height:1.25;
+    }
+
+    .week-list, .alert-list {
+      display:grid;
+      gap:8px;
+    }
+    .week-item {
+      width:100%;
+      border:1px solid var(--border);
+      border-radius:16px;
+      background:#fff;
+      padding:12px;
+      text-align:left;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .week-main strong {
+      display:block;
+      font-size:14px;
+      margin-bottom:4px;
+    }
+    .week-main span {
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .week-status {
+      flex:0 0 auto;
+      min-width:92px;
+      text-align:center;
+      border-radius:999px;
+      padding:7px 9px;
+      font-size:11px;
+      font-weight:900;
+      background:#f1f5f9;
+      color:#475569;
+    }
+    .week-status.tranquilo { background:#f0fdf4; color:#166534; }
+    .week-status.atencao { background:#fffbeb; color:#92400e; }
+    .week-status.critico { background:#fef2f2; color:#991b1b; }
+
+    .macro-scroll {
+      display:flex;
+      gap:10px;
+      overflow-x:auto;
+      padding:2px 2px 10px;
+      scroll-snap-type:x proximity;
+      -webkit-overflow-scrolling:touch;
+    }
+    .macro-day {
+      flex:0 0 260px;
+      min-height:230px;
+      border:1px solid var(--border);
+      border-radius:20px;
+      background:#fff;
+      padding:12px;
+      text-align:left;
+      scroll-snap-align:start;
+      box-shadow:0 8px 24px rgba(15,23,42,.05);
+    }
+    .macro-day.selected {
+      border-color:#93c5fd;
+      box-shadow:0 0 0 3px rgba(37,99,235,.12);
+    }
+    .macro-day-head {
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:10px;
+    }
+    .macro-day-title strong {
+      display:block;
+      font-size:14px;
+      line-height:1.2;
+    }
+    .macro-day-title span {
+      display:block;
+      margin-top:3px;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+    }
+    .macro-services {
+      display:grid;
+      gap:7px;
+    }
+    .macro-service {
+      border:1px solid #edf2f7;
+      border-radius:14px;
+      background:#f8fafc;
+      padding:9px;
+    }
+    .macro-service-top {
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:4px;
+      font-size:12px;
+      font-weight:900;
+    }
+    .macro-service small {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.35;
+      margin-top:2px;
+    }
+    .status-mini {
+      flex:0 0 auto;
+      border-radius:999px;
+      padding:3px 7px;
+      background:#e2e8f0;
+      color:#475569;
+      font-size:10px;
+      font-weight:900;
+      line-height:1;
+    }
+    .status-mini.finalizado { background:#dcfce7; color:#166534; }
+    .status-mini.em_execucao { background:#dbeafe; color:#1d4ed8; }
+    .status-mini.problema { background:#fee2e2; color:#991b1b; }
+    .more-line {
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      text-align:center;
+      padding:6px 0 0;
+    }
+    .team-detail-grid {
+      display:grid;
+      gap:10px;
+    }
+    .team-card {
+      border:1px solid var(--border);
+      border-radius:18px;
+      background:#fff;
+      padding:12px;
+    }
+    .team-card-head {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:9px;
+    }
+    .team-card-head strong { font-size:14px; }
+    .team-card-head span {
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+    }
+    .detail-service {
+      display:grid;
+      grid-template-columns:52px 1fr;
+      gap:9px;
+      padding:9px 0;
+      border-top:1px solid #edf2f7;
+    }
+    .detail-service:first-of-type { border-top:0; }
+    .detail-time {
+      color:var(--primary-dark);
+      font-size:12px;
+      font-weight:950;
+    }
+    .detail-main strong {
+      display:block;
+      font-size:13px;
+      line-height:1.25;
+      margin-bottom:3px;
+    }
+    .detail-main span {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.35;
+      margin-top:2px;
+    }
+    .distribution-grid {
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:8px;
+      margin:10px 0 14px;
+    }
+    .distribution-card {
+      border:1px solid var(--border);
+      border-radius:16px;
+      background:#fff;
+      padding:10px;
+    }
+    .distribution-card strong {
+      display:block;
+      font-size:13px;
+      margin-bottom:4px;
+    }
+    .distribution-card span {
+      display:block;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.35;
+    }
+
+    .alert-item {
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:16px;
+      background:#fff;
+      color:var(--text-2);
+      font-size:13px;
+      line-height:1.4;
+    }
+    .alert-item strong { color:var(--text); }
+    .alert-item.danger { background:#fef2f2; border-color:#fecaca; }
+    .alert-item.warn { background:#fffbeb; border-color:#fde68a; }
+    .empty-state {
+      padding:18px;
+      border:1px dashed #cbd5e1;
+      border-radius:18px;
+      background:rgba(255,255,255,.72);
+      color:var(--muted);
+      text-align:center;
+      font-size:13px;
+      line-height:1.45;
+    }
+    .muted-note {
+      margin:12px 2px 0;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.45;
+      text-align:center;
+    }
+    .toast {
+      position:fixed;
+      left:50%;
+      bottom:18px;
+      transform:translateX(-50%);
+      z-index:40;
+      max-width:min(92vw, 520px);
+      padding:11px 14px;
+      border-radius:999px;
+      background:#0f172a;
+      color:#fff;
+      box-shadow:var(--shadow);
+      font-size:13px;
+      font-weight:800;
+      display:none;
+    }
+    .toast.show { display:block; }
+
+    @media (max-width: 720px) {
+      .app { padding:10px 12px 26px; }
+      .hero { margin:-10px -12px 10px; padding:12px; }
+      .brand-row { align-items:stretch; flex-direction:column; }
+      .date-control { align-items:stretch; }
+      h1 { font-size:24px; }
+      .decision-answer { font-size:27px; }
+      .decision-meta, .thermo-grid { grid-template-columns:1fr; }
+      .kpi-grid { grid-template-columns:repeat(2,1fr); }
+      .distribution-grid { grid-template-columns:1fr; }
+      .panel { padding:14px; border-radius:22px; }
+    }
+
+    @media (min-width: 860px) {
+      .desktop-grid {
+        display:grid;
+        grid-template-columns:1.1fr .9fr;
+        gap:12px;
+        align-items:start;
+      }
+      .macro-scroll {
+        display:grid;
+        grid-template-columns:repeat(3,1fr);
+        overflow:visible;
+      }
+      .macro-day { min-width:0; width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div class="brand-row">
+        <div>
+          <p class="brand-kicker">LetecLog</p>
+          <h1>Radar do Gestor</h1>
+          <p class="hero-subtitle">Getulio - decisao rapida sobre demanda, capacidade e encaixes do dia.</p>
+        </div>
+        <div class="date-control">
+          <label for="radar-date">Data</label>
+          <input id="radar-date" type="date" onchange="handleDateChange(this.value)">
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <span id="status-pill" class="status-pill">
+          <span class="status-dot"></span>
+          Carregando
+        </span>
+      </div>
+    </header>
+
+    <section id="main-decision" class="panel decision-card">
+      <p class="decision-title">Da para encaixar mais servico hoje?</p>
+      <h2 class="decision-answer">Carregando dados...</h2>
+      <p class="decision-text">Buscando servicos da agenda para calcular a capacidade operacional.</p>
+      <div class="decision-meta">
+        <div class="mini-box"><span>Equipe sugerida</span><strong>--</strong></div>
+        <div class="mini-box"><span>Melhor janela</span><strong>--</strong></div>
+        <div class="mini-box"><span>Risco</span><strong>--</strong></div>
+      </div>
+    </section>
+
+    <section id="kpi-grid" class="kpi-grid" aria-live="polite"></section>
+
+    <section class="capacity-box">
+      <div class="capacity-head">
+        <span>Capacidade operacional estimada</span>
+        <strong id="capacity-label">--</strong>
+      </div>
+      <div class="bar"><div id="capacity-fill" class="bar-fill"></div></div>
+      <small id="capacity-detail" style="color:var(--muted)">Capacidade base: 4 servicos por equipe.</small>
+    </section>
+
+    <div class="desktop-grid">
+      <section>
+        <div class="section-title">
+          <div>
+            <h2>Termometro Comercial</h2>
+            <p>Oportunidade operacional, sem valores financeiros.</p>
+          </div>
+        </div>
+        <div id="thermo-card" class="panel"></div>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <div>
+            <h2>Alertas importantes</h2>
+            <p>Somente sinais que mudam a decisao.</p>
+          </div>
+        </div>
+        <div id="alerts-list" class="alert-list"></div>
+      </section>
+    </div>
+
+    <section>
+      <div class="section-title">
+        <div>
+          <h2>Mapa da Semana</h2>
+          <p>Quem faz o que e onde, em leitura rapida.</p>
+        </div>
+      </div>
+      <div id="macro-map" class="macro-scroll"></div>
+      <div id="day-detail" class="panel" style="margin-top:10px"></div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <div>
+          <h2>Semana Operacional</h2>
+          <p>Resumo estimado da semana da data selecionada.</p>
+        </div>
+      </div>
+      <div id="week-list" class="week-list"></div>
+    </section>
+
+    <p class="muted-note">
+      Radar estimado com base nos servicos cadastrados. Nao e roteirizacao avancada e nao considera deslocamento em tempo real.
+    </p>
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const LETEC_DEFAULT_API_BASE_URL = 'https://letec-api.onrender.com';
+    const CAPACIDADE_SERVICOS_POR_EQUIPE = 4;
+
+    function normalizeApiBaseUrl(value) {
+      const url = String(value || '').trim();
+      if (!url || url.startsWith('javascript:') || url.startsWith('data:')) return '';
+      return url.replace(/\/$/, '');
+    }
+
+    function isSameVercelOriginApiBase(url) {
+      try {
+        const parsed = new URL(url);
+        return window.location.hostname.includes('vercel.app') && parsed.hostname === window.location.hostname;
+      } catch(e) {
+        return false;
+      }
+    }
+
+    function isKnownInvalidApiBase(url) {
+      try {
+        return new URL(url).hostname === 'letec-log-api.onrender.com';
+      } catch(e) {
+        return false;
+      }
+    }
+
+    const apiBaseFromUrl = normalizeApiBaseUrl(params.get('api_base'));
+    if (apiBaseFromUrl) localStorage.setItem('letec_api_base_url', apiBaseFromUrl);
+    const API_BASE_URL = (function() {
+      const explicit = normalizeApiBaseUrl(window.LETEC_API_BASE_URL);
+      if (explicit) return explicit;
+      if (apiBaseFromUrl) return apiBaseFromUrl;
+      const stored = normalizeApiBaseUrl(localStorage.getItem('letec_api_base_url'));
+      if (stored && !isSameVercelOriginApiBase(stored) && !isKnownInvalidApiBase(stored)) return stored;
+      if (window.location.protocol === 'file:') return 'http://localhost:8000';
+      if (window.location.hostname.includes('vercel.app')) return LETEC_DEFAULT_API_BASE_URL;
+      return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+    })();
+
+    const state = {
+      date: params.get('data') || toDateKey(new Date()),
+      dayServices: [],
+      weekResults: [],
+      loading: false,
+      error: null,
+      selectedDetailDate: params.get('data') || toDateKey(new Date())
+    };
+
+    function toDateKey(date) {
+      const d = date instanceof Date ? date : new Date(date);
+      const fixed = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      return fixed.toISOString().slice(0, 10);
+    }
+
+    function parseLocalDate(value) {
+      const [year, month, day] = String(value || '').split('-').map(Number);
+      if (!year || !month || !day) return new Date();
+      return new Date(year, month - 1, day);
+    }
+
+    function addDays(dateKey, offset) {
+      const date = parseLocalDate(dateKey);
+      date.setDate(date.getDate() + offset);
+      return toDateKey(date);
+    }
+
+    function startOfWeek(dateKey) {
+      const date = parseLocalDate(dateKey);
+      const day = date.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      date.setDate(date.getDate() + diff);
+      return toDateKey(date);
+    }
+
+    function formatDateBr(dateKey, mode = 'short') {
+      const date = parseLocalDate(dateKey);
+      const options = mode === 'weekday'
+        ? { weekday:'long', day:'2-digit', month:'2-digit' }
+        : { day:'2-digit', month:'2-digit', year:'numeric' };
+      return date.toLocaleDateString('pt-BR', options);
+    }
+
+    function normalizeCollection(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.data)) return payload.data;
+      if (Array.isArray(payload?.services)) return payload.services;
+      if (Array.isArray(payload?.items)) return payload.items;
+      return [];
+    }
+
+    async function requestBackendJson(path) {
+      const response = await fetch(`${API_BASE_URL}${path}`, { cache:'no-store' });
+      const text = await response.text();
+      let payload = {};
+      try { payload = text ? JSON.parse(text) : {}; } catch(e) { payload = { error:text }; }
+      if (!response.ok) {
+        throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
+      }
+      return payload;
+    }
+
+    async function loadRadarDay(date) {
+      const payload = await requestBackendJson(`/api/services?date=${encodeURIComponent(date)}&limit=500`);
+      state.dayServices = normalizeCollection(payload).filter(s => sameServiceDate(s, date));
+      return state.dayServices;
+    }
+
+    async function loadRadarWeek(date) {
+      const first = startOfWeek(date);
+      const days = Array.from({ length:6 }, (_, index) => addDays(first, index));
+      const results = await Promise.all(days.map(async day => {
+        try {
+          const payload = await requestBackendJson(`/api/services?date=${encodeURIComponent(day)}&limit=500`);
+          const services = normalizeCollection(payload).filter(s => sameServiceDate(s, day));
+          return { date:day, services, radar:calcularRadarOperacional(services, day), error:null };
+        } catch(error) {
+          return { date:day, services:[], radar:calcularRadarOperacional([], day), error:error.message };
+        }
+      }));
+      state.weekResults = results;
+      return results;
+    }
+
+    function sameServiceDate(service, date) {
+      return getServiceDate(service) === date;
+    }
+
+    function getServiceDate(service) {
+      const value = service?.data_servico || service?.data || service?.date || service?.scheduled_date || service?.dia || '';
+      return String(value).slice(0, 10);
+    }
+
+    function getServiceTime(service) {
+      const value = service?.hora || service?.horario || service?.scheduled_time || service?.time || service?.periodo || '';
+      const match = String(value).match(/(\d{1,2}):(\d{2})/);
+      if (!match) return '';
+      return `${match[1].padStart(2, '0')}:${match[2]}`;
+    }
+
+    function getMinutes(time) {
+      const match = String(time || '').match(/^(\d{2}):(\d{2})$/);
+      if (!match) return null;
+      return Number(match[1]) * 60 + Number(match[2]);
+    }
+
+    function normalizeText(value) {
+      return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function getServiceTeam(service) {
+      const team = service?.equipe || service?.tecnico || service?.tecnico_nome || service?.technician || service?.technicians || '';
+      if (Array.isArray(team)) return team.filter(Boolean).join(' / ');
+      if (String(team || '').trim()) return String(team).trim();
+      const ids = service?.tecnicos_ids || service?.technician_ids;
+      if (Array.isArray(ids) && ids.length) return ids.join(' / ');
+      return 'Equipe nao identificada';
+    }
+
+    function getServiceClientName(service) {
+      return String(service?.cliente || service?.cliente_nome || service?.customer_name || service?.nome_cliente || 'Cliente nao informado').trim();
+    }
+
+    function getServiceAddress(service) {
+      return String(service?.endereco || service?.address || service?.endereco_completo || service?.local || '').trim();
+    }
+
+    function getServiceAddressShort(service) {
+      const address = getServiceAddress(service);
+      if (!address) return 'Endereco nao informado';
+      const parts = address.split(',').map(part => part.trim()).filter(Boolean);
+      if (parts.length >= 2) return `${parts[0]}, ${parts[1]}`;
+      return address.length > 58 ? `${address.slice(0, 55)}...` : address;
+    }
+
+    function getServiceVehicle(service) {
+      return String(service?.veiculo || service?.vehicle || service?.vehicle_name || service?.carro || '').trim();
+    }
+
+    function getServiceType(service) {
+      return String(service?.tipo || service?.tipo_servico || service?.service_type || service?.servico || 'Servico').trim();
+    }
+
+    function getServiceOs(service) {
+      return String(service?.os || service?.ordem_servico || service?.numero_os || service?.id || '').trim();
+    }
+
+    function statusDisplay(service) {
+      const status = normalizeStatus(service);
+      return {
+        finalizado:'Finalizado',
+        em_execucao:'Em execucao',
+        problema:'Problema',
+        cancelado:'Cancelado',
+        pendente:'Pendente'
+      }[status] || 'Pendente';
+    }
+
+    function sortServicesByTime(services) {
+      return [...(Array.isArray(services) ? services : [])].sort((a, b) => {
+        const ta = getMinutes(getServiceTime(a));
+        const tb = getMinutes(getServiceTime(b));
+        if (ta === null && tb === null) return getServiceClientName(a).localeCompare(getServiceClientName(b), 'pt-BR');
+        if (ta === null) return 1;
+        if (tb === null) return -1;
+        return ta - tb;
+      });
+    }
+
+    function agruparServicosPorEquipe(servicos) {
+      return sortServicesByTime(servicos).reduce((groups, service) => {
+        const team = getServiceTeam(service);
+        if (!groups.has(team)) groups.set(team, []);
+        groups.get(team).push(service);
+        return groups;
+      }, new Map());
+    }
+
+    function normalizeStatus(service) {
+      const raw = normalizeText(service?.exec_status || service?.status_execucao || service?.status || service?.situacao || 'Agendado');
+      if (raw.includes('final') || raw.includes('execut')) return 'finalizado';
+      if (raw.includes('execucao') || raw.includes('inici')) return 'em_execucao';
+      if (raw.includes('desloc') || raw.includes('local') || raw.includes('cheguei')) return 'em_execucao';
+      if (raw.includes('problem') || raw.includes('pendenc')) return 'problema';
+      if (raw.includes('cancel')) return 'cancelado';
+      return 'pendente';
+    }
+
+    function isEncaixe(service) {
+      const haystack = normalizeText([
+        service?.encaixe,
+        service?.urgente,
+        service?.extra,
+        service?.prioridade,
+        service?.nivel,
+        service?.tipo_agendamento,
+        service?.origem,
+        service?.observacoes,
+        service?.obs
+      ].join(' '));
+      return haystack.includes('encaixe') || haystack.includes('extra') || haystack.includes('urgente');
+    }
+
+    function isUrgent(service) {
+      const haystack = normalizeText([service?.prioridade, service?.nivel, service?.observacoes, service?.obs].join(' '));
+      return haystack.includes('urgent') || haystack.includes('critico');
+    }
+
+    function worsenRecommendation(value) {
+      if (value === 'pode') return 'cuidado';
+      if (value === 'cuidado') return 'nao_recomendado';
+      return value;
+    }
+
+    function calcularRadarOperacional(servicos, dataSelecionada) {
+      const services = Array.isArray(servicos) ? servicos : [];
+      const totalServicos = services.length;
+      const byStatus = services.reduce((acc, service) => {
+        const status = normalizeStatus(service);
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {});
+      const teams = new Map();
+      services.forEach(service => {
+        const team = getServiceTeam(service);
+        teams.set(team, (teams.get(team) || 0) + 1);
+      });
+      const equipesNaRua = Array.from(teams.keys()).filter(team => team !== 'Equipe nao identificada').length || (totalServicos ? 1 : 0);
+      const capacidadeTotal = equipesNaRua * CAPACIDADE_SERVICOS_POR_EQUIPE;
+      const capacidadePercentual = capacidadeTotal ? Math.round((totalServicos / capacidadeTotal) * 100) : 0;
+      const encaixes = services.filter(isEncaixe).length;
+      const urgentes = services.filter(isUrgent).length;
+      const finalizados = byStatus.finalizado || 0;
+      const emExecucao = byStatus.em_execucao || 0;
+      const problemas = byStatus.problema || 0;
+      const pendentes = Math.max(0, totalServicos - finalizados - emExecucao);
+      const motivos = [];
+
+      let statusDia = 'sem_dados';
+      let riscoOperacional = 'sem_dados';
+      let recomendacaoEncaixe = 'sem_dados';
+      if (totalServicos && equipesNaRua) {
+        if (capacidadePercentual <= 60) {
+          statusDia = 'tranquilo';
+          riscoOperacional = 'baixo';
+          recomendacaoEncaixe = 'pode';
+          motivos.push('Capacidade estimada abaixo de 60%.');
+        } else if (capacidadePercentual <= 85) {
+          statusDia = 'atencao';
+          riscoOperacional = 'medio';
+          recomendacaoEncaixe = 'cuidado';
+          motivos.push('Capacidade estimada entre 61% e 85%.');
+        } else {
+          statusDia = 'critico';
+          riscoOperacional = 'alto';
+          recomendacaoEncaixe = 'nao_recomendado';
+          motivos.push('Capacidade estimada acima de 85%.');
+        }
+        if (capacidadePercentual > 100) motivos.push('Capacidade estimada ultrapassada.');
+      } else {
+        motivos.push('Sem servicos ou equipes suficientes para estimar capacidade.');
+      }
+
+      const teamEntries = Array.from(teams.entries()).sort((a, b) => a[1] - b[1]);
+      const equipeSugerida = teamEntries.find(([team]) => team !== 'Equipe nao identificada')?.[0] || null;
+      const maiorCarga = teamEntries.length ? Math.max(...teamEntries.map(([, total]) => total)) : 0;
+      const mediaEquipe = equipesNaRua ? totalServicos / equipesNaRua : 0;
+      if (maiorCarga > Math.ceil(mediaEquipe + 2)) {
+        recomendacaoEncaixe = worsenRecommendation(recomendacaoEncaixe);
+        motivos.push('Uma equipe esta com carga acima da media.');
+      }
+      if (problemas > 0) {
+        recomendacaoEncaixe = worsenRecommendation(recomendacaoEncaixe);
+        riscoOperacional = riscoOperacional === 'baixo' ? 'medio' : 'alto';
+        statusDia = statusDia === 'tranquilo' ? 'atencao' : statusDia;
+        motivos.push('Ha servicos com problema ou pendencia.');
+      }
+      if (urgentes > 0 || encaixes >= 2) {
+        recomendacaoEncaixe = worsenRecommendation(recomendacaoEncaixe);
+        motivos.push('Ja existem urgencias ou encaixes no dia.');
+      }
+      if (pendentes > Math.max(3, totalServicos * 0.55) && totalServicos > 4) {
+        recomendacaoEncaixe = worsenRecommendation(recomendacaoEncaixe);
+        motivos.push('Ainda ha muitos servicos pendentes.');
+      }
+      if (recomendacaoEncaixe === 'nao_recomendado') {
+        statusDia = statusDia === 'sem_dados' ? 'sem_dados' : 'critico';
+        riscoOperacional = riscoOperacional === 'sem_dados' ? 'sem_dados' : 'alto';
+      }
+
+      const tipoEncaixeRecomendado = {
+        pode:'Servico rapido ou proximo da rota',
+        cuidado:'Apenas servico rapido e proximo da rota',
+        nao_recomendado:'Evitar novos encaixes',
+        sem_dados:'Sem dados suficientes'
+      }[recomendacaoEncaixe] || 'Sem dados suficientes';
+
+      return {
+        dataSelecionada,
+        totalServicos,
+        finalizados,
+        emExecucao,
+        pendentes,
+        problemas,
+        equipesNaRua,
+        encaixes,
+        capacidadeTotal,
+        capacidadePercentual,
+        statusDia,
+        recomendacaoEncaixe,
+        equipeSugerida,
+        melhorJanela: calcularMelhorJanela(services),
+        tipoEncaixeRecomendado,
+        riscoOperacional,
+        motivos: motivos.slice(0, 5)
+      };
+    }
+
+    function calcularMelhorJanela(services) {
+      const times = services.map(getServiceTime).filter(Boolean).map(getMinutes).filter(value => value !== null).sort((a, b) => a - b);
+      if (times.length < 2) return 'Verificar com logistica';
+      let bestGap = 0;
+      let bestStart = null;
+      for (let i = 0; i < times.length - 1; i += 1) {
+        const gap = times[i + 1] - times[i];
+        if (gap > bestGap) {
+          bestGap = gap;
+          bestStart = times[i];
+        }
+      }
+      if (bestGap < 90 || bestStart === null) return 'Verificar com logistica';
+      return `${formatMinutes(bestStart + 30)} - ${formatMinutes(bestStart + bestGap - 30)}`;
+    }
+
+    function formatMinutes(total) {
+      const hours = Math.floor(total / 60).toString().padStart(2, '0');
+      const minutes = (total % 60).toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    function getRecommendationMeta(radar) {
+      if (radar.recomendacaoEncaixe === 'pode') {
+        return {
+          answer:'Pode encaixar',
+          text:'Existe capacidade disponivel e pelo menos uma equipe com demanda menor.',
+          potential:'Alto',
+          orientation:'Pode buscar novos encaixes',
+          type:'Servico rapido ou proximo da rota'
+        };
+      }
+      if (radar.recomendacaoEncaixe === 'cuidado') {
+        return {
+          answer:'Pode, mas com cuidado',
+          text:'Existe oportunidade, mas a operacao pede encaixes curtos e proximos da rota.',
+          potential:'Medio',
+          orientation:'Buscar apenas encaixes proximos',
+          type:'Servico rapido e proximo da rota'
+        };
+      }
+      if (radar.recomendacaoEncaixe === 'nao_recomendado') {
+        return {
+          answer:'Nao recomendado',
+          text:'A operacao esta cheia ou com risco elevado para assumir novos atendimentos.',
+          potential:'Baixo',
+          orientation:'Evitar novos encaixes',
+          type:'Nao recomendado'
+        };
+      }
+      return {
+        answer:'Sem dados suficientes',
+        text:'Carregue a agenda do dia ou confirme os servicos com a logistica.',
+        potential:'Indisponivel',
+        orientation:'Verificar com logistica',
+        type:'Sem dados suficientes'
+      };
+    }
+
+    function statusLabel(status) {
+      return {
+        tranquilo:'Tranquilo',
+        atencao:'Atencao',
+        critico:'Critico',
+        sem_dados:'Sem dados'
+      }[status] || 'Sem dados';
+    }
+
+    function riskLabel(risk) {
+      return {
+        baixo:'Baixo',
+        medio:'Medio',
+        alto:'Alto',
+        sem_dados:'Sem dados'
+      }[risk] || 'Sem dados';
+    }
+
+    function renderRadar() {
+      const radar = calcularRadarOperacional(state.dayServices, state.date);
+      const meta = getRecommendationMeta(radar);
+      renderStatus(radar);
+      renderDecision(radar, meta);
+      renderKpis(radar);
+      renderCapacity(radar);
+      renderTermometroComercial(meta);
+      renderAlertasImportantes(radar);
+      renderMapaSemana();
+      renderSemanaOperacional();
+    }
+
+    function renderStatus(radar) {
+      const pill = document.getElementById('status-pill');
+      pill.className = `status-pill ${radar.statusDia}`;
+      pill.innerHTML = `<span class="status-dot"></span>${statusLabel(radar.statusDia)} - ${formatDateBr(state.date)}`;
+    }
+
+    function renderDecision(radar, meta) {
+      const card = document.getElementById('main-decision');
+      card.className = `panel decision-card ${radar.statusDia}`;
+      card.innerHTML = `
+        <p class="decision-title">Da para encaixar mais servico hoje?</p>
+        <h2 class="decision-answer">${escapeHtml(meta.answer)}</h2>
+        <p class="decision-text">${escapeHtml(meta.text)}</p>
+        <div class="decision-meta">
+          <div class="mini-box"><span>Equipe sugerida</span><strong>${escapeHtml(radar.equipeSugerida || 'Sem equipe sugerida')}</strong></div>
+          <div class="mini-box"><span>Melhor janela</span><strong>${escapeHtml(radar.melhorJanela || 'Verificar com logistica')}</strong></div>
+          <div class="mini-box"><span>Risco</span><strong>${escapeHtml(riskLabel(radar.riscoOperacional))}</strong></div>
+        </div>
+      `;
+    }
+
+    function renderKpis(radar) {
+      const items = [
+        ['Servicos hoje', radar.totalServicos, `${radar.capacidadeTotal || 0} capacidade estimada`],
+        ['Finalizados', radar.finalizados, 'atendimentos concluidos'],
+        ['Em execucao', radar.emExecucao, 'em andamento ou deslocamento'],
+        ['Pendentes', radar.pendentes, 'ainda exigem atencao'],
+        ['Equipes na rua', radar.equipesNaRua, 'identificadas na agenda'],
+        ['Encaixes do dia', radar.encaixes || '0', radar.encaixes ? 'identificados nos dados' : 'nao identificado'],
+        ['Problemas', radar.problemas, 'pendencias operacionais'],
+        ['Capacidade', `${radar.capacidadePercentual}%`, 'estimativa simples']
+      ];
+      document.getElementById('kpi-grid').innerHTML = items.map(([label, value, note]) => `
+        <article class="kpi-card">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+          <small>${escapeHtml(note)}</small>
+        </article>
+      `).join('');
+    }
+
+    function renderCapacity(radar) {
+      const pct = Math.min(140, Math.max(0, radar.capacidadePercentual || 0));
+      document.getElementById('capacity-label').textContent = radar.capacidadeTotal
+        ? `${radar.capacidadePercentual}%`
+        : 'Sem dados';
+      document.getElementById('capacity-detail').textContent = radar.capacidadeTotal
+        ? `${radar.totalServicos} servicos para ${radar.equipesNaRua} equipe(s). Base: 4 servicos por equipe.`
+        : 'Sem equipes suficientes para estimar capacidade.';
+      const fill = document.getElementById('capacity-fill');
+      fill.className = `bar-fill ${radar.statusDia}`;
+      fill.style.width = `${Math.min(100, pct)}%`;
+    }
+
+    function renderTermometroComercial(meta) {
+      document.getElementById('thermo-card').innerHTML = `
+        <div class="thermo-grid">
+          <div class="thermo-item"><span>Potencial de encaixe</span><strong>${escapeHtml(meta.potential)}</strong></div>
+          <div class="thermo-item"><span>Orientacao</span><strong>${escapeHtml(meta.orientation)}</strong></div>
+          <div class="thermo-item"><span>Tipo recomendado</span><strong>${escapeHtml(meta.type)}</strong></div>
+        </div>
+      `;
+    }
+
+    function renderAlertasImportantes(radar) {
+      const alerts = [];
+      if (radar.statusDia === 'critico') alerts.push(['danger', 'Operacao acima do limite recomendado para novos encaixes.']);
+      if (radar.capacidadePercentual > 85) alerts.push(['danger', 'Capacidade acima de 85%. Evitar novos atendimentos sem revisao da logistica.']);
+      if (radar.pendentes > Math.max(3, radar.totalServicos * 0.55) && radar.totalServicos > 4) alerts.push(['warn', 'Existem muitos servicos pendentes para o volume do dia.']);
+      if (radar.problemas > 0) alerts.push(['danger', 'Ha servicos com problema ou pendencia.']);
+      if (radar.encaixes >= 2) alerts.push(['warn', 'Ja existem encaixes identificados na agenda do dia.']);
+      if (radar.equipeSugerida && radar.recomendacaoEncaixe !== 'nao_recomendado') alerts.push(['', `Melhor equipe para avaliar encaixe: ${radar.equipeSugerida}.`]);
+      radar.motivos.forEach(reason => alerts.push(['', reason]));
+
+      const unique = Array.from(new Map(alerts.map(item => [item[1], item])).values()).slice(0, 7);
+      document.getElementById('alerts-list').innerHTML = unique.length
+        ? unique.map(([type, text]) => `<div class="alert-item ${type}">${escapeHtml(text)}</div>`).join('')
+        : '<div class="empty-state">Sem alertas criticos no momento.</div>';
+    }
+
+    function renderMapaSemana() {
+      const map = document.getElementById('macro-map');
+      if (!state.weekResults.length) {
+        map.innerHTML = '<div class="empty-state" style="min-width:260px">Mapa da semana ainda nao carregado.</div>';
+        renderDetalheDia(state.date);
+        return;
+      }
+      const dates = state.weekResults.map(item => item.date);
+      if (!dates.includes(state.selectedDetailDate)) state.selectedDetailDate = state.date;
+      map.innerHTML = state.weekResults.map(item => {
+        const services = sortServicesByTime(item.services);
+        const radar = item.radar;
+        const visible = services.slice(0, 4);
+        const remaining = Math.max(0, services.length - visible.length);
+        return `
+          <button class="macro-day ${item.date === state.selectedDetailDate ? 'selected' : ''}" onclick="selectMacroDay('${item.date}')">
+            <span class="macro-day-head">
+              <span class="macro-day-title">
+                <strong>${escapeHtml(capitalize(formatDateBr(item.date, 'weekday')))}</strong>
+                <span>${radar.totalServicos} servicos - ${radar.equipesNaRua} equipe(s)</span>
+              </span>
+              <span class="week-status ${radar.statusDia}">${escapeHtml(statusLabel(radar.statusDia))}</span>
+            </span>
+            <span class="macro-services">
+              ${visible.length ? visible.map(service => renderMacroService(service)).join('') : '<span class="empty-state" style="padding:12px">Sem servicos neste dia.</span>'}
+              ${remaining ? `<span class="more-line">+ ${remaining} servico(s) no detalhe</span>` : ''}
+            </span>
+          </button>
+        `;
+      }).join('');
+      renderDetalheDia(state.selectedDetailDate);
+    }
+
+    function renderMacroService(service) {
+      const status = normalizeStatus(service);
+      const vehicle = getServiceVehicle(service);
+      return `
+        <span class="macro-service">
+          <span class="macro-service-top">
+            <span>${escapeHtml(getServiceTime(service) || 'Sem horario')} - ${escapeHtml(getServiceClientName(service))}</span>
+            <span class="status-mini ${status}">${escapeHtml(statusDisplay(service))}</span>
+          </span>
+          <small>${escapeHtml(getServiceAddressShort(service))}</small>
+          <small>${escapeHtml(getServiceTeam(service))}${vehicle ? ` - ${escapeHtml(vehicle)}` : ''}</small>
+        </span>
+      `;
+    }
+
+    function selectMacroDay(date) {
+      state.selectedDetailDate = date;
+      renderMapaSemana();
+      setTimeout(() => {
+        document.getElementById('day-detail')?.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      }, 30);
+    }
+
+    function renderDetalheDia(date) {
+      const detail = document.getElementById('day-detail');
+      const item = state.weekResults.find(entry => entry.date === date) || {
+        date,
+        services: date === state.date ? state.dayServices : [],
+        radar: calcularRadarOperacional(date === state.date ? state.dayServices : [], date)
+      };
+      const groups = agruparServicosPorEquipe(item.services);
+      const distribution = renderDistribuicaoEquipes(item.radar, item.services);
+      const title = capitalize(formatDateBr(item.date, 'weekday'));
+      const groupedHtml = groups.size
+        ? Array.from(groups.entries()).map(([team, services]) => renderTeamDetail(team, services)).join('')
+        : '<div class="empty-state">Nenhum servico cadastrado para este dia.</div>';
+      detail.innerHTML = `
+        <div class="section-title" style="margin-top:0">
+          <div>
+            <h2>Detalhe do Dia</h2>
+            <p>${escapeHtml(title)} - quem faz o que e onde.</p>
+          </div>
+        </div>
+        ${distribution}
+        <div class="team-detail-grid">${groupedHtml}</div>
+      `;
+    }
+
+    function renderDistribuicaoEquipes(radar, servicos) {
+      const groups = agruparServicosPorEquipe(servicos);
+      if (!groups.size) {
+        return '<div class="empty-state" style="margin-bottom:12px">Sem distribuicao de equipes para este dia.</div>';
+      }
+      return `
+        <div class="distribution-grid">
+          ${Array.from(groups.entries()).map(([team, services]) => {
+            const sorted = sortServicesByTime(services);
+            const first = getServiceTime(sorted[0]) || 'Sem horario';
+            const last = getServiceTime(sorted[sorted.length - 1]) || 'Sem horario';
+            const regions = uniqueValues(sorted.map(getAddressRegion).filter(Boolean)).slice(0, 3).join(', ') || 'Endereco nao informado';
+            return `
+              <div class="distribution-card">
+                <strong>${escapeHtml(team)}</strong>
+                <span>${sorted.length} servico(s) - ${escapeHtml(first)} ate ${escapeHtml(last)}</span>
+                <span>${escapeHtml(regions)}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderTeamDetail(team, services) {
+      return `
+        <article class="team-card">
+          <div class="team-card-head">
+            <strong>${escapeHtml(team)}</strong>
+            <span>${services.length} servico(s)</span>
+          </div>
+          ${sortServicesByTime(services).map(service => {
+            const vehicle = getServiceVehicle(service);
+            const os = getServiceOs(service);
+            return `
+              <div class="detail-service">
+                <div class="detail-time">${escapeHtml(getServiceTime(service) || 'S/H')}</div>
+                <div class="detail-main">
+                  <strong>${escapeHtml(getServiceClientName(service))}</strong>
+                  <span>${escapeHtml(getServiceType(service))}${os ? ` - OS ${escapeHtml(os)}` : ''}</span>
+                  <span>${escapeHtml(getServiceAddressShort(service))}</span>
+                  <span>${vehicle ? `Veiculo: ${escapeHtml(vehicle)} - ` : ''}Status: ${escapeHtml(statusDisplay(service))}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </article>
+      `;
+    }
+
+    function getAddressRegion(service) {
+      const address = getServiceAddress(service);
+      if (!address) return '';
+      const dashParts = address.split('-').map(part => part.trim()).filter(Boolean);
+      if (dashParts.length >= 2) return dashParts[1].split(',')[0].trim();
+      const commaParts = address.split(',').map(part => part.trim()).filter(Boolean);
+      if (commaParts.length >= 3) return commaParts[commaParts.length - 2];
+      return commaParts[0] || address;
+    }
+
+    function uniqueValues(values) {
+      const seen = new Set();
+      return values.filter(value => {
+        const key = normalizeText(value);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    function renderSemanaOperacional() {
+      const list = document.getElementById('week-list');
+      if (!state.weekResults.length) {
+        list.innerHTML = '<div class="empty-state">Semana ainda nao carregada.</div>';
+        return;
+      }
+      list.innerHTML = state.weekResults.map(item => {
+        const radar = item.radar;
+        const label = formatDateBr(item.date, 'weekday');
+        const detail = item.error
+          ? `Falha ao carregar: ${item.error}`
+          : `${radar.totalServicos} servicos - ${radar.equipesNaRua} equipe(s) - ${radar.capacidadePercentual}%`;
+        return `
+          <button class="week-item" onclick="handleDateChange('${item.date}')">
+            <span class="week-main">
+              <strong>${escapeHtml(capitalize(label))}</strong>
+              <span>${escapeHtml(detail)}</span>
+            </span>
+            <span class="week-status ${radar.statusDia}">${escapeHtml(statusLabel(radar.statusDia))}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function capitalize(value) {
+      const text = String(value || '');
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    async function handleDateChange(date) {
+      if (!date || state.loading) return;
+      state.date = date;
+      state.selectedDetailDate = date;
+      document.getElementById('radar-date').value = date;
+      await initRadar();
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('data', date);
+        window.history.replaceState({}, '', url.toString());
+      } catch(e) {}
+    }
+
+    async function initRadar() {
+      state.loading = true;
+      state.error = null;
+      setLoading();
+      try {
+        await loadRadarDay(state.date);
+        renderRadar();
+        loadRadarWeek(state.date).then(() => renderRadar()).catch(error => {
+          showToast(`Falha ao carregar semana: ${error.message}`);
+          renderRadar();
+        });
+      } catch(error) {
+        state.error = error.message;
+        renderError(error.message);
+      } finally {
+        state.loading = false;
+      }
+    }
+
+    function setLoading() {
+      document.getElementById('status-pill').className = 'status-pill';
+      document.getElementById('status-pill').innerHTML = '<span class="status-dot"></span>Carregando';
+      document.getElementById('main-decision').className = 'panel decision-card';
+      document.getElementById('main-decision').innerHTML = `
+        <p class="decision-title">Da para encaixar mais servico hoje?</p>
+        <h2 class="decision-answer">Carregando dados...</h2>
+        <p class="decision-text">Buscando servicos da agenda para calcular a capacidade operacional.</p>
+        <div class="decision-meta">
+          <div class="mini-box"><span>Equipe sugerida</span><strong>--</strong></div>
+          <div class="mini-box"><span>Melhor janela</span><strong>--</strong></div>
+          <div class="mini-box"><span>Risco</span><strong>--</strong></div>
+        </div>
+      `;
+    }
+
+    function renderError(message) {
+      document.getElementById('status-pill').className = 'status-pill critico';
+      document.getElementById('status-pill').innerHTML = '<span class="status-dot"></span>API indisponivel';
+      document.getElementById('main-decision').className = 'panel decision-card critico';
+      document.getElementById('main-decision').innerHTML = `
+        <p class="decision-title">Radar indisponivel</p>
+        <h2 class="decision-answer">Nao foi possivel carregar</h2>
+        <p class="decision-text">${escapeHtml(message)}. Tente novamente em alguns minutos ou confirme a API em uso.</p>
+      `;
+      document.getElementById('kpi-grid').innerHTML = '';
+      document.getElementById('alerts-list').innerHTML = '<div class="empty-state">Sem dados para alertas.</div>';
+      document.getElementById('thermo-card').innerHTML = '<div class="empty-state">Termometro indisponivel sem dados da agenda.</div>';
+      document.getElementById('macro-map').innerHTML = '<div class="empty-state" style="min-width:260px">Mapa da semana indisponivel sem conexao com a API.</div>';
+      document.getElementById('day-detail').innerHTML = '<div class="empty-state">Detalhe do dia indisponivel sem dados da agenda.</div>';
+      document.getElementById('week-list').innerHTML = '<div class="empty-state">Semana indisponivel sem conexao com a API.</div>';
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&':'&amp;',
+        '<':'&lt;',
+        '>':'&gt;',
+        '"':'&quot;',
+        "'":'&#39;'
+      }[char]));
+    }
+
+    document.getElementById('radar-date').value = state.date;
+    initRadar();
+  </script>
+</body>
+</html>
