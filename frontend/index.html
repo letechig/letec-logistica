@@ -4260,52 +4260,92 @@ async function carregarVeiculos(){
           <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Gerenciar Duplicatas</button>
         </div>
       </div>
-      <div class="filter-bar ui-filter-panel clients-filter-panel">
-        <input class="finput" id="cli-search" placeholder="🔍  Buscar por nome, telefone ou endereço..." oninput="clientesResetPage()">
-        <select class="fsel" id="cli-categoria-filter" onchange="renderClientes()">
-          <option value="">Todas as categorias</option>
-          <option value="eventual">Eventuais</option>
-          <option value="contrato">Contratos</option>
-        </select>
-        <select class="fsel" id="cli-tipo-local-filter" onchange="renderClientes()">
-          <option value="">Todos os tipos de local</option>
-          <option value="residencial">Residencial</option>
-          <option value="condominio">Condomínio</option>
-          <option value="restaurante">Restaurante</option>
-          <option value="comercial">Comercial</option>
-          <option value="industrial">Industrial</option>
-          <option value="outro">Outro</option>
-        </select>
-        <select class="fsel" id="cli-urgencia-filter" onchange="renderClientes()">
-          <option value="">Todos os níveis</option>
-          <option value="normal">Normal</option>
-          <option value="urgente">Urgente</option>
-          <option value="crítico">Crítico</option>
-        </select>
-        <select class="fsel" id="cli-recorrente-filter" onchange="renderClientes()">
-          <option value="">Recorrência</option>
-          <option value="true">Recorrentes</option>
-          <option value="false">Não recorrentes</option>
-        </select>
-        <select class="fsel" id="cli-status-filter" onchange="renderClientes()">
-          <option value="">Todos os status</option>
-          <option value="Ativo">Ativo</option>
-          <option value="A renovar">A renovar</option>
-          <option value="Vencido">Vencido</option>
-          <option value="Eventual">Eventual</option>
-          <option value="Inativo">Inativo</option>
-        </select>
-        <select class="fsel" id="cli-prioridade-filter" onchange="renderClientes()">
-          <option value="">Prioridade</option>
-          <option value="Alta">Alta</option>
-          <option value="Média">Média</option>
-          <option value="Baixa">Baixa</option>
-        </select>
-        <select class="fsel" id="cli-ativo-filter" onchange="renderClientes()">
-          <option value="ativos">Somente ativos</option>
-          <option value="todos">Incluir históricos/inativos</option>
-        </select>
-        <div class="text-muted ui-count-pill" id="cli-count"></div>
+      <div id="filter-bar" class="clients-filter-panel" style="margin-bottom:16px">
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:stretch">
+          <div style="flex:1;display:flex;align-items:center;gap:8px;border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;background:#fff;min-width:0">
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+            <input class="finput" id="cli-search" placeholder="Buscar por nome, telefone ou endereço..." oninput="clientesResetPage()" style="border:none;outline:none;font-size:12px;flex:1;background:transparent;color:#111827;min-height:24px;padding:0;box-shadow:none;min-width:0">
+          </div>
+          <button id="btn-filtros-clientes" onclick="togglePainelFiltrosClientes()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;font-size:12px;color:#374151;cursor:pointer;white-space:nowrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>
+            Filtros
+            <span id="cli-filtro-count" style="display:none;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px">0</span>
+          </button>
+        </div>
+        <div id="painel-filtros-clientes" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:10px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px">
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px">Categoria</label>
+              <select class="fsel" id="cli-categoria-filter" onchange="renderClientes()" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff">
+                <option value="">Todas</option>
+                <option value="eventual">Eventuais</option>
+                <option value="contrato">Contratos</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px">Status</label>
+              <select class="fsel" id="cli-status-filter" onchange="renderClientes()" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff">
+                <option value="">Todos</option>
+                <option value="Ativo">Ativo</option>
+                <option value="A renovar">A renovar</option>
+                <option value="Vencido">Vencido</option>
+                <option value="Eventual">Eventual</option>
+                <option value="Inativo">Inativo</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px">Prioridade</label>
+              <select class="fsel" id="cli-prioridade-filter" onchange="renderClientes()" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff">
+                <option value="">Todas</option>
+                <option value="Alta">Alta</option>
+                <option value="Média">Média</option>
+                <option value="Baixa">Baixa</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px">Tipo de local</label>
+              <select class="fsel" id="cli-tipo-local-filter" onchange="renderClientes()" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff">
+                <option value="">Todos</option>
+                <option value="residencial">Residencial</option>
+                <option value="condominio">Condomínio</option>
+                <option value="restaurante">Restaurante</option>
+                <option value="comercial">Comercial</option>
+                <option value="industrial">Industrial</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px">Recorrência</label>
+              <select class="fsel" id="cli-recorrente-filter" onchange="renderClientes()" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff">
+                <option value="">Todas</option>
+                <option value="true">Recorrentes</option>
+                <option value="false">Não recorrentes</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px">Nível</label>
+              <select class="fsel" id="cli-urgencia-filter" onchange="renderClientes()" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff">
+                <option value="">Todos</option>
+                <option value="normal">Normal</option>
+                <option value="urgente">Urgente</option>
+                <option value="crítico">Crítico</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px">Cadastro</label>
+              <select class="fsel" id="cli-ativo-filter" onchange="renderClientes()" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff">
+                <option value="ativos">Somente ativos</option>
+                <option value="todos">Incluir históricos/inativos</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button onclick="limparFiltrosClientes()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer">Limpar tudo</button>
+            <button onclick="togglePainelFiltrosClientes()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:none;background:#111827;color:#fff;cursor:pointer">Aplicar</button>
+          </div>
+        </div>
+        <div id="cli-filter-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:24px"></div>
+        <div class="text-muted ui-count-pill" id="cli-count" style="margin-top:8px;width:max-content"></div>
       </div>
       <div class="flex ic sb mb2" style="gap:10px;flex-wrap:wrap">
         <div class="text-muted" id="cli-page-info">Página 1</div>
@@ -12330,6 +12370,100 @@ async function aplicarCorrecoesVinculoCliente() {
   }
 }
 
+const CLIENTES_FILTER_CONFIG = {
+  'cli-categoria-filter': { label: 'Categoria' },
+  'cli-status-filter': { label: 'Status' },
+  'cli-prioridade-filter': { label: 'Prioridade' },
+  'cli-tipo-local-filter': { label: 'Local' },
+  'cli-recorrente-filter': { label: 'Recorrência' },
+  'cli-urgencia-filter': { label: 'Nível' },
+  'cli-ativo-filter': { label: 'Cadastro', defaultValue: 'ativos' }
+};
+
+function togglePainelFiltrosClientes() {
+  const painel = document.getElementById('painel-filtros-clientes');
+  if (!painel) return;
+  painel.style.display = painel.style.display === 'none' || !painel.style.display ? 'block' : 'none';
+}
+
+function getSelectedOptionLabel(el) {
+  if (!el) return '';
+  return el.options?.[el.selectedIndex]?.textContent?.trim() || el.value || '';
+}
+
+function getClientesActiveFilterCount() {
+  let total = 0;
+  const search = document.getElementById('cli-search')?.value?.trim();
+  if (search) total++;
+  Object.entries(CLIENTES_FILTER_CONFIG).forEach(([id, cfg]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const value = el.value || '';
+    if (!value || value === cfg.defaultValue) return;
+    total++;
+  });
+  return total;
+}
+
+function renderClientesFilterChips() {
+  const container = document.getElementById('cli-filter-chips');
+  const countEl = document.getElementById('cli-filtro-count');
+  if (!container || !countEl) return;
+
+  container.innerHTML = '';
+  const makeChip = (label, value, onRemove) => {
+    const chip = document.createElement('span');
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600';
+    chip.innerHTML = `${sanitize(label)}: ${sanitize(value)} <span style="cursor:pointer;opacity:.7;font-size:13px" aria-label="Remover filtro">×</span>`;
+    chip.querySelector('span').onclick = onRemove;
+    container.appendChild(chip);
+  };
+
+  const search = document.getElementById('cli-search')?.value?.trim();
+  if (search) makeChip('Busca', search, () => {
+    const el = document.getElementById('cli-search');
+    if (el) el.value = '';
+    clientesResetPage();
+  });
+
+  Object.entries(CLIENTES_FILTER_CONFIG).forEach(([id, cfg]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const value = el.value || '';
+    if (!value || value === cfg.defaultValue) return;
+    makeChip(cfg.label, getSelectedOptionLabel(el), () => removeClienteFiltro(id));
+  });
+
+  const total = getClientesActiveFilterCount();
+  countEl.style.display = total > 0 ? 'inline' : 'none';
+  countEl.textContent = total;
+
+  if (total > 0) {
+    const btnLimpar = document.createElement('button');
+    btnLimpar.textContent = 'Limpar tudo';
+    btnLimpar.style.cssText = 'font-size:11px;color:#b91c1c;background:none;border:none;cursor:pointer;padding:2px 6px';
+    btnLimpar.onclick = limparFiltrosClientes;
+    container.appendChild(btnLimpar);
+  }
+}
+
+function removeClienteFiltro(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = CLIENTES_FILTER_CONFIG[id]?.defaultValue || '';
+  clientesResetPage();
+}
+
+function limparFiltrosClientes() {
+  const search = document.getElementById('cli-search');
+  if (search) search.value = '';
+  Object.entries(CLIENTES_FILTER_CONFIG).forEach(([id, cfg]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = cfg.defaultValue || '';
+  });
+  clientesResetPage();
+}
+
 async function renderClientes(){
   try {
     const search = (document.getElementById('cli-search')?.value||'').toLowerCase();
@@ -12369,6 +12503,7 @@ async function renderClientes(){
     
     const totalPages = Math.max(Math.ceil(clientesTotal / clientesPageSize), 1);
     document.getElementById('cli-count').textContent = `${filtered.length} nesta página · ${clientesTotal} total`;
+    renderClientesFilterChips();
     const pageInfo = document.getElementById('cli-page-info');
     if (pageInfo) pageInfo.textContent = `Página ${clientesPage} de ${totalPages} · 50 por página`;
     const prevBtn = document.getElementById('cli-prev-page');
@@ -12406,8 +12541,19 @@ async function renderClientes(){
       const telefone = c.telefone || c.whatsapp || '—';
       const endereco = c.endereco || c.endereco_completo || '';
       const enderecoCurto = endereco ? `${sanitize(endereco.substring(0,42))}${endereco.length > 42 ? '...' : ''}` : '—';
+      const rowSearch = [nome, telefone, endereco].join(' ').toLowerCase();
+      const rowCategoria = c.categoria || (c.tipo_cliente === 'Contrato' ? 'contrato' : '');
+      const rowRecorrencia = c.cliente_recorrente ? 'true' : 'false';
+      const rowNivel = c.nivel_urgencia_padrao || '';
       
-      return `<tr>
+      return `<tr class="cliente-row"
+        data-search="${escapeHtmlAttr(rowSearch)}"
+        data-categoria="${escapeHtmlAttr(rowCategoria)}"
+        data-status="${escapeHtmlAttr(statusText)}"
+        data-prioridade="${escapeHtmlAttr(prioridadeText || '')}"
+        data-local="${escapeHtmlAttr(c.tipo_local || '')}"
+        data-recorrencia="${escapeHtmlAttr(rowRecorrencia)}"
+        data-nivel="${escapeHtmlAttr(rowNivel)}">
         <td class="mono" style="color:var(--text3)">${i+1}</td>
         <td class="client-name-cell">
           <div class="client-name">${sanitize(nome)}</div>
