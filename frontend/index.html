@@ -157,9 +157,6 @@ textarea:focus-visible,
 }
 .logo-text span { color: var(--blue2); }
 .logo-sub { margin-top:2px; font-size: 11px; color: var(--text3); font-family: var(--body); letter-spacing: 0; }
-.logo-version { display:inline-flex; margin-top:7px; padding:3px 8px; border-radius:999px; background:var(--blue-bg); color:var(--blue2); border:1px solid rgba(37,99,235,.18); font-family:var(--mono); font-size:10px; font-weight:700; }
-.logo-developer { margin-top:6px; color:var(--text3); font-size:10px; font-weight:700; letter-spacing:.01em; }
-.logo-support { margin-top:3px; color:var(--text2); font-size:10px; font-weight:700; }
 .logo-sub-version::after { content: 'Versão Oficial 1.00'; }
 
 .nav-section-label {
@@ -2546,7 +2543,7 @@ textarea { max-width:100%; }
 }
 @media(max-width:768px) {
   .sidebar { width:64px; }
-  .logo-text,.logo-sub,.logo-version,.nav-item span:not(.ico),.nav-badge,.nav-section-label,.sidebar-footer { display:none; }
+  .logo-text,.logo-sub,.nav-item span:not(.ico),.nav-badge,.nav-section-label,.sidebar-footer { display:none; }
   .sidebar-logo { margin:10px 8px; padding:10px; border:none; background:transparent; box-shadow:none; }
   .logo-mark { width:36px; height:36px; }
   .main { margin-left:64px; }
@@ -2662,8 +2659,8 @@ textarea { max-width:100%; }
     box-shadow: 20px 0 60px rgba(15,23,42,.24);
   }
   .sidebar.mob-open { transform: translateX(0); }
-  .logo-text,.logo-sub,.logo-version,.nav-item span:not(.ico),.nav-badge,.nav-section-label,.sidebar-footer { display: flex !important; }
-  .logo-text,.logo-sub,.logo-version { display:block !important; }
+  .logo-text,.logo-sub,.nav-item span:not(.ico),.nav-badge,.nav-section-label,.sidebar-footer { display: flex !important; }
+  .logo-text,.logo-sub { display:block !important; }
   .sidebar-logo { margin:14px 12px 10px; padding:14px; border:1px solid rgba(148,163,184,.18); background:#fff; box-shadow:var(--shadow-sm); }
   .nav-badge { display: flex !important; }
   .nav-section-label { display: block !important; }
@@ -3218,7 +3215,7 @@ gap: 6px;
   const APP_VERSION = '1.00';
   const APP_VERSION_LABEL = 'Versão Oficial 1.00';
   const APP_DEVELOPER = 'by hLd';
-  const APP_SUPPORT_PHONE = '11 97129-3835';
+  const APP_SUPPORT_PHONE = '(11) 97763-8660';
   window.LETEC_APP_INFO = { APP_NAME, APP_VERSION, APP_VERSION_LABEL, APP_DEVELOPER, APP_SUPPORT_PHONE };
   window._tecnicos = [];
   window._veiculos = [];
@@ -3559,9 +3556,6 @@ async function carregarVeiculos(){
     <div>
       <div class="logo-text"><span>Letec</span>Log</div>
       <div class="logo-sub">Gestão Operacional</div>
-      <div class="logo-version">Versão Oficial 1.00</div>
-      <div class="logo-developer">by hLd</div>
-      <div class="logo-support">Suporte: 11 97129-3835</div>
     </div>
   </div>
 
