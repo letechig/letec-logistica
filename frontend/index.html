@@ -2101,6 +2101,20 @@ td.bold { color: var(--text); font-weight: 600; }
   flex-shrink:0;
 }
 .client-rich-name { font-size:13px; font-weight:850; color:var(--text); margin-bottom:2px; }
+.client-name-action {
+  appearance:none;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  padding:0;
+  margin:0;
+  font:inherit;
+  font-weight:850;
+  cursor:pointer;
+  text-align:left;
+}
+.client-name-action:hover,
+.client-name-action:focus-visible { color:var(--blue2); text-decoration:underline; outline:none; }
 .client-rich-meta { font-size:11px; color:var(--text3); display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
 .client-rich-meta span { display:inline-flex; align-items:center; gap:3px; }
 .client-rich-badges { display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
@@ -2121,7 +2135,7 @@ td.bold { color: var(--text); font-weight: 600; }
 }
 .ctx-menu {
   display:none;
-  position:absolute;
+  position:fixed;
   right:0;
   top:36px;
   background:#fff;
@@ -2129,7 +2143,7 @@ td.bold { color: var(--text); font-weight: 600; }
   border-radius:12px;
   box-shadow:0 4px 16px rgba(0,0,0,.08);
   min-width:180px;
-  z-index:100;
+  z-index:320;
   overflow:hidden;
 }
 .ctx-menu.open { display:block; }
@@ -4622,7 +4636,7 @@ async function carregarVeiculos(){
 </div>
 
 <!-- MODAL CLIENTES (NOVO/EDITAR) -->
-<div class="modal-bg" id="client-modal" onclick="if(event.target===event.currentTarget)closeClientModal()">
+<div class="modal-bg" id="client-modal" onclick="if(event.target===event.currentTarget)requestCloseClientModal()">
   <div class="modal client-modal-shell" onclick="event.stopPropagation()">
     <div class="client-modal-header">
       <div class="client-modal-icon">✎</div>
@@ -4934,7 +4948,7 @@ async function carregarVeiculos(){
     </div>
 
     <div class="client-modal-footer">
-      <button class="client-btn secondary" onclick="closeClientModal()">Cancelar</button>
+      <button class="client-btn secondary" onclick="requestCloseClientModal()">Cancelar</button>
       <button class="client-btn danger-outline" id="cli-form-del" style="display:none" onclick="deleteClient()">Deletar</button>
       <div class="client-footer-spacer"></div>
       <button class="client-btn primary" id="cli-form-save" onclick="saveClient()">Salvar alterações</button>
@@ -12310,6 +12324,7 @@ let clientesPageSize = 50;
 let clientesTotal = 0;
 let clienteContratosDraft = [];
 let clienteEnderecosDraft = [];
+let clientModalInitialSnapshot = '';
 const servicoEnderecosCache = {};
 let customerLinkAuditData = null;
 
@@ -12662,25 +12677,56 @@ function inlineIcon(name, color = 'currentColor') {
 
 function criarMenuContextualCliente(clienteId) {
   return `
-    <div class="ctx-menu" id="menu-cliente-${escapeHtmlAttr(clienteId)}">
-      <div style="padding:4px">
-        <button class="ctx-item" onclick="openServiceFromClient(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('plus', '#3b82f6')} Agendar serviço</button>
-        <button class="ctx-item" onclick="openClientModal(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('edit', '#6b7280')} Editar cadastro</button>
-        <button class="ctx-item" onclick="abrirWhatsAppCliente(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('message', '#22c55e')} Enviar WhatsApp</button>
-        <button class="ctx-item" onclick="verHistoricoCliente(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('history', '#6b7280')} Ver histórico</button>
-      </div>
-      <div class="ctx-separator"></div>
-      <div style="padding:4px">
-        <button class="ctx-item danger" onclick="deleteClientDirectly(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('trash')} Excluir cliente</button>
-      </div>
+    <div style="padding:4px">
+      <button class="ctx-item" onclick="openServiceFromClient(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('plus', '#3b82f6')} Agendar serviço</button>
+      <button class="ctx-item" onclick="openClientModal(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('edit', '#6b7280')} Editar cadastro</button>
+      <button class="ctx-item" onclick="abrirWhatsAppCliente(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('message', '#22c55e')} Enviar WhatsApp</button>
+      <button class="ctx-item" onclick="verHistoricoCliente(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('history', '#6b7280')} Ver histórico</button>
+    </div>
+    <div class="ctx-separator"></div>
+    <div style="padding:4px">
+      <button class="ctx-item danger" onclick="deleteClientDirectly(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('trash')} Excluir cliente</button>
     </div>`;
 }
 
 function toggleMenuCliente(event, id) {
   event.stopPropagation();
-  fecharMenusClientes();
-  const menu = document.getElementById(`menu-cliente-${id}`);
-  if (menu) menu.classList.add('open');
+  const trigger = event.currentTarget;
+  let menu = document.getElementById('cliente-floating-menu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'cliente-floating-menu';
+    menu.className = 'ctx-menu';
+    document.body.appendChild(menu);
+  }
+
+  if (menu.classList.contains('open') && menu.dataset.clienteId === String(id)) {
+    fecharMenusClientes();
+    return;
+  }
+
+  menu.dataset.clienteId = String(id);
+  menu.innerHTML = criarMenuContextualCliente(id);
+  menu.classList.add('open');
+  posicionarMenuCliente(trigger, menu);
+}
+
+function posicionarMenuCliente(trigger, menu) {
+  if (!trigger || !menu) return;
+  const margin = 8;
+  const triggerRect = trigger.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const menuWidth = menuRect.width || 180;
+  const menuHeight = menuRect.height || 220;
+  let left = Math.min(Math.max(margin, triggerRect.right - menuWidth), window.innerWidth - menuWidth - margin);
+  const spaceBelow = window.innerHeight - triggerRect.bottom - margin;
+  const top = spaceBelow >= menuHeight || triggerRect.top < menuHeight
+    ? Math.min(triggerRect.bottom + 6, window.innerHeight - menuHeight - margin)
+    : Math.max(margin, triggerRect.top - menuHeight - 6);
+
+  menu.style.left = `${left}px`;
+  menu.style.right = 'auto';
+  menu.style.top = `${Math.max(margin, top)}px`;
 }
 
 function fecharMenusClientes() {
@@ -12703,6 +12749,13 @@ function verHistoricoCliente(clientId) {
 }
 
 document.addEventListener('click', fecharMenusClientes);
+window.addEventListener('scroll', fecharMenusClientes, true);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    fecharMenusClientes();
+    if (document.getElementById('client-modal')?.classList.contains('open')) requestCloseClientModal();
+  }
+});
 
 function toggleSelecionarTudoClientes(marcado) {
   document.querySelectorAll('#cli-tbody .row-check').forEach(cb => {
@@ -12895,7 +12948,7 @@ async function renderClientes(){
           <div class="client-rich-wrap">
             <div class="client-avatar" style="background:${corAvatarCliente(statusText)};color:${corTextoAvatarCliente(statusText)}">${sanitize(iniciaisCliente(nome))}</div>
             <div>
-              <div class="client-rich-name">${sanitize(nome)} <span style="font-family:var(--mono);font-size:10px;color:var(--text3);font-weight:600">ID ${sanitize(c.id || '—')}</span>${c.duplicata ? '<span style="font-size:10px;color:#dc2626;font-weight:600"> · possível duplicata</span>' : ''}</div>
+              <div class="client-rich-name"><button type="button" class="client-name-action" onclick="openClientModal(${jsArg(c.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openClientModal(${jsArg(c.id)})}" title="Editar cadastro de ${escapeHtmlAttr(nome)}">${sanitize(nome)}</button> <span style="font-family:var(--mono);font-size:10px;color:var(--text3);font-weight:600">ID ${sanitize(c.id || '—')}</span>${c.duplicata ? '<span style="font-size:10px;color:#dc2626;font-weight:600"> · possível duplicata</span>' : ''}</div>
               <div class="client-rich-meta">${metaTelefone}${metaBairro}${metaPeriodicidade || (!metaTelefone && !metaBairro ? '<span>Sem contato/endereço</span>' : '')}</div>
               <div class="client-rich-badges">${badgeTipoCliente(c.categoria, c.tipo_cliente)}${badgePessoaCliente(c.tipo)}</div>
             </div>
@@ -12906,7 +12959,6 @@ async function renderClientes(){
         <td>
           <div class="ctx-wrap">
             <button class="ctx-button" onclick="toggleMenuCliente(event, ${jsArg(c.id)})" aria-label="Ações do cliente">${inlineIcon('more')}</button>
-            ${criarMenuContextualCliente(c.id)}
           </div>
         </td>
       </tr>`;
@@ -13262,6 +13314,7 @@ async function saveClientAddresses(customerId) {
 }
 
 function openClientModal(clientId = null) {
+  let modalDraftLoadPromise = null;
   if (clientId) {
     // Editar cliente existente
     clienteEditando = clientesData.find(c => c.id === clientId);
@@ -13321,8 +13374,10 @@ function openClientModal(clientId = null) {
     // Mostrar histórico operacional
     document.getElementById('cli-historico-section').style.display = 'block';
     loadClientHistory();
-    loadClientContracts(clienteEditando.id);
-    loadClientAddresses(clienteEditando.id);
+    modalDraftLoadPromise = Promise.allSettled([
+      loadClientContracts(clienteEditando.id),
+      loadClientAddresses(clienteEditando.id)
+    ]);
   } else {
     // Novo cliente
     clienteEditando = null;
@@ -13378,6 +13433,16 @@ function openClientModal(clientId = null) {
   document.getElementById('cli-geocode-suggestions').style.display = 'none';
   switchClientTab('identificacao');
   document.getElementById('client-modal').classList.add('open');
+  setClientModalSnapshot();
+  if (modalDraftLoadPromise) {
+    const snapshotBeforeDraftLoad = clientModalInitialSnapshot;
+    const fieldsBeforeDraftLoad = getClientModalFieldsSnapshot();
+    modalDraftLoadPromise.then(() => {
+      if (clientModalInitialSnapshot === snapshotBeforeDraftLoad && getClientModalFieldsSnapshot() === fieldsBeforeDraftLoad) {
+        setClientModalSnapshot();
+      }
+    });
+  }
 }
 
 function switchClientTab(tab) {
@@ -13399,9 +13464,45 @@ function updateClientSystemInfo(cliente) {
   confidenceEl.textContent = match?.[1]?.trim() || 'Não informado';
 }
 
-function closeClientModal() {
+function getClientModalFieldsSnapshot() {
+  return JSON.stringify(Array.from(document.querySelectorAll('#client-modal input, #client-modal select, #client-modal textarea'))
+    .filter(el => !el.classList.contains('row-check'))
+    .map(el => ({
+      id: el.id || el.name || '',
+      type: el.type || el.tagName,
+      value: el.type === 'checkbox' ? !!el.checked : el.value,
+      geocodeData: el.id === 'cli-form-end' ? (el.dataset.geocodeData || '') : undefined
+    })));
+}
+
+function getClientModalSnapshot() {
+  const fields = getClientModalFieldsSnapshot();
+  return JSON.stringify({
+    fields,
+    contratos: clienteContratosDraft || [],
+    enderecos: clienteEnderecosDraft || []
+  });
+}
+
+function setClientModalSnapshot() {
+  clientModalInitialSnapshot = getClientModalSnapshot();
+}
+
+function hasClientModalUnsavedChanges() {
+  const modal = document.getElementById('client-modal');
+  return !!modal?.classList.contains('open') && clientModalInitialSnapshot && getClientModalSnapshot() !== clientModalInitialSnapshot;
+}
+
+function requestCloseClientModal() {
+  if (hasClientModalUnsavedChanges() && !confirmAction('Descartar alterações não salvas?')) return;
+  closeClientModal({ force: true });
+}
+
+function closeClientModal(options = {}) {
+  if (!options.force && hasClientModalUnsavedChanges() && !confirmAction('Descartar alterações não salvas?')) return;
   document.getElementById('client-modal').classList.remove('open');
   clienteEditando = null;
+  clientModalInitialSnapshot = '';
   document.getElementById('cli-form-error').style.display = 'none';
   document.getElementById('cli-historico-section').style.display = 'none';
   clearClientFormErrors();
@@ -13748,7 +13849,8 @@ async function saveClient() {
       await saveClientContracts(savedCustomer.id);
       await saveClientAddresses(savedCustomer.id);
     }
-    closeClientModal();
+    setClientModalSnapshot();
+    closeClientModal({ force: true });
     await renderClientes();
 
     if (savedCustomer?.id && isNewClient) {
@@ -14262,7 +14364,7 @@ async function deleteCustomerById(clientId, clientName, options = {}) {
       throw new Error(result.error || `Erro ${response.status}`);
     }
 
-    if (options.closeModal) closeClientModal();
+    if (options.closeModal) closeClientModal({ force: true });
     clientesData = clientesData.filter(c => String(c.id) !== String(clientId));
     clientesTotal = Math.max(0, Number(clientesTotal || 0) - 1);
     toast(result.message || 'Cliente removido com sucesso', 'ok');
@@ -18892,6 +18994,7 @@ function agToggleFilters() {
   }
 }
 window.addEventListener('resize', () => {
+  fecharMenusClientes();
   const fields = document.getElementById('ag-filter-fields');
   if (!fields) return;
   if (!mobIsMobile()) { fields.style.display = 'contents'; _agFiltersOpen = false; }
