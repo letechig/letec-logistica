@@ -2804,10 +2804,12 @@ app.get('/api/technician-events', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const date = cleanDateText(req.query.date);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 500);
     let query = db
       .from('technician_events')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     if (date) query = query.eq('date', date);
 
@@ -2863,10 +2865,12 @@ app.get('/api/technician-messages', async (req, res) => {
     const db = getSupabaseClient();
     const date = cleanDateText(req.query.date);
     const unread = String(req.query.unread) === 'true';
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 500);
     let query = db
       .from('technician_messages')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     if (date && unread) query = query.or(`date.eq.${date},lido.eq.false`);
     else if (date) query = query.eq('date', date);

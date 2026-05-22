@@ -8938,12 +8938,7 @@ function dayMatchesQuickFilter(metrics, dt, today) {
 
 async function carregarEventosCampoDoSupabase() {
   try {
-    const { data, error } = await supabaseClient
-      .from('technician_events')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(80);
-    if (error) throw error;
+    const data = await requestBackendJson('/api/technician-events?limit=80');
     const nextEvents = data || [];
     trackFieldOpsIncomingEvents(nextEvents);
     technicianEvents = nextEvents;
@@ -8958,12 +8953,7 @@ async function carregarEventosCampoDoSupabase() {
 
 async function carregarRecadosTecnicosDoSupabase() {
   try {
-    const { data, error } = await supabaseClient
-      .from('technician_messages')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(120);
-    if (error) throw error;
+    const data = await requestBackendJson('/api/technician-messages?limit=120');
     technicianMessages = data || [];
     if (typeof renderFieldOpsPanel === 'function' && currentPage === 'hoje') renderFieldOpsPanel();
   } catch(e) {
