@@ -308,6 +308,111 @@ test('PUT /api/services/:id retorna service_not_found quando agenda nao existe n
   });
 });
 
+test('PUT /api/services/:id bloqueia outro atendimento ativo do mesmo tecnico', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [
+      {
+        id: 10,
+        date: '2026-05-25',
+        cliente: 'Cliente Ativo',
+        horario: '10:30',
+        os: '3543',
+        equipe: 'Lucas Eduardo',
+        tecnicos_ids: ['tec-1'],
+        exec_status: 'cheguei'
+      },
+      {
+        id: 11,
+        date: '2026-05-25',
+        cliente: 'Outro Cliente',
+        horario: '',
+        equipe: 'Lucas Eduardo',
+        tecnicos_ids: ['tec-1'],
+        exec_status: 'agendado'
+      }
+    ];
+
+    const response = await fetch(`${baseUrl}/api/services/11`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exec_status: 'em_deslocamento' })
+    });
+
+    assert.equal(response.status, 409);
+    const payload = await response.json();
+    assert.equal(payload.code, 'active_service_conflict');
+    assert.equal(payload.active_service_id, 10);
+    assert.equal(state.services.find(service => service.id === 11).exec_status, 'agendado');
+  });
+});
+
+test('PUT /api/services/:id permite avancar o proprio atendimento ativo', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [
+      {
+        id: 10,
+        date: '2026-05-25',
+        cliente: 'Cliente Ativo',
+        equipe: 'Lucas Eduardo',
+        tecnicos_ids: ['tec-1'],
+        exec_status: 'cheguei'
+      }
+    ];
+
+    const response = await fetch(`${baseUrl}/api/services/10`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exec_status: 'em_execucao', inicio_hora: '2026-05-25T13:30:00.000Z' })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.exec_status, 'em_execucao');
+    assert.equal(state.services[0].inicio_hora, '2026-05-25T13:30:00.000Z');
+  });
+});
+
+test('PUT /api/services/:id libera novo atendimento quando anterior esta finalizado ou problema', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [
+      {
+        id: 10,
+        date: '2026-05-25',
+        cliente: 'Cliente Finalizado',
+        equipe: 'Lucas Eduardo',
+        tecnicos_ids: ['tec-1'],
+        exec_status: 'finalizado'
+      },
+      {
+        id: 11,
+        date: '2026-05-25',
+        cliente: 'Cliente Problema',
+        equipe: 'Lucas Eduardo',
+        tecnicos_ids: ['tec-1'],
+        exec_status: 'problema'
+      },
+      {
+        id: 12,
+        date: '2026-05-25',
+        cliente: 'Proximo Cliente',
+        equipe: 'Lucas Eduardo',
+        tecnicos_ids: ['tec-1'],
+        exec_status: 'agendado'
+      }
+    ];
+
+    const response = await fetch(`${baseUrl}/api/services/12`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exec_status: 'em_deslocamento' })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.exec_status, 'em_deslocamento');
+  });
+});
+
 test('PUT /api/customers/:id/addresses ignora colunas opcionais ausentes em schema legado', async () => {
   await withServer(async (baseUrl, state) => {
     state.__missingColumns = {

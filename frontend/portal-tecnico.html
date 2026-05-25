@@ -1673,10 +1673,17 @@
         const saved = await updateServiceViaBackend(id, payload);
         if (saved) updateLocalService(id, saved);
         toast(successMessage, 'ok');
+        return true;
       } catch(e) {
         console.error(e);
+        if (e.status === 409 && e.payload?.code === 'active_service_conflict') {
+          toast(e.payload.error || 'Existe outro atendimento ativo. Finalize ou resolva antes de iniciar outro.', 'err');
+          await loadData();
+          return false;
+        }
         addQueue({ type:'service-update', id, payload });
         toast('Sem sincronizar agora. Foi salvo neste celular.', 'warn');
+        return true;
       }
     }
 
@@ -1691,7 +1698,8 @@
         chegada_lng:gps ? gps.lng : null,
       };
       updateLocalService(id, payload);
-      await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
+      const persisted = await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
+      if (!persisted) return;
       await recordEvent('chegada', 'Chegada registrada', describeService(s), s, gps);
       addHistory(`Chegada registrada: ${describeService(s)}.`);
     }
@@ -1703,7 +1711,8 @@
         exec_status:'em_deslocamento',
       };
       updateLocalService(id, payload);
-      await persistService(id, payload, 'Deslocamento iniciado.');
+      const persisted = await persistService(id, payload, 'Deslocamento iniciado.');
+      if (!persisted) return;
       await recordEvent('deslocamento', 'Deslocamento iniciado', describeService(s), s, null);
       addHistory(`Deslocamento iniciado: ${describeService(s)}.`);
     }
@@ -1718,7 +1727,8 @@
         tempo_espera:minutesBetween(s?.chegada_hora, inicio),
       };
       updateLocalService(id, payload);
-      await persistService(id, payload, 'Servico iniciado.');
+      const persisted = await persistService(id, payload, 'Servico iniciado.');
+      if (!persisted) return;
       await recordEvent('inicio', 'Servico iniciado', describeService(s), s, null);
       addHistory(`Inicio de servico registrado: ${describeService(s)}.`);
     }
