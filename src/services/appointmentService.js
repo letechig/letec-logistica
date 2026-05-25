@@ -22,6 +22,95 @@ function createAppointmentService(deps) {
     return { ok: true };
   }
 
+  function serviceDate(service = {}) {
+    return service.date || service.data || service.dt || '';
+  }
+
+  function normalizeText(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function parseArrayLike(value) {
+    if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
+    if (value === null || value === undefined || value === '') return [];
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map(item => String(item || '').trim()).filter(Boolean);
+      } catch (error) {}
+      return trimmed.split(/[,+/|;]/).map(item => item.trim()).filter(Boolean);
+    }
+    return [String(value).trim()].filter(Boolean);
+  }
+
+  function serviceTechnicianIds(service = {}) {
+    return parseArrayLike(
+      service.tecnicos_ids
+      || service.tecnicosIds
+      || service.technicians_ids
+      || service.technician_ids
+      || service.tecnico_ids
+      || service.tecnico_id
+    );
+  }
+
+  function serviceTeam(service = {}) {
+    return normalizeText(service.equipe || service.eq || service.tecnico || service.motorista || '');
+  }
+
+  function activeExecStatus(service = {}) {
+    return normalizeText(service.exec_status).replace(/\s+/g, '_');
+  }
+
+  function isActiveServiceStatus(status) {
+    return ['em_deslocamento', 'cheguei', 'em_execucao'].includes(status);
+  }
+
+  function sameOperationalOwner(a = {}, b = {}) {
+    const aIds = serviceTechnicianIds(a).map(String);
+    const bIds = serviceTechnicianIds(b).map(String);
+    if (aIds.length && bIds.length) return aIds.some(id => bIds.includes(id));
+    const aTeam = serviceTeam(a);
+    const bTeam = serviceTeam(b);
+    return !!aTeam && !!bTeam && aTeam === bTeam;
+  }
+
+  function describeService(service = {}) {
+    const os = service.os || service.OS || '';
+    return [
+      service.horario || service.hr || '--:--',
+      service.cliente || service.cl || 'Cliente',
+      os ? `OS ${os}` : ''
+    ].filter(Boolean).join(' - ');
+  }
+
+  async function fetchServiceById(db, id) {
+    const { data, error } = await db.from('services').select('*').eq('id', id);
+    if (error) return { error };
+    return { data: data?.[0] || null };
+  }
+
+  async function findActiveServiceConflict(db, id, candidate = {}) {
+    const status = activeExecStatus(candidate);
+    if (!isActiveServiceStatus(status)) return null;
+
+    const date = serviceDate(candidate);
+    if (!date) return null;
+    if (!serviceTechnicianIds(candidate).length && !serviceTeam(candidate)) return null;
+
+    const { data, error } = await db.from('services').select('*').eq('date', date).limit(1000);
+    if (error) throw error;
+
+    return (data || []).find(service => {
+      if (String(service.id) === String(id)) return false;
+      if (serviceDate(service) !== date) return false;
+      if (!isActiveServiceStatus(activeExecStatus(service))) return false;
+      return sameOperationalOwner(candidate, service);
+    }) || null;
+  }
+
   async function createAppointment(db, input = {}) {
     const payload = normalizeAppointmentPayload(input, { includeId: true });
     const validation = validateAppointmentPayload(payload);
@@ -70,6 +159,27 @@ function createAppointmentService(deps) {
     delete payload.id;
     if (!Object.keys(payload).length) {
       return { status: 400, error: { code: 'appointment_empty_update', error: 'Nenhum campo válido para atualizar' } };
+    }
+
+    const currentResult = await fetchServiceById(db, id);
+    if (currentResult.error) return { status: 500, error: currentResult.error };
+    if (!currentResult.data) return { status: 404, error: { code: 'service_not_found', error: 'Serviço não encontrado' } };
+
+    try {
+      const conflict = await findActiveServiceConflict(db, id, { ...currentResult.data, ...payload });
+      if (conflict) {
+        return {
+          status: 409,
+          error: {
+            code: 'active_service_conflict',
+            error: 'Já existe outro atendimento ativo para este técnico/equipe',
+            active_service_id: conflict.id,
+            active_service: describeService(conflict)
+          }
+        };
+      }
+    } catch (error) {
+      return { status: 500, error };
     }
 
     const { data, error } = await runServiceWriteWithSchemaFallback(
