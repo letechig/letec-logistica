@@ -3059,6 +3059,9 @@ gap: 6px;
 <script src="js/shared/normalizers.js"></script>
 <script src="js/shared/dates.js"></script>
 <script src="js/shared/formatters.js"></script>
+<script src="js/shared/service-catalog.js"></script>
+<script src="js/shared/service-type-helpers.js"></script>
+<script src="js/shared/light-renderers.js"></script>
 <script>
   // ═════════════════════════════════════════════════════════════════════════════
   // 🔒 XSS PROTECTION: Sanitization and Safe DOM methods
@@ -5126,48 +5129,6 @@ const ECAT_COLORS={"DS — Desinsetização":"#2dd67b","DR — Desratização":"
   }
 */
 
-// ─── Tipos de serviço (não categorias fixas) ─
-// Apenas referência para labels/cores — sem lógica de negócio acoplada
-const TIPO_SERVICO = {
-  DS:       { label: 'Desinsetização',        cor: '#16a34a' },
-  DR:       { label: 'Desratização',          cor: '#2563eb' },
-  LCA:      { label: 'Higienização Cx Água',  cor: '#0891b2' },
-  DST:      { label: 'Desentupimento',        cor: '#dc2626' },
-  DSC:      { label: 'Descupinização',        cor: '#7c3aed' },
-  MON:      { label: 'Monitoramento',         cor: '#ea580c' },
-  ISCA:     { label: 'Iscagem',               cor: '#b45309' },
-  HIG:      { label: 'Higienização Estofado', cor: '#0891b2' },
-  TERMO:    { label: 'Termo/Laudo',           cor: '#475569' },
-  // ── Novos tipos operacionais ──────────────────────────────
-  VIS:      { label: 'Vistoria',              cor: '#0f766e' },
-  REU:      { label: 'Reunião',               cor: '#6d28d9' },
-  VISTEC:   { label: 'Visita Técnica',        cor: '#0369a1' },
-  MAN:      { label: 'Manobra',               cor: '#92400e' },
-  OUTRO:    { label: 'Outro',                 cor: '#94a3b8' },
-};
-
-// Catálogo ordenado para selects/checkboxes — fonte única de verdade
-const TIPOS_CATALOGO = [
-  // Serviços técnicos principais
-  { key:'DS',     grupo:'Pragas',      label:'DS — Desinsetização'       },
-  { key:'DR',     grupo:'Pragas',      label:'DR — Desratização'         },
-  { key:'DSC',    grupo:'Pragas',      label:'DSC — Descupinização'      },
-  { key:'ISCA',   grupo:'Pragas',      label:'ISCA — Iscagem'            },
-  { key:'MON',    grupo:'Pragas',      label:'MON — Monitoramento'       },
-  // Infraestrutura
-  { key:'LCA',    grupo:'Infraestrutura', label:'LCA — Cx d\'Água'      },
-  { key:'DST',    grupo:'Infraestrutura', label:'DST — Desentupimento'  },
-  { key:'HIG',    grupo:'Infraestrutura', label:'HIG — Higienização Est.'},
-  // Documentação
-  { key:'TERMO',  grupo:'Documentação', label:'TERMO — Termo/Laudo'     },
-  // Operacionais
-  { key:'VIS',    grupo:'Operacional', label:'VIS — Vistoria'           },
-  { key:'REU',    grupo:'Operacional', label:'REU — Reunião'            },
-  { key:'VISTEC', grupo:'Operacional', label:'VISTEC — Visita Técnica'  },
-  { key:'MAN',    grupo:'Operacional', label:'MAN — Manobra'            },
-  { key:'OUTRO',  grupo:'Operacional', label:'Outro'                    },
-];
-
 // ─── Equipes conhecidas (dinâmicas — apenas referência) ─
 // Na prática, a equipe é definida dia a dia no Calendar/planilha
 const EQUIPES_REF = [
@@ -5681,46 +5642,6 @@ function ehCondominio(servico) {
     servico.sc || '',
   ].join(' ').toLowerCase();
   return /\bcond\b|condom[ií]n|edif[íi]c|cond\./.test(haystack);
-}
-
-// ── Extrair lista de tipos de um serviço ──────
-// Entrada:  "DS + DR", "DS/DR", "DS e DR", "DS", "LCA"
-// Saída:    ["DS", "DR"] — sempre maiúsculos, sem duplicatas
-function extrairTiposServico(servico) {
-  const tiposArray = Array.isArray(servico?.tipos) ? servico.tipos : [];
-  const raw = [
-    ...tiposArray,
-    servico.tipoServico || '',
-    servico.sc || '',
-  ].join(' ');
-
-  // Normalizar separadores → espaço, depois split por palavras-chave conhecidas
-  const normalizado = raw
-    .toUpperCase()
-    .replace(/[+\/,&]/g, ' ')
-    .replace(/\bE\b/g, ' ')      // "e" como conjunção
-    .replace(/\bDE\b/g, ' ')
-    .replace(/\bCOM\b/g, ' ')
-    .replace(/[^A-Z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const TIPOS_VALIDOS = ['DS','DR','DST','DSC','LCA','HIG','MON','TERMO','ISCA','PC','VIS','REU','VISTEC','MAN'];
-  const encontrados = [];
-  const tokens = normalizado.split(' ');
-  tokens.forEach(t => {
-    if (TIPOS_VALIDOS.includes(t) && !encontrados.includes(t)) {
-      encontrados.push(t);
-    }
-  });
-
-  // Se nada identificado, tentar tipoServico direto
-  if (encontrados.length === 0) {
-    const ts = (servico.tipoServico || '').toUpperCase().split(/[\s/,+]/)[0];
-    if (ts && ts.length > 0) encontrados.push(ts);
-  }
-
-  return encontrados.length > 0 ? encontrados : ['OUTRO'];
 }
 
 // ── Calcular tempo base de um tipo + categoria ─
@@ -7780,42 +7701,6 @@ function filteredSvcs() {
   );
 }
 
-// ── Gera chips HTML para todos os tipos de um serviço (suporte a combos) ──
-// Retorna string com spans coloridos de cada tipo do combo.
-// Se apenas 1 tipo, comporta-se igual ao código anterior.
-function tipoChipsHtml(s, opts) {
-  const { fontSize = '10px', compact = false } = opts || {};
-  const tipos = extrairTiposServico(s);
-  return tipos.map(t => {
-    const meta = TIPO_SERVICO[t] || TIPO_SERVICO.OUTRO;
-    const cor  = meta.cor;
-    const lbl  = compact ? t : (meta.label || t);
-    return `<span style="font-family:var(--mono);font-size:${fontSize};color:${cor};background:${cor}18;padding:1px 6px;border-radius:4px;border:1px solid ${cor}40;white-space:nowrap">${lbl}</span>`;
-  }).join(' ');
-}
-
-// ── Gera label de exibição do combo: "DS + DR + LCA" ──
-function tipoComboLabel(s) {
-  const tipos = extrairTiposServico(s);
-  return tipos.join(' + ') || (s.tipoServico || s.sc || '—');
-}
-
-function renderTecnicos(selectedIds = [], containerId = 'tecnicos-container'){
-  const container = document.getElementById(containerId);
-  const lista = window._tecnicos || [];
-  const selectedSet = new Set((Array.isArray(selectedIds) ? selectedIds : []).map(id => String(id)));
-
-  if(!container) return;
-
-  container.innerHTML = lista.map(t => `
-    <label style="display:block; margin-bottom:4px;">
-      <input type="checkbox" value="${escapeHtmlAttr(t.id)}"
-        ${selectedSet.has(String(t.id)) ? 'checked' : ''}>
-      ${sanitize(t.nome)}
-    </label>
-  `).join('');
-}
-
 function getVeiculosOptions(selectedValue = '') {
   const selected = String(selectedValue || '').trim();
   const ativos = Array.isArray(window._veiculos) ? window._veiculos.filter(v => v && v.ativo !== false) : [];
@@ -7835,88 +7720,6 @@ function renderVeiculosSelect(selectId, selectedValue = '') {
   const select = document.getElementById(selectId);
   if (!select) return;
   select.innerHTML = getVeiculosOptions(selectedValue);
-}
-
-function getTiposServicoCatalogo(selected = []) {
-  const selectedNorm = (Array.isArray(selected) ? selected : [])
-    .map(t => String(t || '').trim().toUpperCase())
-    .filter(Boolean);
-
-  const tiposDb = Array.isArray(window._tiposServico) && window._tiposServico.length
-    ? window._tiposServico
-        .map(t => ({
-          sigla: String(t?.sigla || '').trim().toUpperCase(),
-          nome: String(t?.nome || t?.sigla || '').trim()
-        }))
-        .filter(t => t.sigla)
-    : [];
-
-  const fallbackTipos = TIPOS_CATALOGO.map(tc => ({
-    sigla: String(tc.key || '').trim().toUpperCase(),
-    nome: String(tc.label.split('—')[1]?.trim() || tc.label || tc.key || '').trim()
-  }));
-
-  const tiposBase = tiposDb.length ? tiposDb : fallbackTipos;
-  const tiposMap = new Map();
-
-  tiposBase.forEach(tipo => {
-    if (!tiposMap.has(tipo.sigla)) tiposMap.set(tipo.sigla, tipo);
-  });
-
-  selectedNorm.forEach(sigla => {
-    if (!tiposMap.has(sigla)) tiposMap.set(sigla, { sigla, nome: sigla });
-  });
-
-  return [...tiposMap.values()];
-}
-
-function renderTiposCheckbox(selected = [], containerId = 'tipos-container'){
-  const container = document.getElementById(containerId);
-  if(!container) return;
-
-  const selectedNorm = (Array.isArray(selected) ? selected : [])
-    .map(t => String(t || '').trim().toUpperCase())
-    .filter(Boolean);
-  const tipos = getTiposServicoCatalogo(selectedNorm);
-
-  container.innerHTML = tipos.map(t => {
-    const meta = TIPO_SERVICO[t.sigla] || TIPO_SERVICO.OUTRO;
-    if (containerId === 'ed-tipos-container' || containerId === 'ns-tipos-container') {
-      return `
-        <label class="svc-edit-type-option">
-          <input type="checkbox" value="${sanitize(t.sigla)}"
-            ${selectedNorm.includes(t.sigla) ? 'checked' : ''}>
-          <span class="svc-edit-type-code" style="color:${meta?.cor || '#2563eb'}">${sanitize(t.sigla)}</span>
-          <span class="svc-edit-type-name">${sanitize(t.nome || t.sigla)}</span>
-        </label>
-      `;
-    }
-    return `
-      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;padding:2px 0">
-        <input type="checkbox" value="${sanitize(t.sigla)}"
-          ${selectedNorm.includes(t.sigla) ? 'checked' : ''}
-          style="width:14px;height:14px;accent-color:${meta?.cor || '#2563eb'}">
-        <span style="color:${meta?.cor || '#64748b'};font-family:var(--mono);font-size:10px;min-width:50px">${sanitize(t.sigla)}</span>
-        <span style="color:var(--text2)">${sanitize(t.nome || t.sigla)}</span>
-      </label>
-    `;
-  }).join('');
-}
-
-function updateTiposPreview(previewId, containerId = 'tipos-container') {
-  const prev = document.getElementById(previewId);
-  if (!prev) return;
-  const sel = Array.from(
-    document.querySelectorAll(`#${containerId} input:checked`)
-  ).map(el => el.value);
-  prev.textContent = sel.length ? sel.join(' + ') : 'Nenhum tipo selecionado';
-}
-
-function bindTiposPreview(previewId, containerId = 'tipos-container') {
-  document.querySelectorAll(`#${containerId} input[type="checkbox"]`).forEach(chk => {
-    chk.addEventListener('change', () => updateTiposPreview(previewId, containerId));
-  });
-  updateTiposPreview(previewId, containerId);
 }
 
 // ════════════════════════════════════════════════
