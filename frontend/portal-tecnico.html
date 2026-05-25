@@ -1495,8 +1495,35 @@
       `;
     }
 
+    function serviceTimeMinutes(s) {
+      const raw = String(s?.horario || s?.hr || '').trim();
+      const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+      if (!match) return Number.MAX_SAFE_INTEGER;
+      const hour = Number(match[1]);
+      const minute = Number(match[2]);
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return Number.MAX_SAFE_INTEGER;
+      return hour * 60 + minute;
+    }
+
+    function serviceOperationalRank(s) {
+      return {
+        em_execucao: 0,
+        cheguei: 1,
+        em_deslocamento: 2,
+        agendado: 3,
+        problema: 4,
+        finalizado: 5,
+      }[execStatus(s)] ?? 3;
+    }
+
     function sortServicesByTime(items) {
-      return [...(items || [])].sort((a, b) => String(a.horario || a.hr || '').localeCompare(String(b.horario || b.hr || '')));
+      return [...(items || [])].sort((a, b) => {
+        const rankDiff = serviceOperationalRank(a) - serviceOperationalRank(b);
+        if (rankDiff) return rankDiff;
+        const timeDiff = serviceTimeMinutes(a) - serviceTimeMinutes(b);
+        if (timeDiff) return timeDiff;
+        return String(a.id || '').localeCompare(String(b.id || ''));
+      });
     }
 
     function toggleFullRoute() {
