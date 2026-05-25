@@ -1580,6 +1580,32 @@
       return text.length > 72 ? `${text.slice(0, 69)}...` : text;
     }
 
+    function isActiveServiceStatus(status) {
+      return ['em_deslocamento','cheguei','em_execucao'].includes(status);
+    }
+
+    function findActiveServiceExcept(id) {
+      return state.services.find(s => String(s.id) !== String(id) && isActiveServiceStatus(execStatus(s))) || null;
+    }
+
+    function describeService(s) {
+      if (!s) return 'Servico nao identificado';
+      const os = s.os || s.OS || '';
+      return [
+        s.horario || s.hr || '--:--',
+        s.cliente || s.cl || 'Cliente',
+        os ? `OS ${os}` : '',
+        shortAddress(serviceAddress(s))
+      ].filter(Boolean).join(' - ');
+    }
+
+    function ensureNoOtherActiveService(id) {
+      const active = findActiveServiceExcept(id);
+      if (!active) return true;
+      toast(`Finalize ou resolva o atendimento ativo antes de iniciar outro: ${describeService(active)}.`, 'warn');
+      return false;
+    }
+
     function serviceAddress(s) {
       return String(s?.endereco || '').trim();
     }
@@ -1655,6 +1681,7 @@
     }
 
     async function markArrived(id) {
+      if (!ensureNoOtherActiveService(id)) return;
       const s = state.services.find(item => String(item.id) === String(id));
       const gps = await getGps();
       const payload = {
@@ -1665,22 +1692,24 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
-      await recordEvent('chegada', 'Chegada registrada', `${s?.cliente || 'Servico'} - ${s?.endereco || ''}`, s, gps);
-      addHistory('Chegada registrada no servico.');
+      await recordEvent('chegada', 'Chegada registrada', describeService(s), s, gps);
+      addHistory(`Chegada registrada: ${describeService(s)}.`);
     }
 
     async function startDisplacement(id) {
+      if (!ensureNoOtherActiveService(id)) return;
       const s = state.services.find(item => String(item.id) === String(id));
       const payload = {
         exec_status:'em_deslocamento',
       };
       updateLocalService(id, payload);
       await persistService(id, payload, 'Deslocamento iniciado.');
-      await recordEvent('deslocamento', 'Deslocamento iniciado', s?.cliente || 'Deslocamento iniciado', s, null);
-      addHistory('Deslocamento iniciado.');
+      await recordEvent('deslocamento', 'Deslocamento iniciado', describeService(s), s, null);
+      addHistory(`Deslocamento iniciado: ${describeService(s)}.`);
     }
 
     async function startService(id) {
+      if (!ensureNoOtherActiveService(id)) return;
       const s = state.services.find(item => String(item.id) === String(id));
       const inicio = nowIso();
       const payload = {
@@ -1690,8 +1719,8 @@
       };
       updateLocalService(id, payload);
       await persistService(id, payload, 'Servico iniciado.');
-      await recordEvent('inicio', 'Servico iniciado', s?.cliente || 'Servico iniciado', s, null);
-      addHistory('Inicio de servico registrado.');
+      await recordEvent('inicio', 'Servico iniciado', describeService(s), s, null);
+      addHistory(`Inicio de servico registrado: ${describeService(s)}.`);
     }
 
     function openFinishModal(id) {
@@ -1745,11 +1774,11 @@
       await recordEvent(
         state.finishState === 'ok' ? 'finalizacao' : 'problema',
         state.finishState === 'ok' ? 'Servico finalizado' : 'Problema registrado',
-        state.finishState === 'ok' ? (s?.cliente || 'Servico finalizado') : problemText,
+        state.finishState === 'ok' ? describeService(s) : `${describeService(s)} - ${problemText}`,
         s,
         null
       );
-      addHistory(state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado no servico.');
+      addHistory(state.finishState === 'ok' ? `Servico finalizado: ${describeService(s)}.` : `Problema registrado no servico: ${describeService(s)}.`);
     }
 
     function showSection(section) {
