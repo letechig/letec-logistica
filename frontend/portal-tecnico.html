@@ -909,6 +909,7 @@
       finishState: 'ok',
       finishServiceId: null,
       routeExpanded: false,
+      serviceActionLocks: {},
       selectedWeekDate: params.get('data') || new Date().toISOString().slice(0, 10),
       weekServicesByDate: {},
       rawServicesCount: 0,
@@ -1216,13 +1217,18 @@
       };
       try {
         const saved = await createEventViaBackend(rec);
-        state.events.unshift(saved || rec);
+        const event = saved || rec;
+        if (!event.deduplicated && !state.events.some(item => String(item.id) === String(event.id))) {
+          state.events.unshift(event);
+        }
         renderHistory();
+        return event;
       } catch(e) {
         addQueue({ type:'event-insert', record:rec });
         state.events.unshift(rec);
         savePortalCache();
         renderHistory();
+        return rec;
       }
     }
 
@@ -1538,6 +1544,29 @@
       return false;
     }
 
+    function beginServiceAction(id) {
+      const key = String(id);
+      if (state.serviceActionLocks[key]) {
+        toast('Aguarde, a acao anterior ainda esta sendo salva.', 'warn');
+        return false;
+      }
+      state.serviceActionLocks[key] = true;
+      return true;
+    }
+
+    function endServiceAction(id) {
+      delete state.serviceActionLocks[String(id)];
+    }
+
+    function ensureServiceStatus(id, allowedStatuses, actionLabel) {
+      const service = state.services.find(item => String(item.id) === String(id));
+      const current = execStatus(service);
+      if (service && allowedStatuses.includes(current)) return service;
+      toast(`${actionLabel} nao foi aplicada porque este servico ja mudou de status. Atualizando agenda.`, 'warn');
+      loadData();
+      return null;
+    }
+
     function buildGoogleMapsUrl(address) {
       return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
     }
@@ -1616,8 +1645,11 @@
     }
 
     async function markArrived(id) {
+      if (!beginServiceAction(id)) return;
+      try {
       if (!ensureNoOtherActiveService(id)) return;
-      const s = state.services.find(item => String(item.id) === String(id));
+      const s = ensureServiceStatus(id, ['em_deslocamento'], 'Chegada');
+      if (!s) return;
       const gps = await getGps();
       const payload = {
         exec_status:'cheguei',
@@ -1628,26 +1660,38 @@
       updateLocalService(id, payload);
       const persisted = await persistService(id, payload, gps ? 'Chegada registrada com GPS.' : 'Chegada registrada sem GPS.');
       if (!persisted) return;
-      await recordEvent('chegada', 'Chegada registrada', describeService(s), s, gps);
-      addHistory(`Chegada registrada: ${describeService(s)}.`);
+      const event = await recordEvent('chegada', 'Chegada registrada', describeService(s), s, gps);
+      if (!event?.deduplicated) addHistory(`Chegada registrada: ${describeService(s)}.`);
+      } finally {
+        endServiceAction(id);
+      }
     }
 
     async function startDisplacement(id) {
+      if (!beginServiceAction(id)) return;
+      try {
       if (!ensureNoOtherActiveService(id)) return;
-      const s = state.services.find(item => String(item.id) === String(id));
+      const s = ensureServiceStatus(id, ['agendado'], 'Deslocamento');
+      if (!s) return;
       const payload = {
         exec_status:'em_deslocamento',
       };
       updateLocalService(id, payload);
       const persisted = await persistService(id, payload, 'Deslocamento iniciado.');
       if (!persisted) return;
-      await recordEvent('deslocamento', 'Deslocamento iniciado', describeService(s), s, null);
-      addHistory(`Deslocamento iniciado: ${describeService(s)}.`);
+      const event = await recordEvent('deslocamento', 'Deslocamento iniciado', describeService(s), s, null);
+      if (!event?.deduplicated) addHistory(`Deslocamento iniciado: ${describeService(s)}.`);
+      } finally {
+        endServiceAction(id);
+      }
     }
 
     async function startService(id) {
+      if (!beginServiceAction(id)) return;
+      try {
       if (!ensureNoOtherActiveService(id)) return;
-      const s = state.services.find(item => String(item.id) === String(id));
+      const s = ensureServiceStatus(id, ['cheguei'], 'Inicio do servico');
+      if (!s) return;
       const inicio = nowIso();
       const payload = {
         exec_status:'em_execucao',
@@ -1657,8 +1701,11 @@
       updateLocalService(id, payload);
       const persisted = await persistService(id, payload, 'Servico iniciado.');
       if (!persisted) return;
-      await recordEvent('inicio', 'Servico iniciado', describeService(s), s, null);
-      addHistory(`Inicio de servico registrado: ${describeService(s)}.`);
+      const event = await recordEvent('inicio', 'Servico iniciado', describeService(s), s, null);
+      if (!event?.deduplicated) addHistory(`Inicio de servico registrado: ${describeService(s)}.`);
+      } finally {
+        endServiceAction(id);
+      }
     }
 
     function openFinishModal(id) {
@@ -1687,6 +1734,8 @@
     async function confirmFinishService() {
       const id = state.finishServiceId;
       if (!id) return;
+      if (!beginServiceAction(id)) return;
+      try {
       const problemText = document.getElementById('service-problem-text').value.trim();
       if (state.finishState === 'problema' && !problemText) {
         toast('Descreva o problema encontrado.', 'err');
@@ -1708,15 +1757,21 @@
       if (state.finishState === 'ok') payload.status = 'executado';
       updateLocalService(id, payload);
       closeFinishModal();
-      await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
-      await recordEvent(
+      const persisted = await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
+      if (!persisted) return;
+      const event = await recordEvent(
         state.finishState === 'ok' ? 'finalizacao' : 'problema',
         state.finishState === 'ok' ? 'Servico finalizado' : 'Problema registrado',
         state.finishState === 'ok' ? describeService(s) : `${describeService(s)} - ${problemText}`,
         s,
         null
       );
-      addHistory(state.finishState === 'ok' ? `Servico finalizado: ${describeService(s)}.` : `Problema registrado no servico: ${describeService(s)}.`);
+      if (!event?.deduplicated) {
+        addHistory(state.finishState === 'ok' ? `Servico finalizado: ${describeService(s)}.` : `Problema registrado no servico: ${describeService(s)}.`);
+      }
+      } finally {
+        endServiceAction(id);
+      }
     }
 
     function showSection(section) {
