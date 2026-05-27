@@ -534,6 +534,40 @@ test('POST /api/technician-events salva evento do portal', async () => {
   });
 });
 
+test('POST /api/technician-events evita duplicar evento operacional do mesmo servico', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.technician_events.push({
+      id: 88,
+      date: '2026-05-27',
+      tecnico: 'Andrey',
+      service_id: 3323,
+      tipo: 'inicio',
+      titulo: 'Servico iniciado',
+      detalhes: '09:00 - Cond Feel - OS 3323 / 3140 - Rua da Chibata, 61'
+    });
+
+    const response = await fetch(`${baseUrl}/api/technician-events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 99,
+        date: '2026-05-27',
+        tecnico: 'Andrey',
+        service_id: 3323,
+        tipo: 'inicio',
+        titulo: 'Servico iniciado',
+        detalhes: '09:00 - Cond Feel - OS 3323 / 3140 - Rua da Chibata, 61'
+      })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.id, 88);
+    assert.equal(payload.deduplicated, true);
+    assert.equal(state.technician_events.length, 1);
+  });
+});
+
 test('PUT /api/technician-events/:id atualiza evento sem apagar campos existentes', async () => {
   await withServer(async (baseUrl, state) => {
     state.technician_events.push({

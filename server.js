@@ -704,6 +704,31 @@ function normalizeTechnicianEventPayload(input = {}, options = {}) {
   return payload;
 }
 
+const IDEMPOTENT_TECHNICIAN_EVENT_TYPES = new Set([
+  'deslocamento',
+  'chegada',
+  'inicio',
+  'finalizacao',
+  'problema'
+]);
+
+async function findDuplicateTechnicianEvent(db, payload = {}) {
+  if (!IDEMPOTENT_TECHNICIAN_EVENT_TYPES.has(String(payload.tipo || ''))) return null;
+  if (!payload.date || !payload.service_id || !payload.tecnico) return null;
+
+  const { data, error } = await db
+    .from('technician_events')
+    .select('*')
+    .eq('date', payload.date)
+    .eq('service_id', payload.service_id)
+    .eq('tecnico', payload.tecnico)
+    .eq('tipo', payload.tipo)
+    .limit(1);
+
+  if (error) throw error;
+  return data?.[0] || null;
+}
+
 function normalizeTechnicianMessagePayload(input = {}) {
   return {
     id: input.id !== undefined ? input.id : Date.now(),
@@ -2826,6 +2851,9 @@ app.post('/api/technician-events', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const payload = normalizeTechnicianEventPayload(req.body);
+    const duplicate = await findDuplicateTechnicianEvent(db, payload);
+    if (duplicate) return res.status(200).json({ ...duplicate, deduplicated: true });
+
     const { data, error } = await db
       .from('technician_events')
       .insert([payload])
