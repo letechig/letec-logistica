@@ -3599,6 +3599,7 @@ async function carregarVeiculos(){
   <div class="nav-section-label">Gestão</div>
   <button class="nav-item" onclick="nav('dashboard',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg><span>Dashboard / Gestão</span></button>
   <button class="nav-item" onclick="nav('equipes',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"></line><line x1="12" x2="12" y1="20" y2="4"></line><line x1="6" x2="6" y1="20" y2="14"></line></svg><span>Indicadores</span></button>
+  <button class="nav-item" onclick="nav('servicos-funcionario',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span>Serviços por Funcionário</span></button>
   <button class="nav-item" onclick="nav('revisao',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span>Revisão de Dados</span></button>
   <button class="nav-item" onclick="nav('historico',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6A2 2 0 0 1 18.46 20H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H19a2 2 0 0 1 2 2v2"></path></svg><span>Histórico</span></button>
 
@@ -4533,6 +4534,24 @@ async function carregarVeiculos(){
         <thead><tr><th>Data</th><th>Motorista</th><th>Assistente</th><th>Veículo</th><th>KM+</th><th>Saída</th><th>Chegada</th><th>Comb.</th><th>Avaria</th><th></th></tr></thead>
         <tbody id="hist-tbody"></tbody>
       </table></div>
+    </div>
+
+    <!-- ═══ SERVIÇOS POR FUNCIONÁRIO ═══ -->
+    <div id="page-servicos-funcionario" class="page">
+      <div class="flex ic sb mb4">
+        <div>
+          <div class="section-title">Serviços por Funcionário</div>
+          <div class="section-sub">Serviços executados no dia, agrupados por técnico operacional</div>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <input class="finput" type="date" id="sf-data" onchange="renderServicosFuncionario()">
+        <select class="fsel" id="sf-tecnico" onchange="renderServicosFuncionario()"><option value="">Todos funcionários</option></select>
+        <button class="btn btn-ghost btn-sm" onclick="renderServicosFuncionario(true)">Atualizar</button>
+        <div class="text-muted" id="sf-count"></div>
+      </div>
+      <div id="sf-summary" class="kpi-grid mb4"></div>
+      <div id="sf-content"></div>
     </div>
 
     <!-- ═══ CONFIGURAÇÕES ═══ -->
@@ -7405,7 +7424,7 @@ async function carregarChecklistsDoSupabase() {
 let currentPage = (() => {
   try {
     const saved = localStorage.getItem(CURRENT_PAGE_PREF_KEY);
-    const allowed = ['dashboard','agenda','roteiro','comunicacao','rotas','checklist','frota','estoque','equipes','clientes','revisao','historico','hoje','config'];
+    const allowed = ['dashboard','agenda','roteiro','comunicacao','rotas','checklist','frota','estoque','equipes','servicos-funcionario','clientes','revisao','historico','hoje','config'];
     return allowed.includes(saved) ? saved : 'hoje';
   } catch(e) {
     return 'hoje';
@@ -7735,6 +7754,7 @@ const PAGE_META = {
   frota:      { title:'Controle de Frota',  sub:'Veículos, alertas e manutenção' },
   estoque:    { title:'Estoque',            sub:'Produtos, entradas e saídas por veículo' },
   equipes:    { title:'Indicadores',        sub:'Produtividade por técnico, tipo de serviço e execução' },
+  'servicos-funcionario': { title:'Serviços por Funcionário', sub:'Histórico diário de serviços executados por técnico' },
   clientes:   { title:'Clientes',           sub:'Cadastros, contatos, endereços e contratos' },
   revisao:    { title:'Revisão de Dados',    sub:'Pendências da importação e saneamento da base' },
   historico:  { title:'Histórico',          sub:'Checklists e registros salvos' },
@@ -7746,6 +7766,7 @@ const PAGE_MODULE_KEY = {
   dashboard: 'services',
   agenda: 'services',
   equipes: 'services',
+  'servicos-funcionario': 'fieldOps',
   roteiro: 'services',
   hoje: 'fieldOps',
   rotas: 'checklists',
@@ -7849,6 +7870,7 @@ function refreshPageAfterModuleLoad(page) {
     frota: renderFrota,
     estoque: renderInventory,
     equipes: renderEquipes,
+    'servicos-funcionario': renderServicosFuncionario,
     historico: renderHist,
     roteiro: rotGerarDoSistema
   };
@@ -7930,7 +7952,7 @@ window.nav = function(page, btn) {
   document.getElementById('page-sub').textContent   = meta.sub   || '';
   currentPage = page;
   try { localStorage.setItem(CURRENT_PAGE_PREF_KEY, page); } catch(e) {}
-  const renders = { dashboard: renderDash, agenda: renderAgenda, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, historico: renderHist, roteiro: rotGerarDoSistema };
+  const renders = { dashboard: renderDash, agenda: renderAgenda, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, 'servicos-funcionario': renderServicosFuncionario, historico: renderHist, roteiro: rotGerarDoSistema };
   if (renders[page]) renders[page]();
   ensureModuleLoaded(page).catch(() => {});
   updateBadges();
@@ -14070,6 +14092,218 @@ async function deleteClientDirectly(clientId) {
 }
 
 // ════════════════════════════════════════════════
+// SERVIÇOS POR FUNCIONÁRIO
+// ════════════════════════════════════════════════
+let servicosFuncionarioEventos = [];
+let servicosFuncionarioEventosData = '';
+
+function servicoFoiExecutado(s) {
+  const exec = String(s?.exec_status || '').toLowerCase();
+  const st = String(s?.status || s?.st || '').toLowerCase();
+  return ['finalizado', 'executado', 'concluido', 'concluído'].includes(exec)
+    || ['executado', 'finalizado', 'concluido', 'concluído'].includes(st);
+}
+
+function sfServicoId(s) {
+  return String(s?.id ?? '').trim();
+}
+
+function sfHorarioServico(s) {
+  return String(s?.horario || s?.hr || '').slice(0, 5);
+}
+
+function sfServicoMin(s) {
+  const min = typeof parseHorarioMinuto === 'function' ? parseHorarioMinuto(sfHorarioServico(s)) : null;
+  return Number.isFinite(min) ? min : 99999;
+}
+
+function sfNomeCliente(s) {
+  return String(s?.cliente || s?.cl || 'Cliente sem nome').trim();
+}
+
+function sfEndereco(s) {
+  return String(s?.endereco || 'Sem endereço').trim();
+}
+
+function sfOs(s) {
+  return String(s?.OS || s?.os || '').trim();
+}
+
+function sfStatusLabel(s) {
+  const exec = String(s?.exec_status || '').toLowerCase();
+  if (exec === 'finalizado') return 'Finalizado';
+  if (exec === 'em_execucao') return 'Em execução';
+  if (exec === 'cheguei') return 'Cheguei';
+  if (exec === 'em_deslocamento') return 'Em deslocamento';
+  const st = String(s?.status || s?.st || '').toLowerCase();
+  return ST_META[st]?.label || st || '—';
+}
+
+function sfEventKind(ev) {
+  const raw = `${ev?.tipo || ''} ${ev?.titulo || ''}`.toLowerCase();
+  if (raw.includes('final')) return 'finalizacao';
+  if (raw.includes('inicio') || raw.includes('iniciado')) return 'inicio';
+  if (raw.includes('chegada') || raw.includes('cheguei')) return 'chegada';
+  return raw.trim();
+}
+
+function sfEventoHora(ev) {
+  const raw = ev?.created_at || ev?.updated_at || '';
+  if (!raw) return '';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return String(raw).slice(11, 16);
+  return d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+}
+
+function sfEventosPorServico(events) {
+  const map = new Map();
+  (events || []).forEach(ev => {
+    const sid = String(ev?.service_id || ev?.serviceId || '').trim();
+    if (!sid) return;
+    if (!map.has(sid)) map.set(sid, []);
+    map.get(sid).push(ev);
+  });
+  return map;
+}
+
+function sfEventoChips(events) {
+  const kinds = new Set((events || []).map(sfEventKind));
+  const chips = [];
+  if (kinds.has('chegada')) chips.push('<span class="chip chip-blue">Chegada</span>');
+  if (kinds.has('inicio')) chips.push('<span class="chip chip-orange">Início</span>');
+  if (kinds.has('finalizacao')) chips.push('<span class="chip chip-green">Finalização</span>');
+  return chips.length ? chips.join(' ') : '<span class="chip chip-gray">Sem evento</span>';
+}
+
+async function carregarEventosServicosFuncionario(data, force = false) {
+  if (!force && servicosFuncionarioEventosData === data) return servicosFuncionarioEventos;
+  try {
+    const eventos = await requestBackendJson(`/api/technician-events?date=${encodeURIComponent(data)}&limit=500`);
+    servicosFuncionarioEventos = eventos || [];
+    servicosFuncionarioEventosData = data;
+  } catch(e) {
+    console.warn('Eventos técnicos indisponíveis para serviços por funcionário:', e.message || e);
+    servicosFuncionarioEventos = [];
+    servicosFuncionarioEventosData = data;
+  }
+  return servicosFuncionarioEventos;
+}
+
+function sfBuildGroups(servicos, eventosPorServico) {
+  const groups = new Map();
+  servicos.forEach(s => {
+    const tecnicos = getServiceTecnicos(s);
+    const membros = tecnicos.length ? tecnicos : [{ id:'__sem_funcionario__', nome:'Sem funcionário vinculado' }];
+    membros.forEach(t => {
+      const nome = String(t.nome || 'Sem funcionário vinculado').trim() || 'Sem funcionário vinculado';
+      const key = String(t.id || normalizarNome(nome) || nome);
+      if (!groups.has(key)) groups.set(key, { key, nome, rows: [] });
+      groups.get(key).rows.push({
+        service: s,
+        events: eventosPorServico.get(sfServicoId(s)) || []
+      });
+    });
+  });
+  groups.forEach(group => group.rows.sort((a, b) => sfServicoMin(a.service) - sfServicoMin(b.service) || sfNomeCliente(a.service).localeCompare(sfNomeCliente(b.service), 'pt-BR')));
+  return [...groups.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+function sfSyncTecnicoFilter(groups) {
+  const select = document.getElementById('sf-tecnico');
+  if (!select) return '';
+  const selected = select.value;
+  const options = groups.map(g => `<option value="${escapeHtmlAttr(g.key)}"${g.key === selected ? ' selected' : ''}>${sanitize(g.nome)}</option>`).join('');
+  select.innerHTML = `<option value="">Todos funcionários</option>${options}`;
+  if (selected && groups.some(g => g.key === selected)) select.value = selected;
+  return select.value;
+}
+
+function sfRenderSummary(groups, servicos, eventosPorServico) {
+  const serviceIds = new Set(servicos.map(sfServicoId).filter(Boolean));
+  const comFinalizacao = [...serviceIds].filter(id => (eventosPorServico.get(id) || []).some(ev => sfEventKind(ev) === 'finalizacao')).length;
+  const semEventoPortal = [...serviceIds].filter(id => !(eventosPorServico.get(id) || []).length).length;
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+      <div class="card"><div class="card-label">Funcionários com execução</div><div class="card-value cv-blue">${groups.length}</div><div class="card-trend">na data selecionada</div></div>
+      <div class="card"><div class="card-label">Serviços executados</div><div class="card-value cv-green">${servicos.length}</div><div class="card-trend">fonte principal: agenda</div></div>
+      <div class="card"><div class="card-label">Com finalização no portal</div><div class="card-value">${comFinalizacao}</div><div class="card-trend">auditoria technician_events</div></div>
+      <div class="card"><div class="card-label">Sem evento de portal</div><div class="card-value cv-orange">${semEventoPortal}</div><div class="card-trend">listar mesmo sem evento</div></div>
+    </div>
+  `;
+}
+
+function sfRenderGroup(group) {
+  const mins = group.rows.map(r => sfServicoMin(r.service));
+  const validMins = mins.filter(v => v < 99999);
+  const firstMin = validMins.length ? Math.min(...validMins) : 99999;
+  const lastMin = validMins.length ? Math.max(...validMins) : 99999;
+  const firstLabel = firstMin < 99999 ? formatarMinutosHM(firstMin) : '—';
+  const lastLabel = lastMin < 99999 ? formatarMinutosHM(lastMin) : '—';
+  return `
+    <div class="card mb3" style="padding:0;overflow:hidden">
+      <div class="flex ic sb" style="padding:14px 16px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-family:var(--display);font-weight:900;color:var(--text)">${sanitize(group.nome)}</div>
+          <div class="text-muted">${group.rows.length} serviço${group.rows.length === 1 ? '' : 's'} · ${firstLabel} até ${lastLabel}</div>
+        </div>
+        <span class="chip chip-blue">${group.rows.length} executado${group.rows.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="tbl-wrap" style="border:0;border-radius:0;box-shadow:none">
+        <table>
+          <thead><tr><th>Horário</th><th>Cliente</th><th>OS</th><th>Tipo</th><th>Endereço</th><th>Status</th><th>Portal</th></tr></thead>
+          <tbody>${group.rows.map(({ service, events }) => {
+            const status = sfStatusLabel(service);
+            const eventTimes = events.length ? `<div class="text-muted" style="font-size:10px;margin-top:3px">${events.map(sfEventoHora).filter(Boolean).slice(0, 3).join(' · ')}</div>` : '';
+            return `<tr>
+              <td class="mono bold">${sanitize(sfHorarioServico(service) || '--:--')}</td>
+              <td><strong>${sanitize(sfNomeCliente(service))}</strong></td>
+              <td class="mono">${sanitize(sfOs(service) || '—')}</td>
+              <td>${sanitize(typeof tipoComboLabel === 'function' ? tipoComboLabel(service) : (service.tipoServico || service.sc || '—'))}</td>
+              <td>${sanitize(sfEndereco(service))}</td>
+              <td><span class="chip ${(service.exec_status === 'finalizado' || (service.status || service.st) === 'executado') ? 'chip-green' : 'chip-gray'}">${sanitize(status)}</span></td>
+              <td>${sfEventoChips(events)}${eventTimes}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+async function renderServicosFuncionario(force = false) {
+  const dateEl = document.getElementById('sf-data');
+  const contentEl = document.getElementById('sf-content');
+  const summaryEl = document.getElementById('sf-summary');
+  const countEl = document.getElementById('sf-count');
+  if (!dateEl || !contentEl || !summaryEl) return;
+  const today = new Date().toISOString().split('T')[0];
+  const data = dateEl.value || today;
+  if (!dateEl.value) dateEl.value = data;
+
+  contentEl.innerHTML = '<div class="ui-empty-state">Carregando serviços executados...</div>';
+  const eventos = await carregarEventosServicosFuncionario(data, force);
+  const eventosPorServico = sfEventosPorServico(eventos);
+  const executados = services
+    .filter(s => getServiceDateValue(s) === data && servicoFoiExecutado(s))
+    .sort((a, b) => sfServicoMin(a) - sfServicoMin(b) || sfNomeCliente(a).localeCompare(sfNomeCliente(b), 'pt-BR'));
+  const groups = sfBuildGroups(executados, eventosPorServico);
+  const selected = sfSyncTecnicoFilter(groups);
+  const visibleGroups = selected ? groups.filter(g => g.key === selected) : groups;
+
+  summaryEl.innerHTML = sfRenderSummary(groups, executados, eventosPorServico);
+  if (countEl) countEl.textContent = `${executados.length} serviço${executados.length === 1 ? '' : 's'} executado${executados.length === 1 ? '' : 's'}`;
+  if (!executados.length) {
+    contentEl.innerHTML = '<div class="ui-empty-state">Nenhum serviço executado nesta data.</div>';
+    return;
+  }
+  if (!visibleGroups.length) {
+    contentEl.innerHTML = '<div class="ui-empty-state">Nenhum serviço para o funcionário selecionado.</div>';
+    return;
+  }
+  contentEl.innerHTML = visibleGroups.map(sfRenderGroup).join('');
+}
+
+// ════════════════════════════════════════════════
 // HISTÓRICO (CHECK LISTS)
 // ════════════════════════════════════════════════
 function renderHist(){
@@ -17776,6 +18010,7 @@ function refreshPages() {
   if (currentPage === 'hoje') renderHoje();
   if (currentPage === 'roteiro') rotGerarDoSistema();
   if (currentPage === 'estoque') renderInventory();
+  if (currentPage === 'servicos-funcionario') renderServicosFuncionario();
 }
 
 function listenSupabase() {
