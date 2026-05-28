@@ -4551,7 +4551,9 @@ async function carregarVeiculos(){
           <option value="ano">Ano inteiro</option>
         </select>
         <input class="finput" type="date" id="sf-data" onchange="renderServicosFuncionario()">
+        <input class="finput" id="sf-cliente" placeholder="Buscar cliente..." oninput="renderServicosFuncionario()">
         <select class="fsel" id="sf-tecnico" onchange="renderServicosFuncionario()"><option value="">Todos funcionários</option></select>
+        <select class="fsel" id="sf-veiculo" onchange="renderServicosFuncionario()"><option value="">Todos veículos</option></select>
         <button class="btn btn-ghost btn-sm" onclick="renderServicosFuncionario(true)">Atualizar</button>
         <div class="text-muted" id="sf-count"></div>
       </div>
@@ -14169,6 +14171,20 @@ function sfOs(s) {
   return String(s?.OS || s?.os || '').trim();
 }
 
+function sfVeiculo(s) {
+  return String(s?.veiculo || s?.vehicle || '').trim();
+}
+
+function sfMatchesCliente(s, query) {
+  const q = normalizarNome(query || '');
+  if (!q) return true;
+  return normalizarNome([
+    sfNomeCliente(s),
+    sfEndereco(s),
+    sfOs(s)
+  ].join(' ')).includes(q);
+}
+
 function sfStatusLabel(s) {
   const exec = String(s?.exec_status || '').toLowerCase();
   if (exec === 'finalizado') return 'Finalizado';
@@ -14262,6 +14278,16 @@ function sfSyncTecnicoFilter(groups) {
   return select.value;
 }
 
+function sfSyncVeiculoFilter(servicos) {
+  const select = document.getElementById('sf-veiculo');
+  if (!select) return '';
+  const selected = select.value;
+  const veiculos = [...new Set(servicos.map(sfVeiculo).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  select.innerHTML = '<option value="">Todos veículos</option>' + veiculos.map(v => `<option value="${escapeHtmlAttr(v)}"${v === selected ? ' selected' : ''}>${sanitize(v)}</option>`).join('');
+  if (selected && veiculos.includes(selected)) select.value = selected;
+  return select.value;
+}
+
 function sfRenderSummary(groups, servicos, eventosPorServico) {
   const serviceIds = new Set(servicos.map(sfServicoId).filter(Boolean));
   const comFinalizacao = [...serviceIds].filter(id => (eventosPorServico.get(id) || []).some(ev => sfEventKind(ev) === 'finalizacao')).length;
@@ -14294,7 +14320,7 @@ function sfRenderGroup(group) {
       </div>
       <div class="tbl-wrap" style="border:0;border-radius:0;box-shadow:none">
         <table>
-          <thead><tr><th>Data</th><th>Horário</th><th>Cliente</th><th>OS</th><th>Tipo</th><th>Endereço</th><th>Status</th><th>Portal</th></tr></thead>
+          <thead><tr><th>Data</th><th>Horário</th><th>Cliente</th><th>OS</th><th>Tipo</th><th>Veículo</th><th>Endereço</th><th>Status</th><th>Portal</th></tr></thead>
           <tbody>${group.rows.map(({ service, events }) => {
             const status = sfStatusLabel(service);
             const eventTimes = events.length ? `<div class="text-muted" style="font-size:10px;margin-top:3px">${events.map(sfEventoHora).filter(Boolean).slice(0, 3).join(' · ')}</div>` : '';
@@ -14304,6 +14330,7 @@ function sfRenderGroup(group) {
               <td><strong>${sanitize(sfNomeCliente(service))}</strong></td>
               <td class="mono">${sanitize(sfOs(service) || '—')}</td>
               <td>${sanitize(typeof tipoComboLabel === 'function' ? tipoComboLabel(service) : (service.tipoServico || service.sc || '—'))}</td>
+              <td>${sfVeiculo(service) ? `<span class="chip chip-blue">${sanitize(sfVeiculo(service))}</span>` : '—'}</td>
               <td>${sanitize(sfEndereco(service))}</td>
               <td><span class="chip ${(service.exec_status === 'finalizado' || (service.status || service.st) === 'executado') ? 'chip-green' : 'chip-gray'}">${sanitize(status)}</span></td>
               <td>${sfEventoChips(events)}${eventTimes}</td>
@@ -14318,6 +14345,7 @@ function sfRenderGroup(group) {
 async function renderServicosFuncionario(force = false) {
   const dateEl = document.getElementById('sf-data');
   const periodoEl = document.getElementById('sf-periodo');
+  const clienteEl = document.getElementById('sf-cliente');
   const contentEl = document.getElementById('sf-content');
   const summaryEl = document.getElementById('sf-summary');
   const countEl = document.getElementById('sf-count');
@@ -14325,15 +14353,20 @@ async function renderServicosFuncionario(force = false) {
   const today = new Date().toISOString().split('T')[0];
   const data = dateEl.value || today;
   const periodo = periodoEl?.value || 'dia';
+  const clienteBusca = clienteEl?.value || '';
   const period = sfPeriodInfo(data, periodo);
   if (!dateEl.value) dateEl.value = data;
 
   contentEl.innerHTML = '<div class="ui-empty-state">Carregando serviços executados...</div>';
   const eventos = await carregarEventosServicosFuncionario(data, periodo, force);
   const eventosPorServico = sfEventosPorServico(eventos);
-  const executados = services
+  const executadosPeriodo = services
     .filter(s => period.matches(getServiceDateValue(s)) && servicoFoiExecutado(s))
     .sort((a, b) => sfDataServico(a).localeCompare(sfDataServico(b)) || sfServicoMin(a) - sfServicoMin(b) || sfNomeCliente(a).localeCompare(sfNomeCliente(b), 'pt-BR'));
+  const veiculoSelecionado = sfSyncVeiculoFilter(executadosPeriodo);
+  const executados = executadosPeriodo
+    .filter(s => sfMatchesCliente(s, clienteBusca))
+    .filter(s => !veiculoSelecionado || sfVeiculo(s) === veiculoSelecionado);
   const groups = sfBuildGroups(executados, eventosPorServico);
   const selected = sfSyncTecnicoFilter(groups);
   const visibleGroups = selected ? groups.filter(g => g.key === selected) : groups;
