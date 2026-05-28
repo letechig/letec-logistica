@@ -4541,7 +4541,7 @@ async function carregarVeiculos(){
       <div class="flex ic sb mb4">
         <div>
           <div class="section-title">Serviços por Funcionário</div>
-          <div class="section-sub">Serviços executados no dia, agrupados por técnico operacional</div>
+          <div class="section-sub">Serviços do período agrupados por técnico operacional</div>
         </div>
       </div>
       <div class="filter-bar">
@@ -4554,6 +4554,17 @@ async function carregarVeiculos(){
         <input class="finput" id="sf-cliente" placeholder="Buscar cliente..." oninput="renderServicosFuncionario()">
         <select class="fsel" id="sf-tecnico" onchange="renderServicosFuncionario()"><option value="">Todos funcionários</option></select>
         <select class="fsel" id="sf-veiculo" onchange="renderServicosFuncionario()"><option value="">Todos veículos</option></select>
+        <select class="fsel" id="sf-status" onchange="renderServicosFuncionario()">
+          <option value="">Todos status</option>
+          <option value="agendado">Agendado</option>
+          <option value="em_deslocamento">Em deslocamento</option>
+          <option value="cheguei">Cheguei</option>
+          <option value="em_execucao">Em execução</option>
+          <option value="finalizado">Executado/Finalizado</option>
+          <option value="problema">Problema/Não executado</option>
+          <option value="reagendado">Reagendado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
         <button class="btn btn-ghost btn-sm" onclick="renderServicosFuncionario(true)">Atualizar</button>
         <div class="text-muted" id="sf-count"></div>
       </div>
@@ -9436,7 +9447,7 @@ async function setSt(id, st) {
     // 1. Salvar localmente (sempre)
     saveSvcs();
     renderDash();
-    const pageRenders = {agenda:renderAgenda,hoje:renderHoje,rotas:renderRotas,equipes:renderEquipes};
+    const pageRenders = {agenda:renderAgenda,hoje:renderHoje,rotas:renderRotas,equipes:renderEquipes,'servicos-funcionario':renderServicosFuncionario};
     if(pageRenders[currentPage]) pageRenders[currentPage]();
     toast(`Status → ${ST_META[st]?.label||st}`, 'ok');
     // 2. Persistir status no Supabase (duplo, sem bloquear UI)
@@ -9730,7 +9741,7 @@ async function salvarEdicaoSvc(id) {
     closeModal();
     renderDash();
     updateBadges();
-    const pageRenders = {agenda:renderAgenda, hoje:renderHoje, rotas:renderRotas, equipes:renderEquipes};
+    const pageRenders = {agenda:renderAgenda, hoje:renderHoje, rotas:renderRotas, equipes:renderEquipes, 'servicos-funcionario':renderServicosFuncionario};
     if(pageRenders[currentPage]) pageRenders[currentPage]();
     if (avaliacao.status === 'conflito_critico') {
       toast('Serviço atualizado com justificativa logística crítica', 'warn');
@@ -14123,20 +14134,27 @@ function sfPeriodInfo(data, periodo = 'dia') {
     return {
       key: `ano:${year}`,
       label: `Ano inteiro ${year}`,
+      from: `${year}-01-01`,
+      to: `${year}-12-31`,
       matches: dateValue => String(dateValue || '').startsWith(year)
     };
   }
   if (periodo === 'mes') {
+    const lastDay = String(new Date(Number(year), Number(base.slice(5, 7)), 0).getDate()).padStart(2, '0');
     const monthName = MESES_META[Number(base.slice(5, 7)) - 1]?.nome || month;
     return {
       key: `mes:${month}`,
       label: `${monthName} ${year}`,
+      from: `${month}-01`,
+      to: `${month}-${lastDay}`,
       matches: dateValue => String(dateValue || '').startsWith(month)
     };
   }
   return {
     key: `dia:${base}`,
     label: `${base.slice(8, 10)}/${base.slice(5, 7)}/${base.slice(0, 4)}`,
+    from: base,
+    to: base,
     matches: dateValue => String(dateValue || '') === base
   };
 }
@@ -14188,11 +14206,38 @@ function sfMatchesCliente(s, query) {
 function sfStatusLabel(s) {
   const exec = String(s?.exec_status || '').toLowerCase();
   if (exec === 'finalizado') return 'Finalizado';
+  if (exec === 'problema') return 'Problema';
   if (exec === 'em_execucao') return 'Em execução';
   if (exec === 'cheguei') return 'Cheguei';
   if (exec === 'em_deslocamento') return 'Em deslocamento';
   const st = String(s?.status || s?.st || '').toLowerCase();
   return ST_META[st]?.label || st || '—';
+}
+
+function sfStatusCategory(s) {
+  const exec = String(s?.exec_status || '').toLowerCase();
+  const st = String(s?.status || s?.st || '').toLowerCase();
+  if (st === 'cancelado') return 'cancelado';
+  if (st === 'reagendado') return 'reagendado';
+  if (exec === 'problema' || st === 'problema' || ['nao_executado', 'não_executado', 'nao-executado', 'não-executado'].includes(st)) return 'problema';
+  if (exec === 'finalizado' || ['executado', 'finalizado', 'concluido', 'concluído'].includes(st)) return 'finalizado';
+  if (exec === 'em_execucao' || st === 'em_execucao') return 'em_execucao';
+  if (exec === 'cheguei' || st === 'cheguei') return 'cheguei';
+  if (exec === 'em_deslocamento' || st === 'em_deslocamento') return 'em_deslocamento';
+  return st || 'agendado';
+}
+
+function sfStatusChipClass(s) {
+  const category = sfStatusCategory(s);
+  if (category === 'finalizado') return 'chip-green';
+  if (category === 'problema' || category === 'cancelado') return 'chip-red';
+  if (category === 'reagendado' || category === 'em_execucao') return 'chip-orange';
+  if (category === 'em_deslocamento' || category === 'cheguei' || category === 'agendado') return 'chip-blue';
+  return 'chip-gray';
+}
+
+function sfMatchesStatus(s, filtro) {
+  return !filtro || sfStatusCategory(s) === filtro;
 }
 
 function sfEventKind(ev) {
@@ -14237,7 +14282,7 @@ async function carregarEventosServicosFuncionario(data, periodo = 'dia', force =
   try {
     const path = periodo === 'dia'
       ? `/api/technician-events?date=${encodeURIComponent(data)}&limit=500`
-      : '/api/technician-events?limit=500';
+      : `/api/technician-events?date_from=${encodeURIComponent(period.from)}&date_to=${encodeURIComponent(period.to)}&limit=500`;
     const eventos = await requestBackendJson(path);
     servicosFuncionarioEventos = (eventos || []).filter(ev => !ev.date || period.matches(ev.date));
     servicosFuncionarioEventosKey = period.key;
@@ -14294,8 +14339,8 @@ function sfRenderSummary(groups, servicos, eventosPorServico) {
   const semEventoPortal = [...serviceIds].filter(id => !(eventosPorServico.get(id) || []).length).length;
   return `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
-      <div class="card"><div class="card-label">Funcionários com execução</div><div class="card-value cv-blue">${groups.length}</div><div class="card-trend">na data selecionada</div></div>
-      <div class="card"><div class="card-label">Serviços executados</div><div class="card-value cv-green">${servicos.length}</div><div class="card-trend">fonte principal: agenda</div></div>
+      <div class="card"><div class="card-label">Funcionários com serviços</div><div class="card-value cv-blue">${groups.length}</div><div class="card-trend">no período filtrado</div></div>
+      <div class="card"><div class="card-label">Serviços listados</div><div class="card-value cv-green">${servicos.length}</div><div class="card-trend">fonte principal: agenda</div></div>
       <div class="card"><div class="card-label">Com finalização no portal</div><div class="card-value">${comFinalizacao}</div><div class="card-trend">auditoria technician_events</div></div>
       <div class="card"><div class="card-label">Sem evento de portal</div><div class="card-value cv-orange">${semEventoPortal}</div><div class="card-trend">listar mesmo sem evento</div></div>
     </div>
@@ -14316,15 +14361,16 @@ function sfRenderGroup(group) {
           <div style="font-family:var(--display);font-weight:900;color:var(--text)">${sanitize(group.nome)}</div>
           <div class="text-muted">${group.rows.length} serviço${group.rows.length === 1 ? '' : 's'} · ${firstLabel} até ${lastLabel}</div>
         </div>
-        <span class="chip chip-blue">${group.rows.length} executado${group.rows.length === 1 ? '' : 's'}</span>
+        <span class="chip chip-blue">${group.rows.length} serviço${group.rows.length === 1 ? '' : 's'}</span>
       </div>
       <div class="tbl-wrap" style="border:0;border-radius:0;box-shadow:none">
         <table>
-          <thead><tr><th>Data</th><th>Horário</th><th>Cliente</th><th>OS</th><th>Tipo</th><th>Veículo</th><th>Endereço</th><th>Status</th><th>Portal</th></tr></thead>
+          <thead><tr><th>Data</th><th>Horário</th><th>Cliente</th><th>OS</th><th>Tipo</th><th>Veículo</th><th>Endereço</th><th>Status</th><th>Portal</th><th></th></tr></thead>
           <tbody>${group.rows.map(({ service, events }) => {
             const status = sfStatusLabel(service);
+            const idArg = jsArg(service.id);
             const eventTimes = events.length ? `<div class="text-muted" style="font-size:10px;margin-top:3px">${events.map(sfEventoHora).filter(Boolean).slice(0, 3).join(' · ')}</div>` : '';
-            return `<tr>
+            return `<tr onclick="openEditSvc(${idArg})" style="cursor:pointer">
               <td class="mono">${sanitize(sfDataLabel(service))}</td>
               <td class="mono bold">${sanitize(sfHorarioServico(service) || '--:--')}</td>
               <td><strong>${sanitize(sfNomeCliente(service))}</strong></td>
@@ -14332,8 +14378,9 @@ function sfRenderGroup(group) {
               <td>${sanitize(typeof tipoComboLabel === 'function' ? tipoComboLabel(service) : (service.tipoServico || service.sc || '—'))}</td>
               <td>${sfVeiculo(service) ? `<span class="chip chip-blue">${sanitize(sfVeiculo(service))}</span>` : '—'}</td>
               <td>${sanitize(sfEndereco(service))}</td>
-              <td><span class="chip ${(service.exec_status === 'finalizado' || (service.status || service.st) === 'executado') ? 'chip-green' : 'chip-gray'}">${sanitize(status)}</span></td>
+              <td><span class="chip ${sfStatusChipClass(service)}">${sanitize(status)}</span></td>
               <td>${sfEventoChips(events)}${eventTimes}</td>
+              <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openEditSvc(${idArg})">Abrir</button></td>
             </tr>`;
           }).join('')}</tbody>
         </table>
@@ -14346,6 +14393,7 @@ async function renderServicosFuncionario(force = false) {
   const dateEl = document.getElementById('sf-data');
   const periodoEl = document.getElementById('sf-periodo');
   const clienteEl = document.getElementById('sf-cliente');
+  const statusEl = document.getElementById('sf-status');
   const contentEl = document.getElementById('sf-content');
   const summaryEl = document.getElementById('sf-summary');
   const countEl = document.getElementById('sf-count');
@@ -14354,27 +14402,32 @@ async function renderServicosFuncionario(force = false) {
   const data = dateEl.value || today;
   const periodo = periodoEl?.value || 'dia';
   const clienteBusca = clienteEl?.value || '';
+  const statusFiltro = statusEl?.value || '';
   const period = sfPeriodInfo(data, periodo);
   if (!dateEl.value) dateEl.value = data;
 
-  contentEl.innerHTML = '<div class="ui-empty-state">Carregando serviços executados...</div>';
+  contentEl.innerHTML = '<div class="ui-empty-state">Carregando serviços...</div>';
   const eventos = await carregarEventosServicosFuncionario(data, periodo, force);
   const eventosPorServico = sfEventosPorServico(eventos);
-  const executadosPeriodo = services
-    .filter(s => period.matches(getServiceDateValue(s)) && servicoFoiExecutado(s))
+  const servicosPeriodo = services
+    .filter(s => period.matches(getServiceDateValue(s)))
     .sort((a, b) => sfDataServico(a).localeCompare(sfDataServico(b)) || sfServicoMin(a) - sfServicoMin(b) || sfNomeCliente(a).localeCompare(sfNomeCliente(b), 'pt-BR'));
-  const veiculoSelecionado = sfSyncVeiculoFilter(executadosPeriodo);
-  const executados = executadosPeriodo
+  const veiculoSelecionado = sfSyncVeiculoFilter(servicosPeriodo);
+  const servicosFiltrados = servicosPeriodo
     .filter(s => sfMatchesCliente(s, clienteBusca))
+    .filter(s => sfMatchesStatus(s, statusFiltro))
     .filter(s => !veiculoSelecionado || sfVeiculo(s) === veiculoSelecionado);
-  const groups = sfBuildGroups(executados, eventosPorServico);
+  const groups = sfBuildGroups(servicosFiltrados, eventosPorServico);
   const selected = sfSyncTecnicoFilter(groups);
   const visibleGroups = selected ? groups.filter(g => g.key === selected) : groups;
+  const visibleServices = selected
+    ? visibleGroups.flatMap(group => group.rows.map(row => row.service))
+    : servicosFiltrados;
 
-  summaryEl.innerHTML = sfRenderSummary(groups, executados, eventosPorServico);
-  if (countEl) countEl.textContent = `${executados.length} serviço${executados.length === 1 ? '' : 's'} executado${executados.length === 1 ? '' : 's'} · ${period.label}`;
-  if (!executados.length) {
-    contentEl.innerHTML = '<div class="ui-empty-state">Nenhum serviço executado nesta data.</div>';
+  summaryEl.innerHTML = sfRenderSummary(visibleGroups, visibleServices, eventosPorServico);
+  if (countEl) countEl.textContent = `${visibleServices.length} serviço${visibleServices.length === 1 ? '' : 's'} · ${period.label}`;
+  if (!visibleServices.length) {
+    contentEl.innerHTML = '<div class="ui-empty-state">Nenhum serviço encontrado neste período.</div>';
     return;
   }
   if (!visibleGroups.length) {

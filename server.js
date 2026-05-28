@@ -2829,6 +2829,8 @@ app.get('/api/technician-events', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const date = cleanDateText(req.query.date);
+    const dateFrom = cleanDateText(req.query.date_from);
+    const dateTo = cleanDateText(req.query.date_to);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 500);
     let query = db
       .from('technician_events')
@@ -2837,6 +2839,10 @@ app.get('/api/technician-events', async (req, res) => {
       .limit(limit);
 
     if (date) query = query.eq('date', date);
+    else {
+      if (dateFrom) query = query.gte('date', dateFrom);
+      if (dateTo) query = query.lte('date', dateTo);
+    }
 
     const { data, error } = await query;
     if (error) throw error;

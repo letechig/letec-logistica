@@ -45,6 +45,8 @@ function makeBuilder(state, table) {
     limit(n) { builder._limit = n; return builder; },
     range(from, to) { builder._range = [from, to]; return builder; },
     eq(key, value) { builder._filters.push({ key, value }); return builder; },
+    gte(key, value) { builder._filters.push({ key, value, op: 'gte' }); return builder; },
+    lte(key, value) { builder._filters.push({ key, value, op: 'lte' }); return builder; },
     in(key, values) { builder._in.push({ key, values: values.map(String) }); return builder; },
     or(expr) { builder._or = String(expr); return builder; },
     insert(payload) {
@@ -101,7 +103,13 @@ function makeBuilder(state, table) {
     },
     _rows() {
       let rows = [...state[table]];
-      for (const filter of builder._filters) rows = rows.filter(row => String(row[filter.key]) === String(filter.value));
+      for (const filter of builder._filters) rows = rows.filter(row => {
+        const rowValue = String(row[filter.key] || '');
+        const filterValue = String(filter.value || '');
+        if (filter.op === 'gte') return rowValue >= filterValue;
+        if (filter.op === 'lte') return rowValue <= filterValue;
+        return rowValue === filterValue;
+      });
       for (const filter of builder._in) rows = rows.filter(row => filter.values.includes(String(row[filter.key])));
       if (builder._or) {
         const terms = builder._or.split(',').map(part => {
@@ -531,6 +539,22 @@ test('POST /api/technician-events salva evento do portal', async () => {
     const payload = await response.json();
     assert.equal(payload.tipo, 'chegada');
     assert.equal(state.technician_events.some(item => item.id === 88), true);
+  });
+});
+
+test('GET /api/technician-events filtra eventos por intervalo de datas', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.technician_events.push(
+      { id: 81, date: '2026-04-30', tecnico: 'Joao', tipo: 'inicio' },
+      { id: 82, date: '2026-05-01', tecnico: 'Joao', tipo: 'chegada' },
+      { id: 83, date: '2026-05-20', tecnico: 'Maria', tipo: 'finalizacao' },
+      { id: 84, date: '2026-06-01', tecnico: 'Maria', tipo: 'inicio' }
+    );
+
+    const response = await fetch(`${baseUrl}/api/technician-events?date_from=2026-05-01&date_to=2026-05-31`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload.map(item => item.id).sort(), [82, 83]);
   });
 });
 
