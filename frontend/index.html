@@ -4545,6 +4545,11 @@ async function carregarVeiculos(){
         </div>
       </div>
       <div class="filter-bar">
+        <select class="fsel" id="sf-periodo" onchange="renderServicosFuncionario()">
+          <option value="dia">Dia</option>
+          <option value="mes">Mês inteiro</option>
+          <option value="ano">Ano inteiro</option>
+        </select>
         <input class="finput" type="date" id="sf-data" onchange="renderServicosFuncionario()">
         <select class="fsel" id="sf-tecnico" onchange="renderServicosFuncionario()"><option value="">Todos funcionários</option></select>
         <button class="btn btn-ghost btn-sm" onclick="renderServicosFuncionario(true)">Atualizar</button>
@@ -14095,7 +14100,7 @@ async function deleteClientDirectly(clientId) {
 // SERVIÇOS POR FUNCIONÁRIO
 // ════════════════════════════════════════════════
 let servicosFuncionarioEventos = [];
-let servicosFuncionarioEventosData = '';
+let servicosFuncionarioEventosKey = '';
 
 function servicoFoiExecutado(s) {
   const exec = String(s?.exec_status || '').toLowerCase();
@@ -14108,8 +14113,43 @@ function sfServicoId(s) {
   return String(s?.id ?? '').trim();
 }
 
+function sfPeriodInfo(data, periodo = 'dia') {
+  const base = String(data || new Date().toISOString().split('T')[0]);
+  const year = base.slice(0, 4);
+  const month = base.slice(0, 7);
+  if (periodo === 'ano') {
+    return {
+      key: `ano:${year}`,
+      label: `Ano inteiro ${year}`,
+      matches: dateValue => String(dateValue || '').startsWith(year)
+    };
+  }
+  if (periodo === 'mes') {
+    const monthName = MESES_META[Number(base.slice(5, 7)) - 1]?.nome || month;
+    return {
+      key: `mes:${month}`,
+      label: `${monthName} ${year}`,
+      matches: dateValue => String(dateValue || '').startsWith(month)
+    };
+  }
+  return {
+    key: `dia:${base}`,
+    label: `${base.slice(8, 10)}/${base.slice(5, 7)}/${base.slice(0, 4)}`,
+    matches: dateValue => String(dateValue || '') === base
+  };
+}
+
 function sfHorarioServico(s) {
   return String(s?.horario || s?.hr || '').slice(0, 5);
+}
+
+function sfDataServico(s) {
+  return getServiceDateValue(s) || '';
+}
+
+function sfDataLabel(s) {
+  const data = sfDataServico(s);
+  return data ? `${data.slice(8, 10)}/${data.slice(5, 7)}/${data.slice(0, 4)}` : '—';
 }
 
 function sfServicoMin(s) {
@@ -14175,16 +14215,20 @@ function sfEventoChips(events) {
   return chips.length ? chips.join(' ') : '<span class="chip chip-gray">Sem evento</span>';
 }
 
-async function carregarEventosServicosFuncionario(data, force = false) {
-  if (!force && servicosFuncionarioEventosData === data) return servicosFuncionarioEventos;
+async function carregarEventosServicosFuncionario(data, periodo = 'dia', force = false) {
+  const period = sfPeriodInfo(data, periodo);
+  if (!force && servicosFuncionarioEventosKey === period.key) return servicosFuncionarioEventos;
   try {
-    const eventos = await requestBackendJson(`/api/technician-events?date=${encodeURIComponent(data)}&limit=500`);
-    servicosFuncionarioEventos = eventos || [];
-    servicosFuncionarioEventosData = data;
+    const path = periodo === 'dia'
+      ? `/api/technician-events?date=${encodeURIComponent(data)}&limit=500`
+      : '/api/technician-events?limit=500';
+    const eventos = await requestBackendJson(path);
+    servicosFuncionarioEventos = (eventos || []).filter(ev => !ev.date || period.matches(ev.date));
+    servicosFuncionarioEventosKey = period.key;
   } catch(e) {
     console.warn('Eventos técnicos indisponíveis para serviços por funcionário:', e.message || e);
     servicosFuncionarioEventos = [];
-    servicosFuncionarioEventosData = data;
+    servicosFuncionarioEventosKey = period.key;
   }
   return servicosFuncionarioEventos;
 }
@@ -14204,7 +14248,7 @@ function sfBuildGroups(servicos, eventosPorServico) {
       });
     });
   });
-  groups.forEach(group => group.rows.sort((a, b) => sfServicoMin(a.service) - sfServicoMin(b.service) || sfNomeCliente(a.service).localeCompare(sfNomeCliente(b.service), 'pt-BR')));
+  groups.forEach(group => group.rows.sort((a, b) => sfDataServico(a.service).localeCompare(sfDataServico(b.service)) || sfServicoMin(a.service) - sfServicoMin(b.service) || sfNomeCliente(a.service).localeCompare(sfNomeCliente(b.service), 'pt-BR')));
   return [...groups.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
@@ -14250,11 +14294,12 @@ function sfRenderGroup(group) {
       </div>
       <div class="tbl-wrap" style="border:0;border-radius:0;box-shadow:none">
         <table>
-          <thead><tr><th>Horário</th><th>Cliente</th><th>OS</th><th>Tipo</th><th>Endereço</th><th>Status</th><th>Portal</th></tr></thead>
+          <thead><tr><th>Data</th><th>Horário</th><th>Cliente</th><th>OS</th><th>Tipo</th><th>Endereço</th><th>Status</th><th>Portal</th></tr></thead>
           <tbody>${group.rows.map(({ service, events }) => {
             const status = sfStatusLabel(service);
             const eventTimes = events.length ? `<div class="text-muted" style="font-size:10px;margin-top:3px">${events.map(sfEventoHora).filter(Boolean).slice(0, 3).join(' · ')}</div>` : '';
             return `<tr>
+              <td class="mono">${sanitize(sfDataLabel(service))}</td>
               <td class="mono bold">${sanitize(sfHorarioServico(service) || '--:--')}</td>
               <td><strong>${sanitize(sfNomeCliente(service))}</strong></td>
               <td class="mono">${sanitize(sfOs(service) || '—')}</td>
@@ -14272,26 +14317,29 @@ function sfRenderGroup(group) {
 
 async function renderServicosFuncionario(force = false) {
   const dateEl = document.getElementById('sf-data');
+  const periodoEl = document.getElementById('sf-periodo');
   const contentEl = document.getElementById('sf-content');
   const summaryEl = document.getElementById('sf-summary');
   const countEl = document.getElementById('sf-count');
   if (!dateEl || !contentEl || !summaryEl) return;
   const today = new Date().toISOString().split('T')[0];
   const data = dateEl.value || today;
+  const periodo = periodoEl?.value || 'dia';
+  const period = sfPeriodInfo(data, periodo);
   if (!dateEl.value) dateEl.value = data;
 
   contentEl.innerHTML = '<div class="ui-empty-state">Carregando serviços executados...</div>';
-  const eventos = await carregarEventosServicosFuncionario(data, force);
+  const eventos = await carregarEventosServicosFuncionario(data, periodo, force);
   const eventosPorServico = sfEventosPorServico(eventos);
   const executados = services
-    .filter(s => getServiceDateValue(s) === data && servicoFoiExecutado(s))
-    .sort((a, b) => sfServicoMin(a) - sfServicoMin(b) || sfNomeCliente(a).localeCompare(sfNomeCliente(b), 'pt-BR'));
+    .filter(s => period.matches(getServiceDateValue(s)) && servicoFoiExecutado(s))
+    .sort((a, b) => sfDataServico(a).localeCompare(sfDataServico(b)) || sfServicoMin(a) - sfServicoMin(b) || sfNomeCliente(a).localeCompare(sfNomeCliente(b), 'pt-BR'));
   const groups = sfBuildGroups(executados, eventosPorServico);
   const selected = sfSyncTecnicoFilter(groups);
   const visibleGroups = selected ? groups.filter(g => g.key === selected) : groups;
 
   summaryEl.innerHTML = sfRenderSummary(groups, executados, eventosPorServico);
-  if (countEl) countEl.textContent = `${executados.length} serviço${executados.length === 1 ? '' : 's'} executado${executados.length === 1 ? '' : 's'}`;
+  if (countEl) countEl.textContent = `${executados.length} serviço${executados.length === 1 ? '' : 's'} executado${executados.length === 1 ? '' : 's'} · ${period.label}`;
   if (!executados.length) {
     contentEl.innerHTML = '<div class="ui-empty-state">Nenhum serviço executado nesta data.</div>';
     return;
