@@ -2499,6 +2499,18 @@ app.post('/api/logistics/simulate-route', async (req, res) => {
 
 // Static frontend assets
 app.use('/js', express.static(path.join(__dirname, 'frontend', 'js')));
+app.use('/assets', express.static(path.join(__dirname, 'frontend', 'assets')));
+
+app.get('/manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json');
+  res.sendFile(path.join(__dirname, 'frontend', 'manifest.webmanifest'));
+});
+
+app.get('/portal-tecnico-sw.js', (req, res) => {
+  res.type('application/javascript');
+  res.set('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(__dirname, 'frontend', 'portal-tecnico-sw.js'));
+});
 
 // Serve frontend
 app.get('/', (req, res) => {
