@@ -245,6 +245,11 @@ test('rotas de estoque criam produto e movimentacao pelo backend', async () => {
     assert.equal(movementResponse.status, 201);
     assert.equal(state.inventory_products.length, 1);
     assert.equal(state.inventory_movements.length, 1);
+
+    const deleteResponse = await fetch(`${baseUrl}/api/inventory/products/${product.id}`, { method: 'DELETE' });
+    assert.equal(deleteResponse.status, 200);
+    assert.equal(state.inventory_products.length, 0);
+    assert.equal(state.inventory_movements.length, 1);
   });
 });
 

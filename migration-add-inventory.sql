@@ -66,11 +66,12 @@ UPDATE inventory_products
 SET categoria = CASE
   WHEN LOWER(nome) LIKE '%raticida%' OR LOWER(nome) LIKE '%isca%' OR LOWER(nome) LIKE '%porta isca%' OR LOWER(nome) LIKE '%armadilha%' OR LOWER(nome) LIKE '%cola%' OR LOWER(nome) LIKE '%rato%' OR LOWER(nome) LIKE '%roedor%' THEN 'desratizacao'
   WHEN LOWER(nome) LIKE '%inseticida%' OR LOWER(nome) LIKE '%gel%' OR LOWER(nome) LIKE '%pulverizador%' OR LOWER(nome) LIKE '%cipermetrina%' OR LOWER(nome) LIKE '%blatum%' OR LOWER(nome) LIKE '%baraticida%' OR LOWER(nome) LIKE '%formicida%' THEN 'desinsetizacao'
+  WHEN LOWER(nome) LIKE '%cupim%' OR LOWER(nome) LIKE '%cupinicida%' OR LOWER(nome) LIKE '%descupiniz%' OR LOWER(nome) LIKE '%termidor%' OR LOWER(nome) LIKE '%madeira%' OR LOWER(nome) LIKE '%subterr%neo%' THEN 'descupinizacao'
   WHEN LOWER(nome) LIKE '%cloro%' OR LOWER(nome) LIKE '%hipoclorito%' OR LOWER(nome) LIKE '%escova%' OR LOWER(nome) LIKE '%bomba%' OR LOWER(nome) LIKE '%mangueira%' OR LOWER(nome) LIKE '%caixa d%agua%' OR LOWER(nome) LIKE '%caixa d%gua%' OR LOWER(nome) LIKE '%caixa dagua%' THEN 'caixa_agua'
   WHEN LOWER(nome) LIKE '%desentupidor%' OR LOWER(nome) LIKE '%cabo%' OR LOWER(nome) LIKE '%mola%' OR LOWER(nome) LIKE '%produto desentupimento%' THEN 'desentupimento'
   ELSE 'outros'
 END
-WHERE categoria IS NULL OR TRIM(categoria) = '';
+WHERE categoria IS NULL OR TRIM(categoria) = '' OR categoria = 'outros';
 
 INSERT INTO inventory_products (nome, unidade, categoria, estoque_inicial, estoque_minimo, ativo) VALUES
   ('Set', 'un', 'outros', 0, 0, true),
@@ -83,7 +84,7 @@ INSERT INTO inventory_products (nome, unidade, categoria, estoque_inicial, estoq
   ('Cyperex', 'un', 'outros', 0, 0, true),
   ('Ceretrex', 'un', 'outros', 0, 0, true),
   ('Devetion', 'un', 'outros', 0, 0, true),
-  ('Termidor', 'un', 'outros', 0, 0, true),
+  ('Termidor', 'un', 'descupinizacao', 0, 0, true),
   ('Demand', 'un', 'outros', 0, 0, true),
   ('F4', 'un', 'outros', 0, 0, true),
   ('F3', 'un', 'outros', 0, 0, true),
