@@ -1961,6 +1961,8 @@ td.bold { color: var(--text); font-weight: 600; }
 .inventory-cat-card:hover { border-color:rgba(79,142,247,.35); background:var(--card); }
 .inventory-cat-card-title { font-weight:800; font-size:12px; color:var(--text); margin-bottom:4px; }
 .inventory-cat-card-meta { font-size:11px; color:var(--text3); line-height:1.45; }
+.inventory-pagination { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:12px; color:var(--text3); font-size:12px; }
+.inventory-pagination-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 
 /* ─── UI REFRESH V1 ───────────────────────────── */
 .ui-page-head {
@@ -4288,7 +4290,7 @@ async function carregarVeiculos(){
             <div class="card-label">Produtos em estoque</div>
             <div class="section-sub" style="font-size:12px">Saldo calculado por entradas, saídas e ajustes.</div>
           </div>
-          <input class="finput" id="inventory-product-search" placeholder="Buscar produto..." oninput="renderInventory()" style="max-width:280px">
+          <input class="finput" id="inventory-product-search" placeholder="Buscar produto..." oninput="handleInventoryProductSearch()" style="max-width:280px">
         </div>
         <div id="inventory-category-summary" class="inventory-category-summary"></div>
         <div class="pill-bar" id="inventory-product-filters">
@@ -4296,6 +4298,7 @@ async function carregarVeiculos(){
           <button type="button" class="pill-btn" data-filter="desratizacao" onclick="setInventoryProductFilter('desratizacao')">Desratização</button>
           <button type="button" class="pill-btn" data-filter="desentupimento" onclick="setInventoryProductFilter('desentupimento')">Desentupimento</button>
           <button type="button" class="pill-btn" data-filter="desinsetizacao" onclick="setInventoryProductFilter('desinsetizacao')">Desinsetização</button>
+          <button type="button" class="pill-btn" data-filter="descupinizacao" onclick="setInventoryProductFilter('descupinizacao')">Descupinização</button>
           <button type="button" class="pill-btn" data-filter="caixa_agua" onclick="setInventoryProductFilter('caixa_agua')">Caixa d'Água</button>
           <button type="button" class="pill-btn" data-filter="outros" onclick="setInventoryProductFilter('outros')">Outros</button>
           <button type="button" class="pill-btn" data-filter="baixo_critico" onclick="setInventoryProductFilter('baixo_critico')">Baixo / Crítico</button>
@@ -4307,6 +4310,7 @@ async function carregarVeiculos(){
             <tbody id="inventory-products-tbody"></tbody>
           </table>
         </div>
+        <div id="inventory-products-pagination" class="inventory-pagination"></div>
       </div>
 
       <div class="card" style="padding:16px">
@@ -7401,6 +7405,7 @@ let logisticaWhatsappMensagens = [];
 let inventoryModalMode = null;
 let inventoryEditingProductId = null;
 let inventoryProductFilter = 'todos';
+let inventoryProductPage = 1;
 let fleetVehicles = [];
 let fleetAlerts = [];
 let fleetSelectedVehicle = null;
@@ -18196,6 +18201,7 @@ const INVENTORY_CATEGORIES = [
   { key:'desratizacao', label:'Desratização', chip:'chip-blue', terms:['raticida','isca','porta isca','armadilha','cola','rato','roedor'] },
   { key:'desentupimento', label:'Desentupimento', chip:'chip-cyan', terms:['desentupidor','cabo','mola','produto desentupimento'] },
   { key:'desinsetizacao', label:'Desinsetização', chip:'chip-purple', terms:['inseticida','gel','pulverizador','cipermetrina','blatum','baraticida','formicida'] },
+  { key:'descupinizacao', label:'Descupinização', chip:'chip-orange', terms:['cupim','cupinicida','descupinizacao','descupinização','termidor','madeira','subterraneo','subterrâneo'] },
   { key:'caixa_agua', label:"Caixa d'Água", chip:'chip-green', terms:['cloro','hipoclorito','escova','bomba','mangueira','caixa d agua','caixa dagua'] },
   { key:'outros', label:'Outros', chip:'chip-gray', terms:[] }
 ];
@@ -18208,6 +18214,11 @@ function inventoryNormalizeCategory(value) {
     desentupimento:'desentupimento',
     desinsetizacao:'desinsetizacao',
     dedetizacao:'desinsetizacao',
+    descupinizacao:'descupinizacao',
+    descupinização:'descupinizacao',
+    cupim:'descupinizacao',
+    cupim_subterraneo:'descupinizacao',
+    cupim_subterrâneo:'descupinizacao',
     limpeza_de_caixa_d_agua:'caixa_agua',
     limpeza_caixa_agua:'caixa_agua',
     caixa_d_agua:'caixa_agua',
@@ -18227,7 +18238,13 @@ function inventoryInferCategory(product) {
 
 function inventoryProductCategory(product) {
   const raw = String(product?.categoria || '').trim();
-  return raw ? inventoryNormalizeCategory(raw) : inventoryInferCategory(product);
+  if (!raw) return inventoryInferCategory(product);
+  const normalized = inventoryNormalizeCategory(raw);
+  if (normalized === 'outros') {
+    const inferred = inventoryInferCategory(product);
+    return inferred !== 'outros' ? inferred : normalized;
+  }
+  return normalized;
 }
 
 function inventoryCategoryMeta(value) {
@@ -18303,9 +18320,20 @@ function renderInventorySchemaAlert() {
 
 function setInventoryProductFilter(filter) {
   inventoryProductFilter = filter || 'todos';
+  inventoryProductPage = 1;
   document.querySelectorAll('#inventory-product-filters .pill-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.filter === inventoryProductFilter);
   });
+  renderInventory();
+}
+
+function handleInventoryProductSearch() {
+  inventoryProductPage = 1;
+  renderInventory();
+}
+
+function setInventoryProductPage(page) {
+  inventoryProductPage = Math.max(1, Math.min(2, Number(page) || 1));
   renderInventory();
 }
 
@@ -18331,6 +18359,28 @@ function renderInventoryCategorySummary(productRows) {
       <div class="inventory-cat-card-meta">${rows.length} produtos · ${ok} OK · ${lowCritical} críticos · ${empty} esgotados</div>
     </button>`;
   }).join('');
+}
+
+function renderInventoryProductPagination(totalItems, visibleItems, totalPages, currentPage) {
+  const el = document.getElementById('inventory-products-pagination');
+  if (!el) return;
+  if (!totalItems) {
+    el.innerHTML = '';
+    return;
+  }
+  const start = visibleItems ? ((currentPage - 1) * Math.ceil(totalItems / totalPages)) + 1 : 0;
+  const end = visibleItems ? start + visibleItems - 1 : 0;
+  const pageButtons = Array.from({ length: totalPages }, (_, idx) => {
+    const page = idx + 1;
+    return `<button type="button" class="btn ${page === currentPage ? 'btn-primary' : 'btn-ghost'} btn-xs" onclick="setInventoryProductPage(${page})">${page}</button>`;
+  }).join('');
+  el.innerHTML = `
+    <span>Mostrando ${start}-${end} de ${totalItems} produto${totalItems === 1 ? '' : 's'}</span>
+    <div class="inventory-pagination-actions">
+      <button type="button" class="btn btn-ghost btn-xs" ${currentPage <= 1 ? 'disabled' : ''} onclick="setInventoryProductPage(${currentPage - 1})">Anterior</button>
+      ${pageButtons}
+      <button type="button" class="btn btn-ghost btn-xs" ${currentPage >= totalPages ? 'disabled' : ''} onclick="setInventoryProductPage(${currentPage + 1})">Próxima</button>
+    </div>`;
 }
 
 function updateInventoryFilterOptions() {
@@ -18366,6 +18416,8 @@ function renderInventory() {
     kpis.innerHTML = '';
     const summary = document.getElementById('inventory-category-summary');
     if (summary) summary.innerHTML = '';
+    const pagination = document.getElementById('inventory-products-pagination');
+    if (pagination) pagination.innerHTML = '';
     productsBody.innerHTML = '<tr><td colspan="10" class="text-muted">Estoque indisponível até a migração ser aplicada.</td></tr>';
     movementsBody.innerHTML = '<tr><td colspan="8" class="text-muted">Sem histórico disponível.</td></tr>';
     return;
@@ -18397,7 +18449,11 @@ function renderInventory() {
 
   const search = normalizarNome(document.getElementById('inventory-product-search')?.value || '');
   const visibleProducts = productRows.filter(row => inventoryApplyProductFilter(row, search));
-  productsBody.innerHTML = visibleProducts.length ? visibleProducts.map(({ product, calc, status }) => `
+  const productPageCount = visibleProducts.length > 1 ? 2 : 1;
+  inventoryProductPage = Math.max(1, Math.min(productPageCount, inventoryProductPage));
+  const productPageSize = Math.max(1, Math.ceil(visibleProducts.length / productPageCount));
+  const pagedProducts = visibleProducts.slice((inventoryProductPage - 1) * productPageSize, inventoryProductPage * productPageSize);
+  productsBody.innerHTML = pagedProducts.length ? pagedProducts.map(({ product, calc, status }) => `
     <tr>
       <td class="bold">${sanitize(product.nome)}${product.ativo === false ? ' <span class="chip chip-gray">Inativo</span>' : ''}</td>
       <td>${inventoryCategoryBadge(inventoryProductCategory(product))}</td>
@@ -18412,8 +18468,10 @@ function renderInventory() {
         <button class="btn btn-ghost btn-xs" onclick="openInventoryMovement('saida', ${jsArg(product.id)})">Saída</button>
         <button class="btn btn-ghost btn-xs" onclick="openInventoryMovement('entrada', ${jsArg(product.id)})">Entrada</button>
         <button class="btn btn-ghost btn-xs" onclick="openInventoryProduct(${jsArg(product.id)})">Editar</button>
+        <button class="btn btn-ghost btn-xs" style="color:var(--red)" onclick="deleteInventoryProduct(${jsArg(product.id)})">Excluir</button>
       </td>
     </tr>`).join('') : '<tr><td colspan="10" class="text-muted">Nenhum produto encontrado.</td></tr>';
+  renderInventoryProductPagination(visibleProducts.length, pagedProducts.length, productPageCount, inventoryProductPage);
 
   const fDate = document.getElementById('inventory-filter-date')?.value || '';
   const fProduct = document.getElementById('inventory-filter-product')?.value || '';
@@ -18582,6 +18640,21 @@ async function saveInventoryProduct() {
     await carregarEstoqueDoSupabase();
   } catch(e) {
     toast('Erro ao salvar produto: ' + (e.message || e), 'err');
+  }
+}
+
+async function deleteInventoryProduct(productId) {
+  const product = inventoryProductById(productId);
+  if (!product) { toast('Produto não encontrado', 'err'); return; }
+  const moves = inventoryMovementsForProduct(product.id).length;
+  const detail = moves ? ` O histórico de ${moves} movimentação${moves === 1 ? '' : 'ões'} será mantido.` : '';
+  if (!confirm(`Excluir o produto "${product.nome}" do estoque?${detail}`)) return;
+  try {
+    await requestBackendJson(`/api/inventory/products/${encodeURIComponent(product.id)}`, { method: 'DELETE' });
+    toast('Produto excluído', 'ok');
+    await carregarEstoqueDoSupabase();
+  } catch(e) {
+    toast('Erro ao excluir produto: ' + (e.message || e), 'err');
   }
 }
 
