@@ -108,6 +108,28 @@
     .sync-pill.offline { color:#92400e; background:#fffbeb; border-color:#fde68a; }
     .sync-dot { width:8px; height:8px; border-radius:50%; background:var(--success); }
     .sync-pill.offline .sync-dot { background:var(--warning); }
+    .header-actions {
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+    .install-app-btn {
+      display:none;
+      align-items:center;
+      justify-content:center;
+      min-height:30px;
+      padding:0 10px;
+      border:1px solid rgba(37,99,235,.32);
+      border-radius:999px;
+      background:#eff6ff;
+      color:var(--primary-2);
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .install-app-btn.visible { display:inline-flex; }
 
     .profile-card {
       margin-top:0;
@@ -630,7 +652,10 @@
           <h1>Portal do Tecnico</h1>
           <p class="subtitle">Servicos, execucao e checklist do dia.</p>
         </div>
-        <div class="sync-pill" id="sync-pill"><span class="sync-dot"></span><span id="sync-text">Online</span></div>
+        <div class="header-actions">
+          <button class="install-app-btn" id="install-app-btn" type="button" onclick="installPortalApp()">Instalar</button>
+          <div class="sync-pill" id="sync-pill"><span class="sync-dot"></span><span id="sync-text">Online</span></div>
+        </div>
       </div>
     </header>
 
@@ -925,6 +950,34 @@
       matchedTech: null,
       loading: false,
     };
+    let deferredInstallPrompt = null;
+
+    function isStandaloneApp() {
+      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    }
+
+    function updateInstallButton() {
+      const btn = document.getElementById('install-app-btn');
+      if (!btn) return;
+      btn.classList.toggle('visible', !isStandaloneApp());
+    }
+
+    async function installPortalApp() {
+      if (isStandaloneApp()) {
+        updateInstallButton();
+        toast('Portal ja esta aberto em modo app.', 'ok');
+        return;
+      }
+      if (!deferredInstallPrompt) {
+        toast('Remova o atalho antigo, recarregue o portal e use Instalar app no menu do navegador.', 'warn');
+        return;
+      }
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+      deferredInstallPrompt = null;
+      updateInstallButton();
+      if (choice?.outcome === 'accepted') toast('Portal instalado.', 'ok');
+    }
 
     function normalizeText(value) {
       return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -2050,9 +2103,20 @@ Portal: ${currentPortalLink()}${location}`;
 
     window.addEventListener('online', () => { setSyncState(); processQueue(); });
     window.addEventListener('offline', setSyncState);
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      updateInstallButton();
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      updateInstallButton();
+      toast('Portal instalado.', 'ok');
+    });
 
     window.addEventListener('load', async () => {
       setSyncState();
+      updateInstallButton();
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/portal-tecnico-sw.js').catch(err => {
           console.warn('[Portal Tecnico] Service worker nao registrado:', err);
