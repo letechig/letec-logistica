@@ -1,0 +1,25 @@
+{
+  "name": "Portal do Tecnico Letec",
+  "short_name": "Portal Tecnico",
+  "description": "Agenda, checklist e registros de campo dos tecnicos Letec.",
+  "start_url": "/portal-tecnico",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef4fb",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/assets/portal-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/portal-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

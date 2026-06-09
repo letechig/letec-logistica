@@ -372,6 +372,34 @@ test('PUT /api/services/:id permite avancar o proprio atendimento ativo', async 
   });
 });
 
+test('PUT /api/services/:id ignora atualizacao operacional atrasada que voltaria status', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [
+      {
+        id: 10,
+        date: '2026-05-25',
+        cliente: 'Cliente Ativo',
+        equipe: 'Lucas Eduardo',
+        tecnicos_ids: ['tec-1'],
+        exec_status: 'cheguei',
+        chegada_hora: '2026-05-25T13:20:00.000Z'
+      }
+    ];
+
+    const response = await fetch(`${baseUrl}/api/services/10`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exec_status: 'em_deslocamento' })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.exec_status, 'cheguei');
+    assert.equal(payload.stale_exec_status_ignored, true);
+    assert.equal(state.services[0].exec_status, 'cheguei');
+  });
+});
+
 test('PUT /api/services/:id libera novo atendimento quando anterior esta finalizado ou problema', async () => {
   await withServer(async (baseUrl, state) => {
     state.services = [
