@@ -68,6 +68,43 @@ function createAppointmentService(deps) {
     return ['em_deslocamento', 'cheguei', 'em_execucao'].includes(status);
   }
 
+  function execStatusRank(status) {
+    return {
+      agendado: 0,
+      em_deslocamento: 1,
+      cheguei: 2,
+      em_execucao: 3,
+      finalizado: 4,
+      problema: 4
+    }[status] ?? null;
+  }
+
+  function effectiveExecStatus(service = {}) {
+    const execStatus = activeExecStatus(service);
+    if (execStatus) return execStatus;
+    const status = normalizeText(service.status || service.st).replace(/\s+/g, '_');
+    if (['executado', 'finalizado', 'concluido', 'concluído'].includes(status)) return 'finalizado';
+    if (['problema', 'nao_executado', 'não_executado'].includes(status)) return 'problema';
+    return status || '';
+  }
+
+  function isTerminalExecStatus(status) {
+    return ['finalizado', 'problema'].includes(status);
+  }
+
+  function isStaleExecStatusUpdate(current = {}, payload = {}) {
+    if (!Object.prototype.hasOwnProperty.call(payload, 'exec_status')) return false;
+    const currentStatus = effectiveExecStatus(current);
+    const nextStatus = activeExecStatus(payload);
+    if (!nextStatus || nextStatus === currentStatus) return false;
+
+    if (isTerminalExecStatus(currentStatus)) return true;
+
+    const currentRank = execStatusRank(currentStatus);
+    const nextRank = execStatusRank(nextStatus);
+    return currentRank !== null && nextRank !== null && nextRank < currentRank;
+  }
+
   function sameOperationalOwner(a = {}, b = {}) {
     const aIds = serviceTechnicianIds(a).map(String);
     const bIds = serviceTechnicianIds(b).map(String);
@@ -164,6 +201,16 @@ function createAppointmentService(deps) {
     const currentResult = await fetchServiceById(db, id);
     if (currentResult.error) return { status: 500, error: currentResult.error };
     if (!currentResult.data) return { status: 404, error: { code: 'service_not_found', error: 'Serviço não encontrado' } };
+
+    if (isStaleExecStatusUpdate(currentResult.data, payload)) {
+      return {
+        status: 200,
+        data: {
+          ...currentResult.data,
+          stale_exec_status_ignored: true
+        }
+      };
+    }
 
     try {
       const conflict = await findActiveServiceConflict(db, id, { ...currentResult.data, ...payload });
