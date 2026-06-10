@@ -915,20 +915,52 @@
       return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
     })();
 
-    const portal = {
-      tecnicoId: params.get('tecnicoId') || '',
-      tecnico: params.get('tecnico') || params.get('motorista') || 'Tecnico',
-      data: params.get('data') || new Date().toISOString().slice(0, 10),
-      veiculo: params.get('veiculo') || '',
-      equipe: params.get('equipe') || '',
-      suporte: (params.get('suporte') || '').replace(/\D/g, ''),
-    };
-
     const QUEUE_KEY = 'letec_portal_tecnico_queue';
     const HISTORY_KEY = 'letec_portal_tecnico_history';
     const DATA_CACHE_KEY = 'letec_portal_tecnico_data_cache_v1';
+    const CONTEXT_KEY = 'letec_portal_tecnico_context_v1';
     const EQUIPAMENTOS = ['EPIs', 'Pulverizador', 'Iscas', 'Produtos', 'Ferramentas', 'Prancheta', 'Celular carregado', 'Documentos'];
     const FUEL = ['Cheio', '3/4', 'Metade', '1/4', 'Reserva'];
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    function loadPortalContext() {
+      try {
+        return JSON.parse(localStorage.getItem(CONTEXT_KEY) || '{}') || {};
+      } catch(e) {
+        return {};
+      }
+    }
+
+    function savePortalContext(context) {
+      try {
+        localStorage.setItem(CONTEXT_KEY, JSON.stringify({ ...context, saved_at: new Date().toISOString() }));
+      } catch(e) {}
+    }
+
+    function buildPortalContextFromParams() {
+      return {
+        tecnicoId: params.get('tecnicoId') || '',
+        tecnico: params.get('tecnico') || params.get('motorista') || '',
+        veiculo: params.get('veiculo') || '',
+        equipe: params.get('equipe') || '',
+        suporte: (params.get('suporte') || '').replace(/\D/g, '')
+      };
+    }
+
+    const urlContext = buildPortalContextFromParams();
+    const hasUrlContext = !!(urlContext.tecnicoId || urlContext.tecnico || urlContext.equipe);
+    const savedContext = loadPortalContext();
+    const effectiveContext = hasUrlContext ? urlContext : savedContext;
+    if (hasUrlContext) savePortalContext(urlContext);
+
+    const portal = {
+      tecnicoId: effectiveContext.tecnicoId || '',
+      tecnico: effectiveContext.tecnico || 'Tecnico',
+      data: params.get('data') || todayIso,
+      veiculo: effectiveContext.veiculo || '',
+      equipe: effectiveContext.equipe || '',
+      suporte: (effectiveContext.suporte || '').replace(/\D/g, ''),
+    };
 
     let state = {
       services: [],
