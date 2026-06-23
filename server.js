@@ -1549,11 +1549,44 @@ async function resolveAppUserRole(req) {
       if (!isMissingRelationError(error)) throw error;
       return null;
     });
-    req.appUserRole = byEmail ? { user, appUser: byEmail, role: byEmail.role } : null;
+    if (byEmail) {
+      req.appUserRole = { user, appUser: byEmail, role: byEmail.role };
+      return req.appUserRole;
+    }
+    const bootstrapped = await maybeBootstrapFirstAppUser(db, user);
+    req.appUserRole = bootstrapped ? { user, appUser: bootstrapped, role: bootstrapped.role } : null;
     return req.appUserRole;
   }
   req.appUserRole = appUser ? { user, appUser, role: appUser.role } : null;
   return req.appUserRole;
+}
+
+async function maybeBootstrapFirstAppUser(db, user) {
+  if (!user?.email) return null;
+  try {
+    const { count, error: countError } = await db
+      .from('app_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('active', true);
+    if (countError) throw countError;
+    if (Number(count || 0) > 0) return null;
+
+    const { data, error } = await db
+      .from('app_users')
+      .upsert({
+        auth_user_id: user.id,
+        email: user.email,
+        role: 'admin',
+        active: true
+      }, { onConflict: 'email' })
+      .select()
+      .limit(1);
+    if (error) throw error;
+    return data?.[0] || null;
+  } catch (error) {
+    if (isMissingRelationError(error)) return null;
+    throw error;
+  }
 }
 
 async function requireAdminOrOperator(req, res) {
