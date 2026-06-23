@@ -1,4 +1,4 @@
-const DEFAULT_BASE_ADDRESS = '88VH+MR Vila Sao Paulo, São Paulo - SP';
+const DEFAULT_BASE_ADDRESS = 'R. Maria José Rangel, 135 - Vila Sao Paulo, São Paulo - SP';
 
 const TEMPO_SERVICO = {
   DS_RES: 60,

@@ -2970,9 +2970,9 @@ app.get('/api/operational-map', async (req, res) => {
       range: bounds,
       base: {
         label: 'Base Letec',
-        query: '88VH+MR Vila Sao Paulo, São Paulo - SP',
-        latitude: -23.6407,
-        longitude: -46.5791
+        query: 'R. Maria José Rangel, 135 - Vila Sao Paulo, São Paulo - SP',
+        latitude: -23.655753,
+        longitude: -46.6704132
       },
       services,
       routes,

@@ -215,7 +215,7 @@ test('buildRouteForGroup cacheia distâncias repetidas e inclui retorno à base 
   const countingDistance = {
     async getDistance(origem, destino) {
       calls += 1;
-      if (/Rua A/.test(String(origem)) && /88VH/.test(String(destino))) {
+      if (/Rua A/.test(String(origem)) && /Maria Jos[eé] Rangel/.test(String(destino))) {
         return { km: 8, minutos: 20, origem: 'google' };
       }
       return { km: 4, minutos: 10, origem: 'google' };
