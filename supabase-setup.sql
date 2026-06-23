@@ -91,6 +91,43 @@ CREATE TABLE IF NOT EXISTS technicians (
 
 ALTER TABLE technicians ADD COLUMN IF NOT EXISTS telefone TEXT;
 ALTER TABLE technicians ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE technicians ADD COLUMN IF NOT EXISTS portal_pin_hash TEXT;
+ALTER TABLE technicians ADD COLUMN IF NOT EXISTS portal_pin_updated_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE technicians ADD COLUMN IF NOT EXISTS portal_login_enabled BOOLEAN DEFAULT false;
+ALTER TABLE technicians ADD COLUMN IF NOT EXISTS portal_session_revoked_at TIMESTAMP WITH TIME ZONE;
+
+CREATE TABLE IF NOT EXISTS technician_sessions (
+  id BIGSERIAL PRIMARY KEY,
+  technician_id UUID REFERENCES technicians(id) ON DELETE CASCADE,
+  session_token_hash TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  last_seen_at TIMESTAMP WITH TIME ZONE,
+  revoked_at TIMESTAMP WITH TIME ZONE,
+  ip TEXT,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_technician_sessions_technician_id ON technician_sessions(technician_id);
+CREATE INDEX IF NOT EXISTS idx_technician_sessions_token_hash ON technician_sessions(session_token_hash);
+CREATE INDEX IF NOT EXISTS idx_technician_sessions_expires_at ON technician_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_technician_sessions_revoked_at ON technician_sessions(revoked_at);
+
+CREATE TABLE IF NOT EXISTS app_users (
+  id BIGSERIAL PRIMARY KEY,
+  auth_user_id UUID,
+  email TEXT,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'operador')),
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  UNIQUE(auth_user_id),
+  UNIQUE(email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_users_auth_user_id ON app_users(auth_user_id);
+CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(LOWER(email));
+CREATE INDEX IF NOT EXISTS idx_app_users_role_active ON app_users(role, active);
 
 INSERT INTO technicians (nome) VALUES
   ('João Silva'),
@@ -674,6 +711,39 @@ CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_tipo ON logistica_wh
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_status ON logistica_whatsapp_mensagens(status);
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_destinatario ON logistica_whatsapp_mensagens(destinatario_tipo);
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_created_at ON logistica_whatsapp_mensagens(created_at);
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id BIGSERIAL PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  actor_id TEXT,
+  actor_email TEXT,
+  actor_name TEXT,
+  actor_source TEXT,
+  portal_tecnico_id TEXT,
+  portal_tecnico TEXT,
+  portal_equipe TEXT,
+  method TEXT NOT NULL,
+  path TEXT NOT NULL,
+  route TEXT,
+  status_code INTEGER,
+  entity TEXT,
+  entity_id TEXT,
+  action TEXT,
+  request_id TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  origin TEXT,
+  referer TEXT,
+  payload JSONB DEFAULT '{}'::jsonb,
+  response_summary JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_actor_email ON activity_logs(LOWER(actor_email));
+CREATE INDEX IF NOT EXISTS idx_activity_logs_actor_source ON activity_logs(actor_source);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_path ON activity_logs(path);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_entity ON activity_logs(entity, entity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_portal_tecnico ON activity_logs(LOWER(portal_tecnico));
 
 -- Migração: atualizar registros existentes com valores padrão
 UPDATE customers SET categoria = 'eventual' WHERE categoria IS NULL;

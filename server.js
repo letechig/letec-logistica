@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const crypto = require('crypto');
 const readXlsxFile = require('read-excel-file/node');
 const { createClient } = require('@supabase/supabase-js');
 const { DistanceClient } = require('./src/logistics/distance');
@@ -59,6 +60,15 @@ const strictLimiter = rateLimit({
   max: Number(process.env.STRICT_RATE_LIMIT_MAX || 60),
   message: 'Muitas requisições de escrita, tente novamente em alguns minutos',
   handler: rateLimitJsonHandler('Muitas requisições de escrita, tente novamente em alguns minutos', 'write_rate_limited'),
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const technicianLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.TECHNICIAN_LOGIN_RATE_LIMIT_MAX || 8),
+  message: 'Muitas tentativas de login. Tente novamente em alguns minutos',
+  handler: rateLimitJsonHandler('Muitas tentativas de login. Tente novamente em alguns minutos', 'technician_login_rate_limited'),
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -1292,9 +1302,9 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'", "'unsafe-hashes'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       styleSrcElem: ["'self'", "'unsafe-inline'", "https:", "fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "https://tile.openstreetmap.org"],
       fontSrc: ["'self'", "https:", "data:", "fonts.gstatic.com"],
-      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", supabaseConnectSrc, "https://cdn.jsdelivr.net"],
+      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", "https://tile.openstreetmap.org", supabaseConnectSrc, "https://cdn.jsdelivr.net"],
       frameSrc: ["maps.google.com"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
@@ -1332,6 +1342,366 @@ app.locals.supabase = supabase;
 function getSupabaseClient() {
   return app.locals.supabase || supabase;
 }
+
+function firstHeader(req, name) {
+  const value = req.get(name);
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function extractBearerToken(req) {
+  const auth = firstHeader(req, 'authorization') || '';
+  const match = String(auth).match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+function extractTechnicianToken(req) {
+  const headerToken = firstHeader(req, 'x-technician-session') || '';
+  const bearer = extractBearerToken(req);
+  if (String(bearer).startsWith('tech_')) return bearer;
+  return String(headerToken || '').trim();
+}
+
+function hashToken(value) {
+  return crypto.createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+function generateTechnicianSessionToken() {
+  return `tech_${crypto.randomBytes(32).toString('base64url')}`;
+}
+
+function generateTechnicianPin() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+
+function hashTechnicianPin(pin) {
+  const clean = String(pin || '').replace(/\D/g, '');
+  if (!/^\d{6}$/.test(clean)) {
+    const error = new Error('PIN deve ter 6 digitos');
+    error.status = 400;
+    throw error;
+  }
+  const salt = crypto.randomBytes(16).toString('hex');
+  const iterations = 120000;
+  const digest = crypto.pbkdf2Sync(clean, salt, iterations, 32, 'sha256').toString('hex');
+  return `pbkdf2_sha256$${iterations}$${salt}$${digest}`;
+}
+
+function verifyTechnicianPin(pin, storedHash) {
+  const clean = String(pin || '').replace(/\D/g, '');
+  const parts = String(storedHash || '').split('$');
+  if (!/^\d{6}$/.test(clean) || parts.length !== 4 || parts[0] !== 'pbkdf2_sha256') return false;
+  const [, iterationsText, salt, expected] = parts;
+  const iterations = Number(iterationsText);
+  if (!Number.isFinite(iterations) || !salt || !expected) return false;
+  const digest = crypto.pbkdf2Sync(clean, salt, iterations, 32, 'sha256').toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(digest, 'hex'), Buffer.from(expected, 'hex'));
+}
+
+function publicTechnician(technician = {}) {
+  if (!technician) return null;
+  const { portal_pin_hash, ...rest } = technician;
+  return {
+    ...rest,
+    portal_login_enabled: technician.portal_login_enabled !== false,
+    has_portal_pin: !!portal_pin_hash
+  };
+}
+
+function technicianHasService(technicianId, service = {}) {
+  if (!technicianId || !service) return false;
+  return serviceTechnicianIds(service).some(id => String(id) === String(technicianId));
+}
+
+function textMatchesTechnician(technician = {}, value = '') {
+  const hay = normalizeLooseForMatch(value);
+  if (!hay) return true;
+  const names = [
+    technician.id,
+    technician.nome,
+    ...(String(technician.nome || '').split(/\s*(?:\/|,|\+|\be\b)\s*/i))
+  ].filter(Boolean).map(normalizeLooseForMatch).filter(Boolean);
+  return names.some(name => hay.includes(name) || name.includes(hay));
+}
+
+function eventMatchesTechnician(technician = {}, item = {}) {
+  return textMatchesTechnician(technician, `${item.tecnico || ''} ${item.equipe || ''}`);
+}
+
+async function fetchTechnicianById(db, id) {
+  return maybeSingle(db.from('technicians').select('*').eq('id', id));
+}
+
+async function findTechnicianForLogin(db, input = {}) {
+  const id = cleanNullableText(input.technician_id || input.tecnico_id || input.id, 120);
+  const phone = normalizePhone(input.telefone || input.whatsapp || input.phone || '');
+  const name = cleanNullableText(input.nome || input.name || input.tecnico, 160);
+
+  if (id) {
+    const technician = await fetchTechnicianById(db, id);
+    return technician ? [technician] : [];
+  }
+
+  if (phone) {
+    const { data, error } = await db
+      .from('technicians')
+      .select('*')
+      .or(`telefone.eq.${phone},whatsapp.eq.${phone}`)
+      .limit(5);
+    if (error) throw error;
+    return data || [];
+  }
+
+  if (name) {
+    const { data, error } = await db
+      .from('technicians')
+      .select('*')
+      .ilike('nome', `%${name}%`)
+      .limit(5);
+    if (error) throw error;
+    return data || [];
+  }
+
+  return [];
+}
+
+async function authenticateTechnicianSession(req) {
+  if (req.technicianAuth !== undefined) return req.technicianAuth;
+  const token = extractTechnicianToken(req);
+  if (!token) {
+    req.technicianAuth = null;
+    return null;
+  }
+
+  const db = getSupabaseClient();
+  const sessionHash = hashToken(token);
+  const session = await maybeSingle(
+    db.from('technician_sessions')
+      .select('*')
+      .eq('session_token_hash', sessionHash)
+      .limit(1)
+  );
+  if (!session || session.revoked_at) {
+    req.technicianAuth = null;
+    return null;
+  }
+  if (session.expires_at && new Date(session.expires_at).getTime() <= Date.now()) {
+    req.technicianAuth = null;
+    return null;
+  }
+
+  const technician = await fetchTechnicianById(db, session.technician_id);
+  const revokedAt = technician?.portal_session_revoked_at ? new Date(technician.portal_session_revoked_at).getTime() : 0;
+  const createdAt = session.created_at ? new Date(session.created_at).getTime() : 0;
+  if (!technician || technician.ativo === false || technician.portal_login_enabled === false || (revokedAt && createdAt && createdAt <= revokedAt)) {
+    req.technicianAuth = null;
+    return null;
+  }
+
+  Promise.resolve(
+    db.from('technician_sessions')
+      .update({ last_seen_at: new Date().toISOString(), ip: req.ip || null, user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null })
+      .eq('id', session.id)
+      .select()
+  ).catch(() => {});
+
+  req.technicianAuth = { session, technician };
+  return req.technicianAuth;
+}
+
+async function resolveSupabaseActor(req) {
+  const token = extractBearerToken(req);
+  if (!token || token.startsWith('tech_')) return null;
+  try {
+    const { data, error } = await getSupabaseClient().auth.getUser(token);
+    if (error || !data?.user) return null;
+    return data.user;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function resolveAppUserRole(req) {
+  if (req.appUserRole !== undefined) return req.appUserRole;
+  const user = await resolveSupabaseActor(req);
+  if (!user) {
+    req.appUserRole = null;
+    return null;
+  }
+  const db = getSupabaseClient();
+  const appUser = await maybeSingle(
+    db.from('app_users')
+      .select('*')
+      .eq('auth_user_id', user.id)
+      .eq('active', true)
+      .limit(1)
+  ).catch(async error => {
+    if (!isMissingRelationError(error)) throw error;
+    return null;
+  });
+  if (!appUser && user.email) {
+    const byEmail = await maybeSingle(
+      db.from('app_users')
+        .select('*')
+        .eq('email', user.email)
+        .eq('active', true)
+        .limit(1)
+    ).catch(error => {
+      if (!isMissingRelationError(error)) throw error;
+      return null;
+    });
+    req.appUserRole = byEmail ? { user, appUser: byEmail, role: byEmail.role } : null;
+    return req.appUserRole;
+  }
+  req.appUserRole = appUser ? { user, appUser, role: appUser.role } : null;
+  return req.appUserRole;
+}
+
+async function requireAdminOrOperator(req, res) {
+  const actor = await resolveAppUserRole(req);
+  if (actor && ['admin', 'operador'].includes(String(actor.role || '').toLowerCase())) return actor;
+  res.status(403).json({ error: 'Acesso restrito a admin/operador', code: 'admin_role_required' });
+  return null;
+}
+
+function isTechnicianPortalRequest(req) {
+  return firstHeader(req, 'x-portal-client') === 'technician-portal' || !!extractTechnicianToken(req);
+}
+
+async function requireTechnicianForPortal(req, res) {
+  const auth = await authenticateTechnicianSession(req);
+  if (auth) return auth;
+  if (isTechnicianPortalRequest(req)) {
+    res.status(401).json({ error: 'Login do tecnico obrigatorio', code: 'technician_session_required' });
+    return false;
+  }
+  return null;
+}
+
+function truncateText(value, maxLength = 500) {
+  const text = String(value || '');
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...[truncated]` : text;
+}
+
+function redactAuditValue(key, value) {
+  const lowered = String(key || '').toLowerCase();
+  if (/(password|senha|token|secret|authorization|api[_-]?key|assinatura|foto|image|base64)/.test(lowered)) {
+    return '[redacted]';
+  }
+  if (typeof value === 'string') {
+    if (value.startsWith('data:image/') || value.length > 1200) return truncateText(value, 180);
+    return value;
+  }
+  return value;
+}
+
+function buildAuditPayload(value, depth = 0) {
+  if (value === null || value === undefined) return value;
+  if (depth > 4) return '[max-depth]';
+  if (Array.isArray(value)) return value.slice(0, 30).map(item => buildAuditPayload(item, depth + 1));
+  if (typeof value === 'object') {
+    return Object.entries(value).slice(0, 80).reduce((acc, [key, item]) => {
+      acc[key] = buildAuditPayload(redactAuditValue(key, item), depth + 1);
+      return acc;
+    }, {});
+  }
+  return redactAuditValue('', value);
+}
+
+function inferAuditEntity(req) {
+  const parts = String(req.path || '').split('/').filter(Boolean);
+  if (parts[0] !== 'api') return { entity: parts[0] || null, entityId: null };
+  const entity = parts.slice(1, 3).join('/') || null;
+  const entityId = req.params?.id || req.params?.documento_id || req.params?.manutencao_id || req.body?.id || null;
+  return { entity, entityId: entityId === null || entityId === undefined ? null : String(entityId) };
+}
+
+function inferAuditAction(method) {
+  const map = { POST: 'create', PUT: 'update', PATCH: 'update', DELETE: 'delete' };
+  return map[String(method || '').toUpperCase()] || 'write';
+}
+
+async function resolveAuditActor(req) {
+  const technicianAuth = await authenticateTechnicianSession(req).catch(() => null);
+  if (technicianAuth?.technician) {
+    return {
+      actor_id: technicianAuth.technician.id || null,
+      actor_email: null,
+      actor_name: technicianAuth.technician.nome || null,
+      actor_source: 'technician_session'
+    };
+  }
+
+  const token = extractBearerToken(req);
+  if (token && !token.startsWith('tech_')) {
+    try {
+      const { data, error } = await getSupabaseClient().auth.getUser(token);
+      if (!error && data?.user) {
+        const user = data.user;
+        return {
+          actor_id: user.id || null,
+          actor_email: user.email || null,
+          actor_name: user.user_metadata?.name || user.user_metadata?.full_name || user.email || null,
+          actor_source: 'supabase_auth'
+        };
+      }
+    } catch (error) {
+      console.warn('[audit] Falha ao validar token:', error.message);
+    }
+  }
+
+  const portalTecnico = truncateText(firstHeader(req, 'x-portal-tecnico') || req.body?.tecnico || '', 200);
+  const portalEquipe = truncateText(firstHeader(req, 'x-portal-equipe') || req.body?.equipe || '', 200);
+  const portalTecnicoId = truncateText(firstHeader(req, 'x-portal-tecnico-id') || '', 200);
+  const actorName = truncateText(firstHeader(req, 'x-actor-name') || portalTecnico || portalEquipe || '', 200);
+  return {
+    actor_id: truncateText(firstHeader(req, 'x-actor-id') || portalTecnicoId || '', 200) || null,
+    actor_email: truncateText(firstHeader(req, 'x-actor-email') || '', 200) || null,
+    actor_name: actorName || null,
+    actor_source: actorName ? 'request_context' : 'anonymous'
+  };
+}
+
+function auditActivityMiddleware(req, res, next) {
+  const method = String(req.method || '').toUpperCase();
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || req.path === '/api/activity-logs') {
+    return next();
+  }
+
+  res.on('finish', () => {
+    const db = getSupabaseClient();
+    const { entity, entityId } = inferAuditEntity(req);
+    const payload = buildAuditPayload(req.body || {});
+    resolveAuditActor(req)
+      .then(actor => db.from('activity_logs').insert([{
+        ...actor,
+        portal_tecnico_id: truncateText(firstHeader(req, 'x-portal-tecnico-id') || '', 200) || null,
+        portal_tecnico: truncateText(firstHeader(req, 'x-portal-tecnico') || req.body?.tecnico || '', 200) || null,
+        portal_equipe: truncateText(firstHeader(req, 'x-portal-equipe') || req.body?.equipe || '', 200) || null,
+        method,
+        path: req.originalUrl || req.path,
+        route: req.route?.path ? String(req.route.path) : null,
+        status_code: res.statusCode,
+        entity,
+        entity_id: entityId,
+        action: inferAuditAction(method),
+        request_id: firstHeader(req, 'x-request-id') || null,
+        ip: req.ip || req.socket?.remoteAddress || null,
+        user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null,
+        origin: truncateText(firstHeader(req, 'origin') || '', 300) || null,
+        referer: truncateText(firstHeader(req, 'referer') || '', 500) || null,
+        payload,
+        response_summary: { ok: res.statusCode < 400 }
+      }]))
+      .then(({ error }) => {
+        if (error) console.warn('[audit] Falha ao gravar activity_logs:', error.message);
+      })
+      .catch(error => console.warn('[audit] Falha inesperada:', error.message));
+  });
+
+  next();
+}
+
+app.use(auditActivityMiddleware);
 
 function getEvolutionConfig() {
   const apiUrl = String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL || '').replace(/\/$/, '');
@@ -2325,6 +2695,80 @@ async function fetchServicesForDate(date) {
   return data || [];
 }
 
+function operationalMapBounds(date, range) {
+  const base = cleanDateText(date) || new Date().toISOString().slice(0, 10);
+  const period = ['day', 'week', 'month'].includes(String(range || '').toLowerCase())
+    ? String(range).toLowerCase()
+    : 'day';
+  if (period === 'week') {
+    const end = new Date(`${base}T12:00:00`);
+    end.setDate(end.getDate() + 6);
+    return { start: base, end: end.toISOString().slice(0, 10), range: period };
+  }
+  if (period === 'month') {
+    const start = `${base.slice(0, 7)}-01`;
+    const endDate = new Date(Number(base.slice(0, 4)), Number(base.slice(5, 7)), 0);
+    return { start, end: endDate.toISOString().slice(0, 10), range: period };
+  }
+  return { start: base, end: base, range: period };
+}
+
+function serviceDateValue(service = {}) {
+  return service.date || service.data || service.dt || '';
+}
+
+function serviceTimeValue(service = {}) {
+  return service.horario || service.hr || '';
+}
+
+function serviceAddressValue(service = {}) {
+  return service.address_snapshot || service.endereco || service.endereco_completo || service.address || '';
+}
+
+function serviceTypeValue(service = {}) {
+  return service.tiposervico || service.tipoServico || service.sc || service.tipo || '';
+}
+
+function serviceLocationValue(service = {}) {
+  const lat = cleanNumber(service.latitude ?? service.lat ?? service.chegada_lat ?? service.customer_latitude);
+  const lng = cleanNumber(service.longitude ?? service.lng ?? service.chegada_lng ?? service.customer_longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { latitude: lat, longitude: lng, source: service.chegada_lat ? 'technician_arrival' : 'service' };
+  }
+  return null;
+}
+
+function serviceStatusForOperationalMap(service = {}) {
+  const status = String(service.status || service.st || 'agendado').toLowerCase();
+  const date = serviceDateValue(service);
+  const today = new Date().toISOString().slice(0, 10);
+  if (status === 'executado') return 'executado';
+  if (status === 'reagendado' || status === 'cancelado') return 'critico';
+  if (status === 'agendado' && date && date < today) return 'atrasado';
+  return 'pendente';
+}
+
+function normalizeOperationalService(service = {}, catalogs = {}) {
+  const techIds = serviceTechnicianIds(service);
+  const techById = new Map((catalogs.technicians || []).map(t => [String(t.id), t]));
+  const technicians = techIds.map(id => techById.get(String(id))?.nome || String(id)).filter(Boolean);
+  return {
+    id: service.id,
+    date: serviceDateValue(service),
+    horario: serviceTimeValue(service),
+    cliente: service.cliente || service.client_name_snapshot || service.cl || '',
+    endereco: serviceAddressValue(service),
+    equipe: technicians.join(' / ') || service.equipe || '',
+    technicians_ids: techIds,
+    veiculo: service.veiculo || '',
+    tipo: serviceTypeValue(service),
+    status: service.status || service.st || 'agendado',
+    operational_status: serviceStatusForOperationalMap(service),
+    os: service.os || service.OS || '',
+    location: serviceLocationValue(service)
+  };
+}
+
 // Routes
 app.get('/api/health', (req, res) => {
   res.json({
@@ -2469,6 +2913,80 @@ app.get('/api/logistics/day-route', async (req, res) => {
   } catch (error) {
     console.error('[GET /api/logistics/day-route] Error:', error.message);
     res.status(500).json({ error: 'Falha ao calcular roteiro do dia', details: error.message });
+  }
+});
+
+app.get('/api/operational-map', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
+
+    const bounds = operationalMapBounds(req.query.date || req.query.data, req.query.range || req.query.periodo);
+    const team = cleanText(req.query.team || req.query.equipe || '', 160).toLowerCase();
+    const vehicle = cleanText(req.query.vehicle || req.query.veiculo || '', 120).toLowerCase();
+    const status = cleanText(req.query.status || '', 80).toLowerCase();
+    const tipo = cleanText(req.query.tipo || req.query.type || '', 120).toLowerCase();
+
+    const [catalogs, servicesResult] = await Promise.all([
+      fetchLogisticsCatalogs(),
+      db.from('services').select('*').limit(5000)
+    ]);
+
+    if (servicesResult.error) throw servicesResult.error;
+
+    let rows = (servicesResult.data || []).filter(service => {
+      const date = serviceDateValue(service);
+      return date && date >= bounds.start && date <= bounds.end;
+    });
+
+    if (technicianAuth) {
+      rows = rows.filter(service => technicianHasService(technicianAuth.technician.id, service));
+    }
+
+    let services = rows.map(service => normalizeOperationalService(service, catalogs));
+
+    if (team) services = services.filter(service => String(service.equipe || '').toLowerCase().includes(team));
+    if (vehicle) services = services.filter(service => String(service.veiculo || '').toLowerCase() === vehicle);
+    if (status) services = services.filter(service => String(service.operational_status || '').toLowerCase() === status || String(service.status || '').toLowerCase() === status);
+    if (tipo) services = services.filter(service => String(service.tipo || '').toLowerCase().includes(tipo));
+
+    let routes = [];
+    if (bounds.range === 'day' && rows.length) {
+      try {
+        const routeResult = await buildDayRoutes(rows, {
+          date: bounds.start,
+          serviceTypes: catalogs.serviceTypes,
+          technicians: catalogs.technicians,
+          distanceClient: createDistanceClient()
+        });
+        routes = routeResult.routes || [];
+      } catch (routeError) {
+        routes = [];
+      }
+    }
+
+    res.json({
+      range: bounds,
+      base: {
+        label: 'Base Letec',
+        query: '88VH+MR Vila Sao Paulo, São Paulo - SP',
+        latitude: -23.6407,
+        longitude: -46.5791
+      },
+      services,
+      routes,
+      summary: {
+        total: services.length,
+        atrasados: services.filter(service => service.operational_status === 'atrasado').length,
+        criticos: services.filter(service => service.operational_status === 'critico').length,
+        pendentes: services.filter(service => service.operational_status === 'pendente').length,
+        executados: services.filter(service => service.operational_status === 'executado').length
+      }
+    });
+  } catch (error) {
+    console.error('[GET /api/operational-map] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao montar mapa operacional', details: error.message });
   }
 });
 
@@ -2679,9 +3197,83 @@ app.post('/api/services/customer-link-repair', strictLimiter, async (req, res) =
   }
 });
 
+app.post('/api/technician-auth/login', technicianLoginLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const pin = String(req.body?.pin || '').replace(/\D/g, '');
+    if (!/^\d{6}$/.test(pin)) return res.status(400).json({ error: 'PIN deve ter 6 digitos', code: 'invalid_pin' });
+
+    const matches = await findTechnicianForLogin(db, req.body || {});
+    if (!matches.length) return res.status(401).json({ error: 'Tecnico ou PIN invalido', code: 'invalid_credentials' });
+    if (matches.length > 1) return res.status(409).json({ error: 'Identifique o tecnico pelo ID ou telefone completo', code: 'ambiguous_technician' });
+
+    const technician = matches[0];
+    if (technician.ativo === false || technician.portal_login_enabled === false || !technician.portal_pin_hash) {
+      return res.status(403).json({ error: 'Acesso do portal nao habilitado para este tecnico', code: 'portal_login_disabled' });
+    }
+    if (!verifyTechnicianPin(pin, technician.portal_pin_hash)) {
+      return res.status(401).json({ error: 'Tecnico ou PIN invalido', code: 'invalid_credentials' });
+    }
+
+    const token = generateTechnicianSessionToken();
+    const now = new Date();
+    const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const sessionPayload = {
+      technician_id: technician.id,
+      session_token_hash: hashToken(token),
+      expires_at: expires.toISOString(),
+      last_seen_at: now.toISOString(),
+      ip: req.ip || null,
+      user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null
+    };
+    const { data, error } = await db.from('technician_sessions').insert([sessionPayload]).select();
+    if (error) throw error;
+    res.status(201).json({
+      token,
+      expires_at: expires.toISOString(),
+      technician: publicTechnician(technician),
+      session_id: data?.[0]?.id || null
+    });
+  } catch (error) {
+    console.error('[POST /api/technician-auth/login] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao autenticar tecnico' });
+  }
+});
+
+app.post('/api/technician-auth/logout', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const token = extractTechnicianToken(req);
+    if (token) {
+      await db
+        .from('technician_sessions')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('session_token_hash', hashToken(token))
+        .select();
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[POST /api/technician-auth/logout] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao sair do portal' });
+  }
+});
+
+app.get('/api/technician-auth/me', async (req, res) => {
+  try {
+    const auth = await authenticateTechnicianSession(req);
+    if (!auth) return res.status(401).json({ error: 'Sessao do tecnico invalida ou expirada', code: 'technician_session_required' });
+    res.json({ technician: publicTechnician(auth.technician), expires_at: auth.session.expires_at });
+  } catch (error) {
+    console.error('[GET /api/technician-auth/me] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao validar sessao do tecnico' });
+  }
+});
+
 app.get('/api/services', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 1000, 1), 5000);
     const cliente = String(req.query.cliente || '').trim();
     const date = cleanDateText(req.query.date);
@@ -2702,7 +3294,10 @@ app.get('/api/services', async (req, res) => {
     const { data, error } = await query;
 
     if (error) throw error;
-    res.json(data);
+    const rows = technicianAuth
+      ? (data || []).filter(service => technicianHasService(technicianAuth.technician.id, service))
+      : (data || []);
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2747,6 +3342,15 @@ app.put('/api/services/:id', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const id = req.params.id;
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
+    if (technicianAuth) {
+      const current = await fetchServiceById(db, id);
+      if (!current) return res.status(404).json({ code: 'service_not_found', error: 'ServiÃ§o nÃ£o encontrado' });
+      if (!technicianHasService(technicianAuth.technician.id, current)) {
+        return res.status(403).json({ code: 'technician_service_forbidden', error: 'Este servico nao pertence ao tecnico logado' });
+      }
+    }
     const result = await getAppointmentDomainService().updateAppointment(db, id, req.body || {});
     if (result.error) {
       return res.status(result.status || 500).json(result.error);
@@ -2784,6 +3388,8 @@ app.delete('/api/services/:id', async (req, res) => {
 app.get('/api/checklists', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
     const date = cleanDateText(req.query.date);
     let query = db
       .from('checklists')
@@ -2794,7 +3400,10 @@ app.get('/api/checklists', async (req, res) => {
 
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data || []);
+    const rows = technicianAuth
+      ? (data || []).filter(item => textMatchesTechnician(technicianAuth.technician, `${item.motorista || ''} ${item.assistente || ''}`))
+      : (data || []);
+    res.json(rows);
   } catch (error) {
     console.error('[GET /api/checklists] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar checklists' });
@@ -2804,7 +3413,12 @@ app.get('/api/checklists', async (req, res) => {
 app.post('/api/checklists', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
     const payload = normalizeChecklistPayload(req.body);
+    if (technicianAuth) {
+      payload.motorista = technicianAuth.technician.nome || payload.motorista;
+    }
     const { data, error } = await db
       .from('checklists')
       .insert([payload])
@@ -2840,6 +3454,8 @@ app.delete('/api/checklists/:id', async (req, res) => {
 app.get('/api/technician-events', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
     const date = cleanDateText(req.query.date);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 500);
     let query = db
@@ -2852,7 +3468,10 @@ app.get('/api/technician-events', async (req, res) => {
 
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data || []);
+    const rows = technicianAuth
+      ? (data || []).filter(item => eventMatchesTechnician(technicianAuth.technician, item))
+      : (data || []);
+    res.json(rows);
   } catch (error) {
     console.error('[GET /api/technician-events] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar eventos técnicos' });
@@ -2862,7 +3481,19 @@ app.get('/api/technician-events', async (req, res) => {
 app.post('/api/technician-events', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
     const payload = normalizeTechnicianEventPayload(req.body);
+    if (technicianAuth) {
+      if (payload.service_id) {
+        const service = await fetchServiceById(db, payload.service_id);
+        if (!service || !technicianHasService(technicianAuth.technician.id, service)) {
+          return res.status(403).json({ code: 'technician_service_forbidden', error: 'Este servico nao pertence ao tecnico logado' });
+        }
+      }
+      payload.tecnico = technicianAuth.technician.nome || payload.tecnico;
+      payload.equipe = payload.equipe || technicianAuth.technician.nome || payload.tecnico;
+    }
     const duplicate = await findDuplicateTechnicianEvent(db, payload);
     if (duplicate) return res.status(200).json({ ...duplicate, deduplicated: true });
 
@@ -2903,6 +3534,8 @@ app.put('/api/technician-events/:id', async (req, res) => {
 app.get('/api/technician-messages', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
     const date = cleanDateText(req.query.date);
     const unread = String(req.query.unread) === 'true';
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 500);
@@ -2918,7 +3551,10 @@ app.get('/api/technician-messages', async (req, res) => {
 
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data || []);
+    const rows = technicianAuth
+      ? (data || []).filter(item => eventMatchesTechnician(technicianAuth.technician, item))
+      : (data || []);
+    res.json(rows);
   } catch (error) {
     console.error('[GET /api/technician-messages] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar mensagens técnicas' });
@@ -2945,6 +3581,15 @@ app.post('/api/technician-messages', async (req, res) => {
 app.put('/api/technician-messages/:id/read', async (req, res) => {
   try {
     const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
+    if (technicianAuth) {
+      const current = await maybeSingle(db.from('technician_messages').select('*').eq('id', req.params.id));
+      if (!current) return res.status(404).json({ error: 'Mensagem tÃ©cnica nÃ£o encontrada' });
+      if (!eventMatchesTechnician(technicianAuth.technician, current)) {
+        return res.status(403).json({ code: 'technician_message_forbidden', error: 'Esta mensagem nao pertence ao tecnico logado' });
+      }
+    }
     const payload = {
       lido: true,
       lido_em: cleanNullableText(req.body?.lido_em, 80) || new Date().toISOString()
@@ -3015,6 +3660,62 @@ app.put('/api/technicians/:id', strictLimiter, async (req, res) => {
   } catch (error) {
     console.error('[PUT /api/technicians/:id] Error:', error.message);
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar tecnico' });
+  }
+});
+
+app.post('/api/technicians/:id/portal-pin', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const pin = req.body?.pin ? String(req.body.pin).replace(/\D/g, '') : generateTechnicianPin();
+    const payload = {
+      portal_pin_hash: hashTechnicianPin(pin),
+      portal_pin_updated_at: new Date().toISOString(),
+      portal_login_enabled: true,
+      portal_session_revoked_at: new Date().toISOString()
+    };
+    const { data, error } = await db.from('technicians').update(payload).eq('id', req.params.id).select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Tecnico nao encontrado' });
+    try {
+      await db.from('technician_sessions')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('technician_id', req.params.id)
+        .select();
+    } catch(e) {}
+    res.json({ technician: publicTechnician(updated), pin });
+  } catch (error) {
+    console.error('[POST /api/technicians/:id/portal-pin] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao gerar PIN do tecnico' });
+  }
+});
+
+app.post('/api/technicians/:id/portal-access/revoke', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const revokedAt = new Date().toISOString();
+    const { data, error } = await db
+      .from('technicians')
+      .update({ portal_session_revoked_at: revokedAt })
+      .eq('id', req.params.id)
+      .select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Tecnico nao encontrado' });
+    try {
+      await db.from('technician_sessions')
+        .update({ revoked_at: revokedAt })
+        .eq('technician_id', req.params.id)
+        .select();
+    } catch(e) {}
+    res.json({ ok: true, technician: publicTechnician(updated) });
+  } catch (error) {
+    console.error('[POST /api/technicians/:id/portal-access/revoke] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao revogar acesso do tecnico' });
   }
 });
 

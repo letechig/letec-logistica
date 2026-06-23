@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LetecLog · Versão Oficial 1.00</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Cabinet+Grotesk:wght@400;500;700;800;900&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
 :root {
   --bg:       #f4f6fb;
@@ -3379,11 +3380,30 @@ async function carregarVeiculos(){
     return payload;
   };
 
+  async function getBackendAuthHeaders() {
+    try {
+      const { data } = await supabaseClient.auth.getSession();
+      const session = data?.session;
+      if (!session?.access_token) return {};
+      const user = session.user || {};
+      return {
+        Authorization: `Bearer ${session.access_token}`,
+        'X-Actor-Id': user.id || '',
+        'X-Actor-Email': user.email || '',
+        'X-Actor-Name': authDisplayName(user)
+      };
+    } catch(e) {
+      return {};
+    }
+  }
+
   async function requestBackendJson(path, options = {}) {
+    const authHeaders = await getBackendAuthHeaders();
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
         ...(options.headers || {})
       }
     });
@@ -3585,7 +3605,7 @@ async function carregarVeiculos(){
   <div class="nav-section-label">Operação</div>
   <button class="nav-item active" onclick="nav('hoje',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg><span>Hoje</span><span class="nav-badge orange" id="nb-hoje">0</span></button>
   <button class="nav-item" onclick="nav('agenda',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg><span>Agenda</span><span class="nav-badge" id="nb-agenda">0</span></button>
-  <button class="nav-item" onclick="nav('roteiro',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg><span>Roteiro</span><span class="nav-badge" id="nb-roteiro" style="display:none">0</span></button>
+  <button class="nav-item" onclick="nav('roteiro',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg><span>Mapa & Roteiros</span><span class="nav-badge" id="nb-roteiro" style="display:none">0</span></button>
   <button class="nav-item" onclick="nav('comunicacao',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>WhatsApp</span></button>
 
   <div class="nav-section-label">Cadastros</div>
@@ -3661,7 +3681,7 @@ async function carregarVeiculos(){
     <span class="mob-badge" id="mn-badge-agenda"></span>
   </button>
   <button class="mob-nav-item" id="mn-roteiro" onclick="mobNav('roteiro',this)">
-    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg></span><span class="mob-label">Roteiro</span>
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg></span><span class="mob-label">Mapa</span>
   </button>
   <button class="mob-nav-item" id="mn-comunicacao" onclick="mobNav('comunicacao',this)">
     <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span><span class="mob-label">WhatsApp</span>
@@ -3901,15 +3921,16 @@ async function carregarVeiculos(){
       <!-- Barra de progresso do dia -->
       <div id="hoje-summary" style="display:none;margin-bottom:20px"></div>
       <div id="field-ops-panel" style="display:none;margin-bottom:18px"></div>
+      <div id="hoje-operational-map" style="margin-bottom:18px"></div>
       <div id="hoje-kanban" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px"></div>
     </div>
 
-    <!-- ═══ ROTEIRO DO DIA (Sistema Local) ═══ -->
+    <!-- ═══ MAPA & ROTEIROS (Sistema Local) ═══ -->
     <div id="page-roteiro" class="page">
       <div class="flex ic sb mb3">
         <div>
-          <div class="section-title">Roteiro dos técnicos</div>
-            <div class="section-sub">Escolha a data, monte a sequência e envie para os técnicos.</div>
+          <div class="section-title">Mapa & Roteiros</div>
+            <div class="section-sub">Visualize serviços no mapa, filtre equipes e monte a sequência do dia.</div>
         </div>
         <div class="flex gap2" style="flex-wrap:wrap;align-items:center">
           <input type="date" class="fsel" id="rot-data" onchange="rotGerarDoSistema()">
@@ -3923,6 +3944,27 @@ async function carregarVeiculos(){
         <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Revise por técnico</div><div class="flow-guide-text">Confira horários, endereços e alertas antes de enviar.</div></div></div>
         <div class="flow-guide-step"><span class="flow-guide-num">4</span><div><div class="flow-guide-title">Enviar ou copiar</div><div class="flow-guide-text">Envie aos técnicos ou use copiar como fallback.</div></div></div>
       </div>
+
+      <div class="op-map-toolbar op-map-toolbar-full">
+        <select class="fsel" id="mapa-rot-periodo" onchange="renderMapaRoteiros()">
+          <option value="day">Dia</option>
+          <option value="week">Semana</option>
+          <option value="month">Mês</option>
+        </select>
+        <select class="fsel" id="mapa-rot-equipe" onchange="renderMapaRoteiros()"></select>
+        <select class="fsel" id="mapa-rot-veiculo" onchange="renderMapaRoteiros()"></select>
+        <select class="fsel" id="mapa-rot-status" onchange="renderMapaRoteiros()">
+          <option value="">Todos os status</option>
+          <option value="atrasado">Atrasados</option>
+          <option value="critico">Críticos / reagendados</option>
+          <option value="pendente">Pendentes no prazo</option>
+          <option value="executado">Executados</option>
+        </select>
+        <select class="fsel" id="mapa-rot-tipo" onchange="renderMapaRoteiros()"></select>
+        <button class="btn btn-ghost btn-sm" onclick="renderMapaRoteiros()">Atualizar mapa</button>
+      </div>
+
+      <div id="mapa-roteiros-operacional" class="op-map-expanded"></div>
 
       <!-- KPIs -->
       <div id="rot-kpis" style="display:none;margin-bottom:16px" class="grid-kpi">
@@ -5110,8 +5152,143 @@ async function carregarVeiculos(){
 .modal-bg.open { opacity:1;pointer-events:all; }
 .modal-bg .modal { background:var(--card);border:1px solid var(--border2);border-radius:var(--r);width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.25);transform:translateY(10px);transition:transform .2s; }
 .modal-bg.open .modal { transform:translateY(0); }
+
+/* ─── MAPA OPERACIONAL ─────────────────────── */
+.op-map-card {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  overflow:hidden;
+  box-shadow:var(--shadow-sm);
+}
+.op-map-head {
+  padding:14px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.op-map-title { font-family:var(--display); font-size:16px; font-weight:800; letter-spacing:0; }
+.op-map-sub { margin-top:2px; color:var(--text2); font-size:12px; }
+.op-map-toolbar {
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+  background:var(--card2);
+}
+.op-map-toolbar-full { margin-bottom:14px; border:1px solid var(--border); border-radius:var(--r); }
+.op-map-range { display:flex; gap:6px; flex-wrap:wrap; }
+.op-map-range button.is-active { background:var(--blue); color:#fff; border-color:var(--blue); }
+.op-map-layout { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(280px,.8fr); min-height:360px; }
+.op-map-expanded .op-map-layout { min-height:620px; grid-template-columns:minmax(0,2fr) minmax(320px,.8fr); }
+.op-map-canvas { min-height:360px; background:#dbeafe; position:relative; z-index:1; }
+.op-map-expanded .op-map-canvas { min-height:620px; }
+.op-map-side {
+  border-left:1px solid var(--border);
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  max-height:620px;
+  overflow:auto;
+}
+.op-map-side-title { font-weight:800; font-size:12px; color:var(--text); display:flex; justify-content:space-between; gap:10px; }
+.op-map-summary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.op-map-summary {
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  padding:9px;
+  background:var(--card2);
+}
+.op-map-summary-label { color:var(--text3); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
+.op-map-summary-value { margin-top:2px; font-family:var(--display); font-size:18px; font-weight:800; }
+.op-map-list { display:flex; flex-direction:column; gap:8px; }
+.op-map-item {
+  border:1px solid var(--border);
+  border-left:4px solid var(--blue);
+  border-radius:var(--r2);
+  padding:10px;
+  background:var(--card);
+  cursor:pointer;
+}
+.op-map-item:hover { border-color:var(--border3); box-shadow:var(--shadow-sm); }
+.op-map-item.red { border-left-color:var(--red); }
+.op-map-item.orange { border-left-color:var(--orange); }
+.op-map-item.green { border-left-color:var(--green); }
+.op-map-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.op-map-item-client { font-weight:800; font-size:12px; color:var(--text); }
+.op-map-item-meta { margin-top:5px; color:var(--text2); font-size:11px; line-height:1.45; display:flex; flex-direction:column; gap:2px; }
+.op-map-empty { padding:24px; text-align:center; color:var(--text3); }
+.op-map-pin {
+  width:18px;
+  height:18px;
+  border-radius:99px 99px 99px 2px;
+  transform:rotate(-45deg);
+  border:2px solid #fff;
+  box-shadow:0 6px 14px rgba(15,23,42,.22);
+}
+.op-map-pin::after {
+  content:'';
+  position:absolute;
+  inset:4px;
+  border-radius:99px;
+  background:#fff;
+  opacity:.95;
+}
+.op-map-pin.red { background:var(--red); }
+.op-map-pin.orange { background:var(--orange); }
+.op-map-pin.blue { background:var(--blue); }
+.op-map-pin.green { background:var(--green); }
+.op-map-base-pin {
+  width:22px;
+  height:22px;
+  border-radius:6px;
+  background:#111827;
+  border:2px solid #fff;
+  box-shadow:0 8px 18px rgba(15,23,42,.24);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+}
+.op-map-popup { min-width:230px; display:flex; flex-direction:column; gap:7px; font-family:var(--body); }
+.op-map-popup-title { font-weight:800; color:var(--text); font-size:13px; }
+.op-map-popup-line { color:var(--text2); font-size:11px; line-height:1.35; }
+.op-map-popup-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.op-map-popup-actions button, .op-map-popup-actions a {
+  border:1px solid var(--border2);
+  background:var(--card);
+  color:var(--text2);
+  border-radius:6px;
+  padding:5px 8px;
+  font-weight:700;
+  font-size:11px;
+  text-decoration:none;
+  cursor:pointer;
+}
+.op-map-popup-actions .primary { background:var(--blue); color:#fff; border-color:var(--blue); }
+.op-map-popup-actions .green { background:var(--green); color:#fff; border-color:var(--green); }
+.op-map-popup-actions .orange { background:var(--orange); color:#fff; border-color:var(--orange); }
+.op-map-note { color:var(--text3); font-size:11px; line-height:1.45; }
+@media(max-width:980px) {
+  .op-map-layout, .op-map-expanded .op-map-layout { grid-template-columns:1fr; }
+  .op-map-side { border-left:0; border-top:1px solid var(--border); max-height:none; }
+  .op-map-canvas, .op-map-expanded .op-map-canvas { min-height:360px; }
+}
+@media(max-width:560px) {
+  .op-map-head { flex-direction:column; }
+  .op-map-toolbar .fsel, .op-map-toolbar .btn { flex:1 1 140px; }
+  .op-map-summary-grid { grid-template-columns:1fr; }
+}
 </style>
 
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ════════════════════════════════════════════════
 const EQUIPAMENTOS = {
@@ -7759,7 +7936,7 @@ function renderVeiculosSelect(selectId, selectedValue = '') {
 const PAGE_META = {
   dashboard:  { title:'Dashboard / Gestão', sub:'Resumo gerencial e indicadores' },
   agenda:     { title:'Agenda de Serviços', sub:'Planeje, cadastre e acompanhe os serviços' },
-  roteiro:    { title:'Roteiro',            sub:'Monte a sequência do dia e envie aos técnicos' },
+  roteiro:    { title:'Mapa & Roteiros',    sub:'Visualize serviços, equipes, veículos e sequência operacional' },
   comunicacao:{ title:'WhatsApp e Confirmações', sub:'Confirmações, lembretes e mensagens enviadas' },
   rotas:      { title:'Rotas & KM',          sub:'Eficiência de deslocamento e KM rodados' },
   checklist:  { title:'Checklist Diário',   sub:'Registro de saída, retorno e conferência' },
@@ -10051,6 +10228,373 @@ function hojeIrParaHoje() {
   renderHoje();
 }
 
+const OP_MAP_BASE_LABEL = 'Base Letec';
+const OP_MAP_BASE_QUERY = '88VH+MR Vila Sao Paulo, São Paulo - SP';
+const OP_MAP_BASE_COORDS = { lat: -23.6407, lng: -46.5791 };
+const OP_MAP_GEOCODE_CACHE_KEY = 'letec_operational_map_geocode_cache_v1';
+const operationalMapState = {
+  hojeRange: 'today',
+  hojeEquipe: '',
+  hojeVeiculo: '',
+  hojeStatus: '',
+  maps: {},
+  markers: {},
+  geocodeCache: (() => {
+    try { return JSON.parse(localStorage.getItem(OP_MAP_GEOCODE_CACHE_KEY) || '{}') || {}; }
+    catch(e) { return {}; }
+  })()
+};
+
+function opMapPersistGeocodeCache() {
+  try { localStorage.setItem(OP_MAP_GEOCODE_CACHE_KEY, JSON.stringify(operationalMapState.geocodeCache)); }
+  catch(e) {}
+}
+
+function opMapDateShift(dateStr, days) {
+  const d = new Date(`${dateStr || new Date().toISOString().split('T')[0]}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function opMapPeriodBounds(dateStr, period = 'day') {
+  const base = dateStr || new Date().toISOString().split('T')[0];
+  if (period === 'week') return { start: base, end: opMapDateShift(base, 6) };
+  if (period === 'month') return { start: `${base.slice(0, 7)}-01`, end: `${base.slice(0, 7)}-31` };
+  return { start: base, end: base };
+}
+
+function opMapServiceInBounds(service, bounds) {
+  const dt = getServiceDateValue(service);
+  return dt && dt >= bounds.start && dt <= bounds.end;
+}
+
+function opMapServiceLocation(service = {}) {
+  const lat = Number(service.latitude ?? service.lat ?? service.chegada_lat ?? service.customer_latitude);
+  const lng = Number(service.longitude ?? service.lng ?? service.chegada_lng ?? service.customer_longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, source: service.chegada_lat ? 'campo' : 'cadastro' };
+  return null;
+}
+
+function opMapServiceAddress(service = {}) {
+  const F = sf(service);
+  return String(service.address_snapshot || service.endereco_completo || F.endereco || service.end || '').trim();
+}
+
+function opMapStatusKey(service = {}, refDate = '') {
+  const F = sf(service);
+  const status = String(F.status || 'agendado').toLowerCase();
+  const dt = getServiceDateValue(service);
+  const today = new Date().toISOString().split('T')[0];
+  const ref = refDate || dt || today;
+  const time = F.horario && F.horario !== '—' ? F.horario : '';
+  const now = new Date();
+  const currentMin = now.getHours() * 60 + now.getMinutes();
+  const svcMin = hojeParseMin(time);
+  const late = status === 'agendado' && (dt < today || (dt === today && Number.isFinite(svcMin) && svcMin < currentMin));
+  if (status === 'executado') return 'executado';
+  if (late) return 'atrasado';
+  if (status === 'reagendado' || status === 'cancelado' || !serviceTemEquipe(service)) return 'critico';
+  if (ref < today && status === 'agendado') return 'atrasado';
+  return 'pendente';
+}
+
+function opMapStatusMeta(statusKey) {
+  const map = {
+    atrasado: { label:'Atrasado', color:'red', chip:'chip-red' },
+    critico: { label:'Crítico / reagendado', color:'orange', chip:'chip-orange' },
+    pendente: { label:'Pendente no prazo', color:'blue', chip:'chip-blue' },
+    executado: { label:'Executado', color:'green', chip:'chip-green' }
+  };
+  return map[statusKey] || map.pendente;
+}
+
+function opMapBuildItems(sourceServices = [], options = {}) {
+  const refDate = options.date || new Date().toISOString().split('T')[0];
+  return (sourceServices || [])
+    .map(service => {
+      const F = sf(service);
+      const statusKey = opMapStatusKey(service, refDate);
+      return {
+        id: service.id,
+        service,
+        cliente: F.cliente,
+        horario: F.horario,
+        endereco: opMapServiceAddress(service),
+        equipe: F.equipe || 'Sem equipe',
+        veiculo: F.veiculo || rotVeiculoPreferencial([service], ''),
+        statusKey,
+        statusLabel: opMapStatusMeta(statusKey).label,
+        tipo: F.tipo || F.tipoLabel || '',
+        date: getServiceDateValue(service),
+        location: opMapServiceLocation(service)
+      };
+    })
+    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.horario || '99:99').localeCompare(b.horario || '99:99'));
+}
+
+function opMapFilterItems(items, filters = {}) {
+  return (items || []).filter(item => {
+    if (filters.equipe && item.equipe !== filters.equipe) return false;
+    if (filters.veiculo && item.veiculo !== filters.veiculo) return false;
+    if (filters.status && item.statusKey !== filters.status) return false;
+    if (filters.tipo && !String(item.tipo || '').toLowerCase().includes(String(filters.tipo).toLowerCase())) return false;
+    return true;
+  });
+}
+
+async function opMapResolveLocations(items = []) {
+  const tasks = items.map(async item => {
+    if (item.location || !item.endereco) return item;
+    const key = normalizarNome(item.endereco);
+    const cached = operationalMapState.geocodeCache[key];
+    if (cached && Number.isFinite(Number(cached.lat)) && Number.isFinite(Number(cached.lng))) {
+      item.location = { lat: Number(cached.lat), lng: Number(cached.lng), source: 'cache' };
+      return item;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/geocode?address=${encodeURIComponent(item.endereco)}`);
+      if (!response.ok) throw new Error(`geocode ${response.status}`);
+      const geo = await response.json();
+      if (Number.isFinite(Number(geo.latitude)) && Number.isFinite(Number(geo.longitude))) {
+        item.location = { lat: Number(geo.latitude), lng: Number(geo.longitude), source: 'geocode' };
+        operationalMapState.geocodeCache[key] = { lat: item.location.lat, lng: item.location.lng };
+      }
+    } catch(e) {
+      item.locationError = true;
+    }
+    return item;
+  });
+  await Promise.all(tasks);
+  opMapPersistGeocodeCache();
+  return items;
+}
+
+function opMapGoogleDestination(item = {}) {
+  if (item.location) return `${item.location.lat},${item.location.lng}`;
+  return item.endereco || item.cliente || '';
+}
+
+function opMapRouteUrl(item = {}) {
+  const destination = opMapGoogleDestination(item);
+  const params = new URLSearchParams({
+    api: '1',
+    origin: `${OP_MAP_BASE_COORDS.lat},${OP_MAP_BASE_COORDS.lng}`,
+    destination,
+    travelmode: 'driving'
+  });
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function opMapOpenBase() {
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(OP_MAP_BASE_QUERY)}`;
+  window.open(url, '_blank');
+}
+
+function opMapPopupHtml(item, renderAfter = 'renderHoje()') {
+  const meta = opMapStatusMeta(item.statusKey);
+  const id = jsArg(item.id);
+  const route = opMapRouteUrl(item);
+  return `<div class="op-map-popup">
+    <div class="op-map-popup-title">${sanitize(item.cliente)}</div>
+    <div class="op-map-popup-line"><strong>Horário:</strong> ${sanitize(item.horario || '—')}</div>
+    <div class="op-map-popup-line"><strong>Endereço:</strong> ${sanitize(item.endereco || 'Sem endereço')}</div>
+    <div class="op-map-popup-line"><strong>Equipe:</strong> ${sanitize(item.equipe || 'Sem equipe')}</div>
+    <div class="op-map-popup-line"><strong>Veículo:</strong> ${sanitize(item.veiculo || '—')}</div>
+    <div class="op-map-popup-line"><span class="chip ${meta.chip}">${meta.label}</span></div>
+    <div class="op-map-popup-actions">
+      <button class="primary" onclick="openEditSvc(${id})">Abrir serviço</button>
+      <button onclick="comEnviarConfirmacaoServico(${id})">Enviar WhatsApp</button>
+      ${item.statusKey !== 'executado' ? `<button class="green" onclick="setSt(${id},'executado');${renderAfter}">Marcar executado</button>` : ''}
+      ${item.statusKey !== 'executado' ? `<button class="orange" onclick="setSt(${id},'reagendado');${renderAfter}">Reagendar</button>` : ''}
+      <a href="${route}" target="_blank" rel="noopener">Abrir rota</a>
+    </div>
+  </div>`;
+}
+
+function opMapRenderLeaflet(canvasId, items = [], options = {}) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (!window.L) {
+    canvas.innerHTML = '<div class="op-map-empty">Mapa indisponível. Verifique a conexão com a biblioteca Leaflet.</div>';
+    return;
+  }
+  if (operationalMapState.maps[canvasId]) {
+    operationalMapState.maps[canvasId].remove();
+    delete operationalMapState.maps[canvasId];
+  }
+  operationalMapState.markers[canvasId] = {};
+  const map = L.map(canvasId, { zoomControl: true, scrollWheelZoom: false }).setView([OP_MAP_BASE_COORDS.lat, OP_MAP_BASE_COORDS.lng], 11);
+  operationalMapState.maps[canvasId] = map;
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+  const bounds = [];
+  const baseIcon = L.divIcon({ className:'', html:'<div class="op-map-base-pin">B</div>', iconSize:[22,22], iconAnchor:[11,11] });
+  L.marker([OP_MAP_BASE_COORDS.lat, OP_MAP_BASE_COORDS.lng], { icon: baseIcon })
+    .addTo(map)
+    .bindPopup(`<strong>${OP_MAP_BASE_LABEL}</strong><br>${sanitize(OP_MAP_BASE_QUERY)}`);
+  bounds.push([OP_MAP_BASE_COORDS.lat, OP_MAP_BASE_COORDS.lng]);
+
+  items.filter(item => item.location).forEach(item => {
+    const meta = opMapStatusMeta(item.statusKey);
+    const icon = L.divIcon({
+      className:'',
+      html:`<div class="op-map-pin ${meta.color}"></div>`,
+      iconSize:[22,22],
+      iconAnchor:[11,22],
+      popupAnchor:[0,-18]
+    });
+    const marker = L.marker([item.location.lat, item.location.lng], { icon })
+      .addTo(map)
+      .bindPopup(opMapPopupHtml(item, options.renderAfter || 'renderHoje()'));
+    operationalMapState.markers[canvasId][String(item.id)] = marker;
+    bounds.push([item.location.lat, item.location.lng]);
+  });
+
+  if (bounds.length > 1) map.fitBounds(bounds, { padding:[28,28], maxZoom:14 });
+  setTimeout(() => map.invalidateSize(), 80);
+}
+
+function opMapFocus(canvasId, serviceId) {
+  const marker = operationalMapState.markers[canvasId]?.[String(serviceId)];
+  const map = operationalMapState.maps[canvasId];
+  if (!marker || !map) return;
+  map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
+  marker.openPopup();
+}
+
+function opMapOptionsHtml(values, placeholder, selected = '') {
+  const unique = [...new Set((values || []).map(v => String(v || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return `<option value="">${placeholder}</option>` + unique.map(value => `<option value="${escapeHtmlAttr(value)}" ${value === selected ? 'selected' : ''}>${sanitize(value)}</option>`).join('');
+}
+
+function opMapListHtml(items = [], canvasId = '') {
+  if (!items.length) return '<div class="op-map-empty">Nenhum serviço para os filtros selecionados.</div>';
+  return `<div class="op-map-list">${items.map((item, index) => {
+    const meta = opMapStatusMeta(item.statusKey);
+    const colorClass = meta.color === 'blue' ? '' : meta.color;
+    return `<div class="op-map-item ${colorClass}" onclick="opMapFocus('${canvasId}', ${jsArg(item.id)})">
+      <div class="op-map-item-head">
+        <div class="op-map-item-client">${index + 1}. ${sanitize(item.cliente)}</div>
+        <span class="chip ${meta.chip}">${meta.label}</span>
+      </div>
+      <div class="op-map-item-meta">
+        <span>${sanitize(item.date || '')} · ${sanitize(item.horario || '—')} · ${sanitize(item.equipe || 'Sem equipe')}</span>
+        <span>${sanitize(item.veiculo || 'Sem veículo')} · ${sanitize(item.tipo || 'Serviço')}</span>
+        <span>${sanitize(item.endereco || 'Sem endereço')}</span>
+        ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : ''}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function opMapSummaryHtml(items = [], routeGroups = []) {
+  const total = items.length;
+  const delayed = items.filter(i => i.statusKey === 'atrasado').length;
+  const pending = items.filter(i => i.statusKey === 'pendente' || i.statusKey === 'critico').length;
+  const vehicles = new Set(items.map(i => i.veiculo).filter(v => v && v !== '—')).size;
+  const routeKm = Math.round((routeGroups || []).reduce((sum, group) => sum + Number(group.kmTotal || 0), 0));
+  const routeMin = Math.round((routeGroups || []).reduce((sum, group) => sum + Number(group.tempoTotalMin || 0), 0));
+  return `<div class="op-map-summary-grid">
+    <div class="op-map-summary"><div class="op-map-summary-label">Serviços</div><div class="op-map-summary-value">${total}</div></div>
+    <div class="op-map-summary"><div class="op-map-summary-label">Veículos</div><div class="op-map-summary-value">${vehicles}</div></div>
+    <div class="op-map-summary"><div class="op-map-summary-label">Atrasados</div><div class="op-map-summary-value" style="color:var(--red)">${delayed}</div></div>
+    <div class="op-map-summary"><div class="op-map-summary-label">Pendentes</div><div class="op-map-summary-value" style="color:var(--orange)">${pending}</div></div>
+    <div class="op-map-summary"><div class="op-map-summary-label">KM estimado</div><div class="op-map-summary-value">${routeKm ? `${routeKm} km` : '—'}</div></div>
+    <div class="op-map-summary"><div class="op-map-summary-label">Tempo desloc.</div><div class="op-map-summary-value">${routeMin ? formatarMinutosHM(routeMin) : '—'}</div></div>
+  </div>`;
+}
+
+function opMapVehicleSummaryHtml(items = []) {
+  const groups = {};
+  items.forEach(item => {
+    const key = item.veiculo || 'Sem veículo';
+    groups[key] = groups[key] || { total:0, atrasados:0, pendentes:0 };
+    groups[key].total += 1;
+    if (item.statusKey === 'atrasado') groups[key].atrasados += 1;
+    if (item.statusKey === 'pendente' || item.statusKey === 'critico') groups[key].pendentes += 1;
+  });
+  const rows = Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
+  if (!rows.length) return '';
+  return `<div class="op-map-list">${rows.map(([vehicle, row]) => `<div class="op-map-item">
+    <div class="op-map-item-head"><div class="op-map-item-client">${sanitize(vehicle)}</div><span class="chip chip-blue">${row.total} serviço(s)</span></div>
+    <div class="op-map-item-meta"><span>Atrasados: ${row.atrasados} · Pendentes: ${row.pendentes}</span><span>KM/tempo: calculado quando houver rota do dia.</span></div>
+  </div>`).join('')}</div>`;
+}
+
+function opMapSetHojeRange(range) {
+  operationalMapState.hojeRange = range || 'today';
+  const dateEl = document.getElementById('hoje-date');
+  const today = new Date().toISOString().split('T')[0];
+  if (range === 'today' && dateEl) dateEl.value = today;
+  if (range === 'tomorrow' && dateEl) dateEl.value = opMapDateShift(today, 1);
+  renderHoje();
+}
+
+function opMapSetHojeFilter(field, value) {
+  operationalMapState[field] = value || '';
+  renderHoje();
+}
+
+function renderOperationalMapHoje(daySvcs = [], date = '') {
+  const el = document.getElementById('hoje-operational-map');
+  if (!el) return;
+  const range = operationalMapState.hojeRange || 'today';
+  const bounds = range === 'week' ? opMapPeriodBounds(date, 'week') : opMapPeriodBounds(date, 'day');
+  const source = range === 'week' ? services.filter(s => opMapServiceInBounds(s, bounds)) : daySvcs;
+  const allItems = opMapBuildItems(source, { date });
+  const equipeOptions = opMapOptionsHtml(allItems.map(i => i.equipe), 'Todas as equipes', operationalMapState.hojeEquipe);
+  const veiculoOptions = opMapOptionsHtml(allItems.map(i => i.veiculo), 'Todos os veículos', operationalMapState.hojeVeiculo);
+  const filtered = opMapFilterItems(allItems, {
+    equipe: operationalMapState.hojeEquipe,
+    veiculo: operationalMapState.hojeVeiculo,
+    status: operationalMapState.hojeStatus
+  });
+  el.innerHTML = `<div class="op-map-card">
+    <div class="op-map-head">
+      <div>
+        <div class="op-map-title">Mapa Operacional do Dia</div>
+        <div class="op-map-sub">Base, equipes, veículos e status dos atendimentos.</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="nav('roteiro',null);setTimeout(renderMapaRoteiros,80)">Ver mapa completo</button>
+    </div>
+    <div class="op-map-toolbar">
+      <div class="op-map-range">
+        <button class="btn btn-ghost btn-sm ${range === 'today' ? 'is-active' : ''}" onclick="opMapSetHojeRange('today')">Hoje</button>
+        <button class="btn btn-ghost btn-sm ${range === 'tomorrow' ? 'is-active' : ''}" onclick="opMapSetHojeRange('tomorrow')">Amanhã</button>
+        <button class="btn btn-ghost btn-sm ${range === 'week' ? 'is-active' : ''}" onclick="opMapSetHojeRange('week')">Semana</button>
+      </div>
+      <select class="fsel" onchange="opMapSetHojeFilter('hojeEquipe',this.value)">${equipeOptions}</select>
+      <select class="fsel" onchange="opMapSetHojeFilter('hojeVeiculo',this.value)">${veiculoOptions}</select>
+      <select class="fsel" onchange="opMapSetHojeFilter('hojeStatus',this.value)">
+        <option value="">Todos os status</option>
+        <option value="atrasado" ${operationalMapState.hojeStatus === 'atrasado' ? 'selected' : ''}>Atrasados</option>
+        <option value="critico" ${operationalMapState.hojeStatus === 'critico' ? 'selected' : ''}>Críticos / reagendados</option>
+        <option value="pendente" ${operationalMapState.hojeStatus === 'pendente' ? 'selected' : ''}>Pendentes</option>
+        <option value="executado" ${operationalMapState.hojeStatus === 'executado' ? 'selected' : ''}>Executados</option>
+      </select>
+    </div>
+    <div class="op-map-layout">
+      <div id="op-map-hoje-canvas" class="op-map-canvas"></div>
+      <div class="op-map-side">
+        <div class="op-map-side-title"><span>Serviços no mapa</span><span>${filtered.length}</span></div>
+        ${opMapSummaryHtml(filtered, [])}
+        ${opMapListHtml(filtered, 'op-map-hoje-canvas')}
+        <div class="op-map-note">Serviços sem coordenada ficam na lista e podem abrir rota pelo endereço no Google Maps.</div>
+      </div>
+    </div>
+  </div>`;
+  opMapResolveLocations(filtered).then(items => {
+    opMapRenderLeaflet('op-map-hoje-canvas', items, { renderAfter:'renderHoje()' });
+    const side = el.querySelector('.op-map-side');
+    if (side) {
+      side.innerHTML = `<div class="op-map-side-title"><span>Serviços no mapa</span><span>${items.length}</span></div>${opMapSummaryHtml(items, [])}${opMapListHtml(items, 'op-map-hoje-canvas')}<div class="op-map-note">Serviços sem coordenada ficam na lista e podem abrir rota pelo endereço no Google Maps.</div>`;
+    }
+  });
+}
+
 // ════════════════════════════════════════════════
 // HOJE — Render Principal
 // ════════════════════════════════════════════════
@@ -10065,6 +10609,7 @@ function renderHoje() {
   const summaryEl = document.getElementById('hoje-summary');
   const kanbanEl  = document.getElementById('hoje-kanban');
   renderFieldOpsPanel(d);
+  renderOperationalMapHoje(daySvcs, d);
 
   // ── Sem serviços ──
   if (!daySvcs.length) {
@@ -16230,6 +16775,67 @@ async function comEnviarLembreteServico(id) {
   }
 }
 
+function renderMapaRoteiros(dateOverride = '') {
+  const date = dateOverride || document.getElementById('rot-data')?.value || new Date().toISOString().split('T')[0];
+  const periodoEl = document.getElementById('mapa-rot-periodo');
+  const periodo = periodoEl?.value || 'day';
+  const bounds = opMapPeriodBounds(date, periodo);
+  const source = services.filter(s => opMapServiceInBounds(s, bounds));
+  const allItems = opMapBuildItems(source, { date });
+
+  const equipeEl = document.getElementById('mapa-rot-equipe');
+  const veiculoEl = document.getElementById('mapa-rot-veiculo');
+  const statusEl = document.getElementById('mapa-rot-status');
+  const tipoEl = document.getElementById('mapa-rot-tipo');
+
+  const equipeValue = equipeEl?.value || '';
+  const veiculoValue = veiculoEl?.value || '';
+  const statusValue = statusEl?.value || '';
+  const tipoValue = tipoEl?.value || '';
+
+  if (equipeEl) equipeEl.innerHTML = opMapOptionsHtml(allItems.map(i => i.equipe), 'Todas as equipes', equipeValue);
+  if (veiculoEl) veiculoEl.innerHTML = opMapOptionsHtml(allItems.map(i => i.veiculo), 'Todos os veículos', veiculoValue);
+  if (tipoEl) tipoEl.innerHTML = opMapOptionsHtml(allItems.map(i => i.tipo), 'Todos os tipos', tipoValue);
+
+  const filtered = opMapFilterItems(allItems, {
+    equipe: equipeValue,
+    veiculo: veiculoValue,
+    status: statusValue,
+    tipo: tipoValue
+  });
+  const container = document.getElementById('mapa-roteiros-operacional');
+  if (!container) return;
+  const routeGroups = periodo === 'day' ? rotDados : [];
+  const periodLabel = periodo === 'month' ? 'mês' : periodo === 'week' ? 'semana' : 'dia';
+  container.innerHTML = `<div class="op-map-card">
+    <div class="op-map-head">
+      <div>
+        <div class="op-map-title">Mapa operacional do ${periodLabel}</div>
+        <div class="op-map-sub">${bounds.start === bounds.end ? bounds.start : `${bounds.start} até ${bounds.end}`} · ${filtered.length} serviço(s)</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="opMapOpenBase()">Abrir base</button>
+    </div>
+    <div class="op-map-layout">
+      <div id="op-map-roteiros-canvas" class="op-map-canvas"></div>
+      <div class="op-map-side">
+        <div class="op-map-side-title"><span>Resumo por veículo</span><span>${filtered.length}</span></div>
+        ${opMapSummaryHtml(filtered, routeGroups)}
+        ${opMapVehicleSummaryHtml(filtered)}
+        <div class="op-map-side-title"><span>Ordem dos serviços</span><span>${filtered.length}</span></div>
+        ${opMapListHtml(filtered, 'op-map-roteiros-canvas')}
+        <div class="op-map-note">Roteirização automática diária, semanal e mensal ficará preparada sobre esta estrutura em etapa futura.</div>
+      </div>
+    </div>
+  </div>`;
+  opMapResolveLocations(filtered).then(items => {
+    opMapRenderLeaflet('op-map-roteiros-canvas', items, { renderAfter:'rotGerarDoSistema()' });
+    const side = container.querySelector('.op-map-side');
+    if (side) {
+      side.innerHTML = `<div class="op-map-side-title"><span>Resumo por veículo</span><span>${items.length}</span></div>${opMapSummaryHtml(items, routeGroups)}${opMapVehicleSummaryHtml(items)}<div class="op-map-side-title"><span>Ordem dos serviços</span><span>${items.length}</span></div>${opMapListHtml(items, 'op-map-roteiros-canvas')}<div class="op-map-note">Roteirização automática diária, semanal e mensal ficará preparada sobre esta estrutura em etapa futura.</div>`;
+    }
+  });
+}
+
 // ─── Gerar Roteiro do sistema ────────────────
 async function rotGerarDoSistema() {
   const data = document.getElementById('rot-data')?.value;
@@ -16246,6 +16852,7 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-sugestao-grid').innerHTML = '';
       document.getElementById('rot-equipes-grid').innerHTML = '';
       renderCustomerRemindersPanel([], data);
+      renderMapaRoteiros(data);
       return;
     }
 
@@ -16264,6 +16871,7 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-sugestao-grid').innerHTML = '';
       document.getElementById('rot-equipes-grid').innerHTML = '';
       renderCustomerRemindersPanel(daySvcs, data);
+      renderMapaRoteiros(data);
       return;
     }
 
@@ -16330,6 +16938,7 @@ async function rotGerarDoSistema() {
 
     rotRenderizarSugestoes(rotDados);
     renderCustomerRemindersPanel(daySvcs, data);
+    renderMapaRoteiros(data);
     rotRenderizarLocal(rotDados, data);
   } catch (e) {
     console.error('Erro ao gerar roteiro do dia:', e);
@@ -16341,6 +16950,7 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-sugestao-grid').innerHTML = '';
     document.getElementById('rot-equipes-grid').innerHTML = '';
     renderCustomerRemindersPanel([], data);
+    renderMapaRoteiros(data);
     toast(`Erro ao gerar roteiro: ${e.message || e}`, 'err');
   }
 }
@@ -18765,8 +19375,20 @@ async function carregarTecnicosConfig() {
           </div>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>WhatsApp</th><th>Ativo</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(t => `<tr><td class="mono">${sanitize(t.id)}</td><td class="bold">${sanitize(t.nome)}</td><td class="mono">${sanitize(t.telefone || '—')}</td><td class="mono">${sanitize(t.whatsapp || '—')}</td><td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td><button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</tbody>
+          <thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>WhatsApp</th><th>Ativo</th><th>Portal</th><th>Ações</th></tr></thead>
+          <tbody>${items.map(t => `<tr>
+            <td class="mono">${sanitize(t.id)}</td>
+            <td class="bold">${sanitize(t.nome)}</td>
+            <td class="mono">${sanitize(t.telefone || '—')}</td>
+            <td class="mono">${sanitize(t.whatsapp || '—')}</td>
+            <td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td>
+            <td>${t.portal_login_enabled && t.has_portal_pin ? '<span class="chip chip-green">Acesso habilitado</span>' : '<span class="chip chip-orange">Sem PIN</span>'}</td>
+            <td style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button>
+              <button class="btn btn-ghost btn-sm" onclick="gerarPinTecnico(${jsArg(t.id)}, ${jsArg(t.nome || 'Tecnico')})">${t.has_portal_pin ? 'Trocar PIN' : 'Gerar PIN'}</button>
+              <button class="btn btn-ghost btn-sm" onclick="revogarAcessoTecnico(${jsArg(t.id)})">Revogar</button>
+            </td>
+          </tr>`).join('')}</tbody>
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
@@ -18801,6 +19423,28 @@ async function toggleTecnico(id, ativo) {
     await carregarTecnicos();
   } catch(e) {
     toast('❌ Erro: ' + e.message, 'err');
+  }
+}
+async function gerarPinTecnico(id, nome) {
+  if (!confirmAction(`Gerar novo PIN para ${nome}? As sessões antigas serão encerradas.`)) return;
+  try {
+    const result = await requestBackendJson(`/api/technicians/${encodeURIComponent(id)}/portal-pin`, { method:'POST', body: JSON.stringify({}) });
+    const pin = result?.pin || '';
+    toast(`✅ PIN gerado: ${pin}`, 'ok');
+    alert(`PIN de acesso do técnico ${nome}: ${pin}\n\nAnote agora. Ele não será exibido novamente.`);
+    await carregarTecnicosConfig();
+  } catch(e) {
+    toast('❌ Erro ao gerar PIN: ' + e.message, 'err');
+  }
+}
+async function revogarAcessoTecnico(id) {
+  if (!confirmAction('Revogar sessões abertas deste técnico? O PIN continua válido, mas ele precisará entrar novamente.')) return;
+  try {
+    await requestBackendJson(`/api/technicians/${encodeURIComponent(id)}/portal-access/revoke`, { method:'POST', body: JSON.stringify({}) });
+    toast('✅ Acesso revogado', 'ok');
+    await carregarTecnicosConfig();
+  } catch(e) {
+    toast('❌ Erro ao revogar acesso: ' + e.message, 'err');
   }
 }
 async function carregarVeiculosConfig() {

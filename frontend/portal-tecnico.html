@@ -68,6 +68,40 @@
       overflow:hidden;
     }
 
+    .auth-gate {
+      position:fixed;
+      inset:0;
+      z-index:500;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:linear-gradient(180deg,#f8fbff,#eef4fb);
+    }
+    .auth-gate.open { display:flex; }
+    .auth-card {
+      width:min(420px,100%);
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow:var(--shadow);
+      padding:20px;
+    }
+    .auth-title { font-size:22px; font-weight:900; margin-bottom:4px; }
+    .auth-sub { color:var(--muted); font-size:13px; line-height:1.45; margin-bottom:16px; }
+    .auth-card .field { margin-bottom:12px; }
+    .auth-card input, .auth-card select {
+      width:100%;
+      border:1px solid var(--border);
+      border-radius:12px;
+      min-height:46px;
+      padding:0 12px;
+      background:#fff;
+      color:var(--text);
+    }
+    .auth-card .primary { width:100%; min-height:46px; }
+    .auth-error { min-height:18px; color:var(--danger); font-size:12px; font-weight:700; margin-top:8px; }
+
     .hero {
       position:sticky;
       top:0;
@@ -644,6 +678,26 @@
 <body>
   <div class="toast-wrap" id="toasts"></div>
 
+  <div class="auth-gate open" id="auth-gate">
+    <form class="auth-card" id="tech-login-form" onsubmit="event.preventDefault(); loginTechnician();">
+      <div class="brand-kicker">Letec Log</div>
+      <div class="auth-title">Entrar no Portal</div>
+      <div class="auth-sub">Use seu acesso individual. A agenda exibida sera somente a vinculada ao seu tecnico.</div>
+      <div class="field">
+        <label for="tech-login-id">Tecnico</label>
+        <select id="tech-login-id" required>
+          <option value="">Carregando tecnicos...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="tech-login-pin">PIN de 6 digitos</label>
+        <input id="tech-login-pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)">
+      </div>
+      <button class="primary" id="tech-login-btn" type="submit">Entrar</button>
+      <div class="auth-error" id="tech-login-error"></div>
+    </form>
+  </div>
+
   <main class="app">
     <header class="hero">
       <div class="brand-row">
@@ -831,6 +885,7 @@
         <button class="secondary" type="button" onclick="showSection('recados')">Recados do dia</button>
         <button class="secondary" type="button" onclick="showSection('historico')">Historico do dia</button>
         <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
+        <button class="secondary" type="button" onclick="logoutTechnician()">Sair do portal</button>
         <button class="danger-soft" type="button" onclick="callSupport('Enviar observacao')">Enviar observacao</button>
       </div>
     </section>
@@ -919,6 +974,7 @@
     const HISTORY_KEY = 'letec_portal_tecnico_history';
     const DATA_CACHE_KEY = 'letec_portal_tecnico_data_cache_v1';
     const CONTEXT_KEY = 'letec_portal_tecnico_context_v1';
+    const TECH_SESSION_KEY = 'letec_portal_tecnico_session_v1';
     const EQUIPAMENTOS = ['EPIs', 'Pulverizador', 'Iscas', 'Produtos', 'Ferramentas', 'Prancheta', 'Celular carregado', 'Documentos'];
     const FUEL = ['Cheio', '3/4', 'Metade', '1/4', 'Reserva'];
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -980,6 +1036,7 @@
       rawServicesCount: 0,
       gps: { saida:null, retorno:null },
       matchedTech: null,
+      auth: null,
       loading: false,
     };
     let deferredInstallPrompt = null;
@@ -1187,12 +1244,131 @@
       }
     }
 
+    function loadTechSession() {
+      try {
+        const session = JSON.parse(localStorage.getItem(TECH_SESSION_KEY) || 'null');
+        if (!session?.token) return null;
+        if (session.expires_at && new Date(session.expires_at).getTime() <= Date.now()) {
+          localStorage.removeItem(TECH_SESSION_KEY);
+          return null;
+        }
+        return session;
+      } catch(e) {
+        return null;
+      }
+    }
+
+    function saveTechSession(session) {
+      localStorage.setItem(TECH_SESSION_KEY, JSON.stringify(session));
+      state.auth = session;
+    }
+
+    function clearTechSession() {
+      localStorage.removeItem(TECH_SESSION_KEY);
+      state.auth = null;
+    }
+
+    function techAuthHeaders() {
+      const session = state.auth || loadTechSession();
+      return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+    }
+
+    function showAuthGate(open = true) {
+      document.getElementById('auth-gate')?.classList.toggle('open', open);
+    }
+
+    async function loadTechnicianLoginOptions() {
+      const select = document.getElementById('tech-login-id');
+      if (!select) return;
+      try {
+        const items = await requestBackendJson('/api/technicians?active=true', { skipAuth: true });
+        const selected = portal.tecnicoId || '';
+        select.innerHTML = '<option value="">Selecione seu nome</option>' + (items || []).map(t => {
+          const isSelected = selected && String(t.id) === String(selected);
+          return `<option value="${escapeHtml(String(t.id))}" ${isSelected ? 'selected' : ''}>${escapeHtml(t.nome || t.id)}</option>`;
+        }).join('');
+      } catch(e) {
+        select.innerHTML = '<option value="">Nao foi possivel carregar</option>';
+      }
+    }
+
+    async function validateTechSession() {
+      const session = loadTechSession();
+      if (!session?.token) return false;
+      state.auth = session;
+      try {
+        const payload = await requestBackendJson('/api/technician-auth/me');
+        const technician = payload?.technician;
+        if (!technician?.id) throw new Error('Sessao invalida');
+        state.auth = { ...session, technician, expires_at: payload.expires_at || session.expires_at };
+        portal.tecnicoId = technician.id;
+        portal.tecnico = technician.nome || portal.tecnico;
+        state.matchedTech = technician;
+        showAuthGate(false);
+        return true;
+      } catch(e) {
+        clearTechSession();
+        showAuthGate(true);
+        return false;
+      }
+    }
+
+    async function loginTechnician() {
+      const technicianId = document.getElementById('tech-login-id')?.value || '';
+      const pin = document.getElementById('tech-login-pin')?.value || '';
+      const btn = document.getElementById('tech-login-btn');
+      const errorBox = document.getElementById('tech-login-error');
+      if (errorBox) errorBox.textContent = '';
+      if (!technicianId || !/^\d{6}$/.test(pin)) {
+        if (errorBox) errorBox.textContent = 'Selecione o tecnico e informe o PIN de 6 digitos.';
+        return;
+      }
+      try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Entrando...'; }
+        const payload = await requestBackendJson('/api/technician-auth/login', {
+          method: 'POST',
+          skipAuth: true,
+          body: JSON.stringify({ technician_id: technicianId, pin })
+        });
+        saveTechSession({ token: payload.token, expires_at: payload.expires_at, technician: payload.technician });
+        portal.tecnicoId = payload.technician?.id || technicianId;
+        portal.tecnico = payload.technician?.nome || portal.tecnico;
+        state.matchedTech = payload.technician || null;
+        showAuthGate(false);
+        await loadData();
+        await processQueue();
+      } catch(e) {
+        if (errorBox) errorBox.textContent = e.message || 'Falha no login.';
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
+      }
+    }
+
+    async function logoutTechnician() {
+      try {
+        await requestBackendJson('/api/technician-auth/logout', { method:'POST', body: JSON.stringify({}) });
+      } catch(e) {}
+      clearTechSession();
+      state.services = [];
+      state.messages = [];
+      state.events = [];
+      showAuthGate(true);
+      await loadTechnicianLoginOptions();
+    }
+
     async function requestBackendJson(path, options = {}) {
+      const { skipAuth, ...fetchOptions } = options;
       const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...options,
+        ...fetchOptions,
         headers: {
           'Content-Type': 'application/json',
-          ...(options.headers || {})
+          'X-Portal-Client': 'technician-portal',
+          'X-Portal-Tecnico-Id': portal.tecnicoId || '',
+          'X-Portal-Tecnico': portalDisplayName(),
+          'X-Portal-Equipe': portal.equipe || portalDisplayName(),
+          'X-Actor-Name': portalDisplayName(),
+          ...(skipAuth ? {} : techAuthHeaders()),
+          ...(fetchOptions.headers || {})
         }
       });
       const payload = await response.json().catch(() => null);
@@ -1441,6 +1617,11 @@
     }
 
     async function loadData() {
+      if (!state.auth?.token && !(await validateTechSession())) {
+        await loadTechnicianLoginOptions();
+        renderAll();
+        return;
+      }
       setSyncState();
       const cached = loadPortalCache();
       if (cached) {
@@ -2155,7 +2336,7 @@ Portal: ${currentPortalLink()}${location}`;
         });
       }
       await loadData();
-      await processQueue();
+      if (state.auth?.token) await processQueue();
     });
   </script>
 </body>
