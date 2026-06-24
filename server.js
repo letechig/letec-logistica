@@ -1361,12 +1361,50 @@ function extractTechnicianToken(req) {
   return String(headerToken || '').trim();
 }
 
+function extractAppToken(req) {
+  const headerToken = firstHeader(req, 'x-app-session') || '';
+  const bearer = extractBearerToken(req);
+  if (String(bearer).startsWith('app_')) return bearer;
+  return String(headerToken || '').trim();
+}
+
 function hashToken(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
 }
 
 function generateTechnicianSessionToken() {
   return `tech_${crypto.randomBytes(32).toString('base64url')}`;
+}
+
+function generateAppSessionToken() {
+  return `app_${crypto.randomBytes(32).toString('base64url')}`;
+}
+
+function hashPassword(password) {
+  const clean = String(password || '');
+  if (clean.length < 6) {
+    const error = new Error('Senha deve ter pelo menos 6 caracteres');
+    error.status = 400;
+    throw error;
+  }
+  const salt = crypto.randomBytes(16).toString('hex');
+  const iterations = 120000;
+  const digest = crypto.pbkdf2Sync(clean, salt, iterations, 32, 'sha256').toString('hex');
+  return `pbkdf2_sha256$${iterations}$${salt}$${digest}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const parts = String(storedHash || '').split('$');
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2_sha256') return false;
+  const [, iterationsText, salt, expected] = parts;
+  const iterations = Number(iterationsText);
+  if (!Number.isFinite(iterations) || !salt || !expected) return false;
+  const digest = crypto.pbkdf2Sync(String(password || ''), salt, iterations, 32, 'sha256').toString('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(digest, 'hex'), Buffer.from(expected, 'hex'));
+  } catch(e) {
+    return false;
+  }
 }
 
 function generateTechnicianPin() {
@@ -1510,7 +1548,7 @@ async function authenticateTechnicianSession(req) {
 
 async function resolveSupabaseActor(req) {
   const token = extractBearerToken(req);
-  if (!token || token.startsWith('tech_')) return null;
+  if (!token || token.startsWith('tech_') || token.startsWith('app_')) return null;
   try {
     const { data, error } = await getSupabaseClient().auth.getUser(token);
     if (error || !data?.user) return null;
@@ -1520,8 +1558,75 @@ async function resolveSupabaseActor(req) {
   }
 }
 
+function publicAppUser(appUser = {}) {
+  if (!appUser) return null;
+  const { password_hash, ...rest } = appUser;
+  return rest;
+}
+
+async function authenticateAppSession(req) {
+  if (req.appSessionAuth !== undefined) return req.appSessionAuth;
+  const token = extractAppToken(req);
+  if (!token) {
+    req.appSessionAuth = null;
+    return null;
+  }
+  const db = getSupabaseClient();
+  const sessionHash = hashToken(token);
+  const session = await maybeSingle(
+    db.from('app_user_sessions')
+      .select('*')
+      .eq('session_token_hash', sessionHash)
+      .limit(1)
+  ).catch(error => {
+    if (isMissingRelationError(error)) return null;
+    throw error;
+  });
+  if (!session || session.revoked_at) {
+    req.appSessionAuth = null;
+    return null;
+  }
+  if (session.expires_at && new Date(session.expires_at).getTime() <= Date.now()) {
+    req.appSessionAuth = null;
+    return null;
+  }
+  const appUser = await maybeSingle(
+    db.from('app_users')
+      .select('*')
+      .eq('id', session.app_user_id)
+      .eq('active', true)
+      .limit(1)
+  ).catch(error => {
+    if (isMissingRelationError(error)) return null;
+    throw error;
+  });
+  const revokedAt = appUser?.session_revoked_at ? new Date(appUser.session_revoked_at).getTime() : 0;
+  const createdAt = session.created_at ? new Date(session.created_at).getTime() : 0;
+  if (!appUser || (revokedAt && createdAt && createdAt <= revokedAt)) {
+    req.appSessionAuth = null;
+    return null;
+  }
+  Promise.resolve(
+    db.from('app_user_sessions')
+      .update({ last_seen_at: new Date().toISOString(), ip: req.ip || null, user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null })
+      .eq('id', session.id)
+      .select()
+  ).catch(() => {});
+  req.appSessionAuth = { session, appUser, role: appUser.role };
+  return req.appSessionAuth;
+}
+
 async function resolveAppUserRole(req) {
   if (req.appUserRole !== undefined) return req.appUserRole;
+  const appSession = await authenticateAppSession(req);
+  if (appSession) {
+    req.appUserRole = {
+      user: { id: appSession.appUser.auth_user_id || `app:${appSession.appUser.id}`, email: appSession.appUser.email },
+      appUser: appSession.appUser,
+      role: appSession.appUser.role
+    };
+    return req.appUserRole;
+  }
   const user = await resolveSupabaseActor(req);
   if (!user) {
     req.appUserRole = null;
@@ -3270,6 +3375,84 @@ app.post('/api/technician-auth/login', technicianLoginLimiter, async (req, res) 
   } catch (error) {
     console.error('[POST /api/technician-auth/login] Error:', error.message);
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao autenticar tecnico' });
+  }
+});
+
+app.post('/api/app-auth/login', technicianLoginLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const email = normalizeEmail(req.body?.email || '');
+    const password = String(req.body?.password || '');
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email e senha sao obrigatorios', code: 'missing_credentials' });
+    }
+    const appUser = await maybeSingle(
+      db.from('app_users')
+        .select('*')
+        .eq('email', email)
+        .eq('active', true)
+        .limit(1)
+    ).catch(error => {
+      if (isMissingRelationError(error)) return null;
+      throw error;
+    });
+    if (!appUser || !appUser.password_hash || !verifyPassword(password, appUser.password_hash)) {
+      return res.status(401).json({ error: 'Email ou senha invalido', code: 'invalid_credentials' });
+    }
+    if (!['admin', 'operador'].includes(String(appUser.role || '').toLowerCase())) {
+      return res.status(403).json({ error: 'Perfil sem permissao de acesso interno', code: 'invalid_role' });
+    }
+
+    const token = generateAppSessionToken();
+    const now = new Date();
+    const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const sessionPayload = {
+      app_user_id: appUser.id,
+      session_token_hash: hashToken(token),
+      expires_at: expires.toISOString(),
+      last_seen_at: now.toISOString(),
+      ip: req.ip || null,
+      user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null
+    };
+    const { data, error } = await db.from('app_user_sessions').insert([sessionPayload]).select();
+    if (error) throw error;
+    res.status(201).json({
+      token,
+      expires_at: expires.toISOString(),
+      user: publicAppUser(appUser),
+      session_id: data?.[0]?.id || null
+    });
+  } catch (error) {
+    console.error('[POST /api/app-auth/login] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao autenticar usuario interno' });
+  }
+});
+
+app.post('/api/app-auth/logout', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const token = extractAppToken(req);
+    if (token) {
+      await db.from('app_user_sessions')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('session_token_hash', hashToken(token))
+        .select();
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[POST /api/app-auth/logout] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao encerrar sessao interna' });
+  }
+});
+
+app.get('/api/app-auth/me', async (req, res) => {
+  try {
+    const auth = await authenticateAppSession(req);
+    if (!auth) return res.status(401).json({ error: 'Sessao interna invalida', code: 'app_session_required' });
+    res.json({ user: publicAppUser(auth.appUser), session_expires_at: auth.session.expires_at });
+  } catch (error) {
+    console.error('[GET /api/app-auth/me] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao validar sessao interna' });
   }
 });
 

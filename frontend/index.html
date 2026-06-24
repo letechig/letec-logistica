@@ -3382,6 +3382,8 @@ async function carregarVeiculos(){
 
   async function getBackendAuthHeaders() {
     try {
+      const appSession = typeof loadAppAuthSession === 'function' ? loadAppAuthSession() : null;
+      if (appSession?.token) return { Authorization: `Bearer ${appSession.token}` };
       const { data } = await supabaseClient.auth.getSession();
       const session = data?.session;
       if (!session?.access_token) return {};
@@ -15325,6 +15327,7 @@ async function confirmNewSvc(){
 // MODAL / DELETE
 // ════════════════════════════════════════════════
 let authEventsBound = false;
+const APP_AUTH_SESSION_KEY = 'letec_app_auth_session_v1';
 const AUTH_PROFILES = {
   admin: {
     label: 'Admin',
@@ -15340,6 +15343,30 @@ const AUTH_PROFILES = {
   }
 };
 let selectedAuthProfile = 'admin';
+
+function loadAppAuthSession(){
+  try {
+    const raw = localStorage.getItem(APP_AUTH_SESSION_KEY);
+    if(!raw) return null;
+    const session = JSON.parse(raw);
+    if(!session?.token) return null;
+    if(session.expires_at && new Date(session.expires_at).getTime() <= Date.now()){
+      localStorage.removeItem(APP_AUTH_SESSION_KEY);
+      return null;
+    }
+    return session;
+  } catch(e) {
+    return null;
+  }
+}
+
+function saveAppAuthSession(session){
+  try { localStorage.setItem(APP_AUTH_SESSION_KEY, JSON.stringify(session || {})); } catch(e) {}
+}
+
+function clearAppAuthSession(){
+  try { localStorage.removeItem(APP_AUTH_SESSION_KEY); } catch(e) {}
+}
 
 function openAuthModal(){
   const modal = document.getElementById('auth-modal');
@@ -15371,6 +15398,7 @@ function selectAuthProfile(profile){
 
 function authDisplayName(user){
   if(!user) return '';
+  if(user.name) return user.name;
   const nome = user.user_metadata?.name || user.user_metadata?.nome || '';
   return nome || user.email || 'usuário';
 }
@@ -15418,6 +15446,20 @@ function bindAuthEvents(){
 
 async function checkAuth(){
   try {
+    const appSession = loadAppAuthSession();
+    if(appSession?.token){
+      const response = await fetch(`${API_BASE_URL}/api/app-auth/me`, {
+        headers: { Authorization: `Bearer ${appSession.token}` }
+      });
+      if(response.ok){
+        const payload = await response.json();
+        updateAuthUI(payload.user || appSession.user);
+        closeAuthModal();
+        return true;
+      }
+      clearAppAuthSession();
+    }
+
     const { data, error } = await supabaseClient.auth.getSession();
     if(error) throw error;
 
@@ -15460,8 +15502,28 @@ async function login(){
 
     if(emailInput && !emailInput.value.trim()) emailInput.value = email;
 
+    let appAuthFailed = null;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/app-auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const payload = await response.json().catch(() => null);
+      if(response.ok && payload?.token){
+        saveAppAuthSession({ token: payload.token, expires_at: payload.expires_at, user: payload.user });
+        toast('✅ Login realizado com sucesso!', 'ok');
+        closeAuthModal();
+        location.reload();
+        return;
+      }
+      appAuthFailed = payload?.error || `Login interno falhou (${response.status})`;
+    } catch(e) {
+      appAuthFailed = e.message || 'Login interno indisponível';
+    }
+
     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if(error) throw error;
+    if(error) throw new Error(appAuthFailed || error.message);
 
     toast('✅ Login realizado com sucesso!', 'ok');
     closeAuthModal();
@@ -15478,9 +15540,18 @@ async function login(){
 }
 
 async function logout(){
+  const appSession = loadAppAuthSession();
   try {
+    if(appSession?.token){
+      await fetch(`${API_BASE_URL}/api/app-auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appSession.token}` },
+        body: JSON.stringify({})
+      }).catch(() => null);
+    }
+    clearAppAuthSession();
     const { error } = await supabaseClient.auth.signOut();
-    if(error) throw error;
+    if(error && !appSession?.token) throw error;
     toast('Sessão encerrada.', 'ok');
   } catch(e){
     console.error('Erro no logout:', e);
