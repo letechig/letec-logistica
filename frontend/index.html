@@ -5227,6 +5227,7 @@ async function carregarVeiculos(){
 .op-map-item.red { border-left-color:var(--red); }
 .op-map-item.orange { border-left-color:var(--orange); }
 .op-map-item.green { border-left-color:var(--green); }
+.op-map-item.gray { border-left-color:#94a3b8; }
 .op-map-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
 .op-map-item-client { font-weight:800; font-size:12px; color:var(--text); }
 .op-map-item-meta { margin-top:5px; color:var(--text2); font-size:11px; line-height:1.45; display:flex; flex-direction:column; gap:2px; }
@@ -5257,6 +5258,55 @@ async function carregarVeiculos(){
   text-decoration:none;
 }
 .op-map-route-link { border:1px solid var(--border2); color:var(--blue); background:var(--blue-bg); display:inline-flex; align-items:center; justify-content:center; }
+.op-map-quick-head { display:flex; flex-direction:column; gap:4px; }
+.op-map-quick-title { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; font-weight:800; font-size:13px; color:var(--text); }
+.op-map-quick-sub { color:var(--text3); font-size:11px; line-height:1.35; }
+.op-map-view-select { display:flex; align-items:center; gap:6px; flex-wrap:wrap; color:var(--text3); font-size:11px; font-weight:700; }
+.op-map-view-select .fsel { min-width:130px; height:32px; padding:5px 9px; font-size:11px; }
+.op-map-quick-item {
+  padding:7px;
+  border-left-width:3px;
+}
+.op-map-quick-row { display:grid; grid-template-columns:24px minmax(0,1fr) auto; gap:8px; align-items:center; }
+.op-map-quick-body { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.op-map-quick-client { font-size:12px; font-weight:800; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.op-map-quick-meta { display:flex; gap:5px; align-items:center; flex-wrap:wrap; color:var(--text2); font-size:10px; line-height:1.25; }
+.op-map-quick-time { font-family:var(--mono); color:var(--text); font-weight:800; }
+.op-map-quick-actions { margin-top:6px; margin-left:32px; display:flex; gap:4px; align-items:center; }
+.op-map-mini-btn {
+  min-height:25px;
+  border:1px solid var(--border2);
+  border-radius:6px;
+  background:var(--card);
+  color:var(--text2);
+  padding:4px 7px;
+  font-size:10px;
+  font-weight:800;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.op-map-mini-btn.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
+.op-map-mini-warn { color:var(--orange); font-weight:800; }
+.op-map-legend {
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--bg2);
+  padding:7px 8px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.op-map-legend-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; color:var(--text3); font-size:10px; line-height:1.2; }
+.op-map-legend-dot { width:9px; height:9px; border-radius:99px; display:inline-block; box-shadow:0 0 0 1px rgba(15,23,42,.08); }
+.op-map-legend-dot.red { background:var(--red); }
+.op-map-legend-dot.orange { background:var(--orange); }
+.op-map-legend-dot.blue { background:var(--blue); }
+.op-map-legend-dot.green { background:var(--green); }
+.op-map-legend-dot.gray { background:#94a3b8; }
+.op-map-legend-token { display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
 .op-map-group { display:flex; flex-direction:column; gap:8px; }
 .op-map-group-title {
   display:flex;
@@ -5286,25 +5336,39 @@ async function carregarVeiculos(){
 .op-map-alert-row strong { color:var(--text); }
 .op-map-empty { padding:24px; text-align:center; color:var(--text3); }
 .op-map-pin {
-  width:18px;
-  height:18px;
+  width:22px;
+  height:22px;
   border-radius:99px 99px 99px 2px;
   transform:rotate(-45deg);
   border:2px solid #fff;
   box-shadow:0 6px 14px rgba(15,23,42,.22);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
 }
 .op-map-pin::after {
   content:'';
   position:absolute;
-  inset:4px;
+  inset:3px;
   border-radius:99px;
   background:#fff;
   opacity:.95;
+  z-index:0;
+}
+.op-map-pin-icon {
+  position:relative;
+  z-index:1;
+  transform:rotate(45deg);
+  font-size:10px;
+  line-height:1;
+  color:#111827;
 }
 .op-map-pin.red { background:var(--red); }
 .op-map-pin.orange { background:var(--orange); }
 .op-map-pin.blue { background:var(--blue); }
 .op-map-pin.green { background:var(--green); }
+.op-map-pin.gray { background:#94a3b8; }
 .op-map-base-pin {
   width:22px;
   height:22px;
@@ -10299,7 +10363,7 @@ const operationalMapState = {
   hojeEquipe: '',
   hojeVeiculo: '',
   hojeStatus: '',
-  hojeGroupBy: 'none',
+  hojeGroupBy: 'time',
   maps: {},
   markers: {},
   geocodeCache: (() => {
@@ -10369,6 +10433,16 @@ function opMapStatusMeta(statusKey) {
     executado: { label:'Executado', color:'green', chip:'chip-green' }
   };
   return map[statusKey] || map.pendente;
+}
+
+function opMapQuickStatusLabel(statusKey) {
+  const labels = {
+    atrasado: 'Atrasado',
+    critico: 'Atenção',
+    pendente: 'Agendado',
+    executado: 'Executado'
+  };
+  return labels[statusKey] || 'Status';
 }
 
 function opMapBuildItems(sourceServices = [], options = {}) {
@@ -10456,6 +10530,44 @@ function opMapOpenBase() {
   window.open(url, '_blank');
 }
 
+function opMapVehicleKind(item = {}) {
+  if (!item.hasVeiculo) return 'none';
+  const vehicle = normalizarNome(item.veiculo || '');
+  if (vehicle.includes('moto')) return 'moto';
+  if (/(fiorino|saveiro|strada|van|utilitario|utilitaria|kangoo|doblo|ducato|partner|hr)/.test(vehicle)) return 'utility';
+  return 'car';
+}
+
+function opMapVehicleIcon(item = {}) {
+  const icons = { car:'🚗', moto:'🏍', utility:'🚐', none:'•' };
+  return icons[opMapVehicleKind(item)] || icons.none;
+}
+
+function opMapPinClass(item = {}) {
+  const meta = opMapStatusMeta(item.statusKey);
+  if (item.statusKey === 'atrasado' || item.statusKey === 'critico' || item.statusKey === 'executado') return meta.color;
+  if (!item.hasEquipe || !item.hasVeiculo || !item.location || opMapAddressIncomplete(item)) return 'gray';
+  return meta.color || 'blue';
+}
+
+function opMapLegendHtml() {
+  return `<div class="op-map-legend">
+    <div class="op-map-legend-row">
+      <span class="op-map-legend-token"><i class="op-map-legend-dot red"></i>Atrasado</span>
+      <span class="op-map-legend-token"><i class="op-map-legend-dot orange"></i>Atenção</span>
+      <span class="op-map-legend-token"><i class="op-map-legend-dot blue"></i>Agendado</span>
+      <span class="op-map-legend-token"><i class="op-map-legend-dot green"></i>Executado</span>
+      <span class="op-map-legend-token"><i class="op-map-legend-dot gray"></i>Incompleto</span>
+    </div>
+    <div class="op-map-legend-row">
+      <span class="op-map-legend-token">🚗 Carro</span>
+      <span class="op-map-legend-token">🏍 Moto</span>
+      <span class="op-map-legend-token">🚐 Utilitário</span>
+      <span class="op-map-legend-token">• Sem veículo</span>
+    </div>
+  </div>`;
+}
+
 function opMapShortAddress(address = '', max = 82) {
   const clean = String(address || '').replace(/\s+/g, ' ').trim();
   if (!clean) return 'Sem endereço';
@@ -10484,11 +10596,17 @@ function opMapLateLabel(item = {}) {
   return `Atraso: ${minutes} min`;
 }
 
-function opMapPopupHtml(item, renderAfter = 'renderHoje()') {
+function opMapPopupHtml(item, options = {}) {
+  const renderAfter = typeof options === 'string' ? options : (options.renderAfter || 'renderHoje()');
+  const compact = typeof options === 'object' && !!options.compactPopup;
   const meta = opMapStatusMeta(item.statusKey);
   const id = jsArg(item.id);
   const route = opMapRouteUrl(item);
   const shortAddress = opMapShortAddress(item.endereco);
+  const secondaryActions = compact ? '' : `
+      <button onclick="comEnviarConfirmacaoServico(${id})">Enviar WhatsApp</button>
+      ${item.statusKey !== 'executado' ? `<button class="green" onclick="setSt(${id},'executado');${renderAfter}">Marcar executado</button>` : ''}
+      ${item.statusKey !== 'executado' ? `<button class="orange" onclick="setSt(${id},'reagendado');${renderAfter}">Reagendar</button>` : ''}`;
   return `<div class="op-map-popup">
     <div class="op-map-popup-title">${sanitize(item.cliente)}</div>
     <div class="op-map-popup-line"><strong>Horário:</strong> ${sanitize(item.horario || '—')}</div>
@@ -10498,9 +10616,7 @@ function opMapPopupHtml(item, renderAfter = 'renderHoje()') {
     <div class="op-map-popup-line"><span class="chip ${meta.chip}">${meta.label}</span></div>
     <div class="op-map-popup-actions">
       <button class="primary" onclick="openEditSvc(${id})">Abrir serviço</button>
-      <button onclick="comEnviarConfirmacaoServico(${id})">Enviar WhatsApp</button>
-      ${item.statusKey !== 'executado' ? `<button class="green" onclick="setSt(${id},'executado');${renderAfter}">Marcar executado</button>` : ''}
-      ${item.statusKey !== 'executado' ? `<button class="orange" onclick="setSt(${id},'reagendado');${renderAfter}">Reagendar</button>` : ''}
+      ${secondaryActions}
       <a href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Abrir rota</a>
     </div>
   </div>`;
@@ -10526,24 +10642,25 @@ function opMapRenderLeaflet(canvasId, items = [], options = {}) {
   }).addTo(map);
 
   const bounds = [];
-  const baseIcon = L.divIcon({ className:'', html:'<div class="op-map-base-pin">B</div>', iconSize:[22,22], iconAnchor:[11,11] });
+  const baseIcon = L.divIcon({ className:'', html:'<div class="op-map-base-pin">⌂</div>', iconSize:[22,22], iconAnchor:[11,11] });
   L.marker([OP_MAP_BASE_COORDS.lat, OP_MAP_BASE_COORDS.lng], { icon: baseIcon })
     .addTo(map)
     .bindPopup(`<strong>${OP_MAP_BASE_LABEL}</strong><br>${sanitize(OP_MAP_BASE_QUERY)}`);
   bounds.push([OP_MAP_BASE_COORDS.lat, OP_MAP_BASE_COORDS.lng]);
 
   items.filter(item => item.location).forEach(item => {
-    const meta = opMapStatusMeta(item.statusKey);
+    const color = opMapPinClass(item);
+    const vehicleIcon = opMapVehicleIcon(item);
     const icon = L.divIcon({
       className:'',
-      html:`<div class="op-map-pin ${meta.color}"></div>`,
-      iconSize:[22,22],
-      iconAnchor:[11,22],
+      html:`<div class="op-map-pin ${color}"><span class="op-map-pin-icon">${vehicleIcon}</span></div>`,
+      iconSize:[26,26],
+      iconAnchor:[13,26],
       popupAnchor:[0,-18]
     });
     const marker = L.marker([item.location.lat, item.location.lng], { icon })
       .addTo(map)
-      .bindPopup(opMapPopupHtml(item, options.renderAfter || 'renderHoje()'));
+      .bindPopup(opMapPopupHtml(item, options));
     operationalMapState.markers[canvasId][String(item.id)] = marker;
     bounds.push([item.location.lat, item.location.lng]);
   });
@@ -10579,13 +10696,14 @@ function opMapGroupItems(items = [], groupBy = 'none') {
   return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function opMapGroupSelectHtml(selected = 'none') {
-  const value = selected || 'none';
-  return `<select class="fsel" onchange="opMapSetHojeFilter('hojeGroupBy',this.value)">
-    <option value="none" ${value === 'none' ? 'selected' : ''}>Lista única</option>
-    <option value="vehicle" ${value === 'vehicle' ? 'selected' : ''}>Agrupar por veículo</option>
-    <option value="team" ${value === 'team' ? 'selected' : ''}>Agrupar por equipe</option>
-  </select>`;
+function opMapGroupSelectHtml(selected = 'time') {
+  const value = selected || 'time';
+  return `<label class="op-map-view-select">Ver por:
+  <select class="fsel" onchange="opMapSetHojeFilter('hojeGroupBy',this.value)">
+    <option value="time" ${value === 'time' || value === 'none' ? 'selected' : ''}>Horário</option>
+    <option value="team" ${value === 'team' ? 'selected' : ''}>Equipe</option>
+    <option value="vehicle" ${value === 'vehicle' ? 'selected' : ''}>Veículo</option>
+  </select></label>`;
 }
 
 function opMapAddressIncomplete(item = {}) {
@@ -10663,35 +10781,36 @@ function opMapAlertsHtml(items = []) {
   </div>`;
 }
 
-function opMapDetailedItemHtml(item, index, canvasId = '') {
+function opMapQuickRouteItemHtml(item, index, canvasId = '') {
   const meta = opMapStatusMeta(item.statusKey);
-  const colorClass = meta.color === 'blue' ? '' : meta.color;
+  const colorClass = opMapPinClass(item);
   const id = jsArg(item.id);
   const route = opMapRouteUrl(item);
   const late = opMapLateLabel(item);
-  return `<div class="op-map-item ${colorClass}" onclick="opMapFocus('${canvasId}', ${id})">
-    <div class="op-map-item-head">
-      <div class="op-map-item-main">
-        <div class="op-map-item-order">${index}</div>
-        <div class="op-map-item-body">
-          <div class="op-map-item-client">${sanitize(item.cliente)}</div>
-          <div class="op-map-item-meta">
-            <span>${sanitize(opMapDateLabel(item.date))} · ${sanitize(item.horario || '—')}</span>
-            <span>Equipe: ${sanitize(item.hasEquipe ? item.equipe : 'Sem equipe')}</span>
-            <span>Veículo: ${sanitize(item.hasVeiculo ? item.veiculo : 'Sem veículo')}</span>
-            <span>${sanitize(item.tipo || 'Serviço')}</span>
-            <span>${sanitize(opMapShortAddress(item.endereco))}</span>
-            ${late ? `<span style="color:var(--red);font-weight:800">${sanitize(late)}</span>` : ''}
-            ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : ''}
-          </div>
+  const issues = [
+    !item.hasEquipe ? 'Sem equipe' : '',
+    !item.hasVeiculo ? 'Sem veículo' : '',
+    opMapAddressIncomplete(item) ? 'Endereço' : '',
+    !item.location ? 'Sem coord.' : ''
+  ].filter(Boolean);
+  return `<div class="op-map-item op-map-quick-item ${colorClass}" onclick="opMapFocus('${canvasId}', ${id})">
+    <div class="op-map-quick-row">
+      <div class="op-map-item-order">${index}</div>
+      <div class="op-map-quick-body">
+        <div class="op-map-quick-client" title="${escapeHtmlAttr(item.cliente)}">${sanitize(item.cliente)}</div>
+        <div class="op-map-quick-meta">
+          <span class="op-map-quick-time">${sanitize(item.horario || '—')}</span>
+          <span>${sanitize(item.hasEquipe ? item.equipe : 'Sem equipe')}</span>
+          <span>${sanitize(opMapVehicleIcon(item))} ${sanitize(item.hasVeiculo ? item.veiculo : 'Sem veículo')}</span>
+          ${late ? `<span style="color:var(--red);font-weight:800">${sanitize(late)}</span>` : ''}
+          ${issues.map(issue => `<span class="op-map-mini-warn">${sanitize(issue)}</span>`).join('')}
         </div>
       </div>
-      <span class="chip ${meta.chip}">${meta.label}</span>
+      <span class="chip ${meta.chip}">${opMapQuickStatusLabel(item.statusKey)}</span>
     </div>
-    <div class="op-map-item-actions" onclick="event.stopPropagation()">
-      <button class="btn btn-ghost btn-xs" onclick="openEditSvc(${id})">Abrir serviço</button>
-      <a class="op-map-route-link" href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Abrir rota</a>
-      ${renderServiceCardActions(item.service, { afterStatusChange:';renderHoje()', detailsLabel:'Abrir serviço', detailAction:`openEditSvc(${id})` })}
+    <div class="op-map-quick-actions" onclick="event.stopPropagation()">
+      <button class="op-map-mini-btn primary" onclick="openEditSvc(${id})">Abrir</button>
+      <a class="op-map-mini-btn" href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Rota</a>
     </div>
   </div>`;
 }
@@ -10700,12 +10819,12 @@ function opMapListHtml(items = [], canvasId = '', options = {}) {
   if (!items.length) return '<div class="op-map-empty">Nenhum serviço para os filtros selecionados.</div>';
   if (options.detailed) {
     let counter = 0;
-    const groups = opMapGroupItems(items, options.groupBy || 'none');
+    const groups = opMapGroupItems(items, options.groupBy || 'time');
     return `<div class="op-map-list">${groups.map(group => {
-      const groupHead = options.groupBy && options.groupBy !== 'none'
+      const groupHead = options.groupBy && options.groupBy !== 'none' && options.groupBy !== 'time'
         ? `<div class="op-map-group-title"><span>${sanitize(group.label || 'Sem grupo')}</span><span>${group.items.length}</span></div>`
         : '';
-      return `<div class="op-map-group">${groupHead}${group.items.map(item => opMapDetailedItemHtml(item, ++counter, canvasId)).join('')}</div>`;
+      return `<div class="op-map-group">${groupHead}${group.items.map(item => opMapQuickRouteItemHtml(item, ++counter, canvasId)).join('')}</div>`;
     }).join('')}</div>`;
   }
   return `<div class="op-map-list">${items.map((item, index) => {
@@ -10779,18 +10898,19 @@ function opMapSetHojeFilter(field, value) {
 }
 
 function opMapHojeSideHtml(items = []) {
-  return `<div class="op-map-side-title"><span>Serviços no mapa</span><span>${items.length}</span></div>
-    ${opMapSummaryHtml(items, [])}
-    ${opMapAlertsHtml(items)}
+  const vehicles = new Set(items.filter(i => i.hasVeiculo).map(i => i.veiculo).filter(Boolean)).size;
+  const groupBy = operationalMapState.hojeGroupBy || 'time';
+  const modeLabel = groupBy === 'team' ? 'Visualização por equipe' : groupBy === 'vehicle' ? 'Visualização por veículo' : 'Ordem por horário';
+  return `<div class="op-map-quick-head">
+      <div class="op-map-quick-title"><span>Roteiro rápido</span><span>${items.length}</span></div>
+      <div class="op-map-quick-sub">${items.length} serviço(s) · ${vehicles} veículo(s) · ${modeLabel}</div>
+    </div>
     <div class="op-map-controls-line">
-      <div>
-        <div class="op-map-side-title"><span>Lista de serviços</span><span>${items.length}</span></div>
-        <div class="op-map-side-kicker">Ordem atual: por horário</div>
-      </div>
       ${opMapGroupSelectHtml(operationalMapState.hojeGroupBy)}
     </div>
+    ${opMapLegendHtml()}
     ${opMapListHtml(items, 'op-map-hoje-canvas', { detailed:true, groupBy: operationalMapState.hojeGroupBy })}
-    <div class="op-map-note">Serviços sem coordenada ficam na lista e podem abrir rota pelo endereço no Google Maps.</div>`;
+    <div class="op-map-note">Use esta lateral para localizar e abrir rotas. Execução e conclusão ficam nos cards por equipe abaixo.</div>`;
 }
 
 function renderOperationalMapHoje(daySvcs = [], date = '') {
@@ -10839,7 +10959,7 @@ function renderOperationalMapHoje(daySvcs = [], date = '') {
     </div>
   </div>`;
   opMapResolveLocations(filtered).then(items => {
-    opMapRenderLeaflet('op-map-hoje-canvas', items, { renderAfter:'renderHoje()' });
+    opMapRenderLeaflet('op-map-hoje-canvas', items, { renderAfter:'renderHoje()', compactPopup:true });
     const side = el.querySelector('.op-map-side');
     if (side) {
       side.innerHTML = opMapHojeSideHtml(items);
