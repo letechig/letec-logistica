@@ -12950,6 +12950,7 @@ function criarMenuContextualCliente(clienteId) {
     <div class="ctx-separator"></div>
     <div style="padding:4px">
       <button class="ctx-item danger" onclick="deleteClientDirectly(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('trash')} Inativar cliente</button>
+      <button class="ctx-item danger" onclick="hardDeleteClientDirectly(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('trash')} Apagar definitivo</button>
     </div>`;
 }
 
@@ -14650,6 +14651,49 @@ async function deleteClientDirectly(clientId) {
   const cliente = clientesData.find(c => c.id === clientId);
   if (!cliente) return;
   await deleteCustomerById(clientId, cliente.nome);
+}
+
+function describeHardDeleteImpact(impact = {}) {
+  const blocking = Array.isArray(impact.blocking) ? impact.blocking.filter(item => item.count > 0) : [];
+  const cleanup = Array.isArray(impact.cleanup) ? impact.cleanup.filter(item => item.count > 0) : [];
+  const blockingText = blocking.length
+    ? blocking.map(item => `- ${item.label}: ${item.count}`).join('\n')
+    : '- nenhum vínculo operacional bloqueante';
+  const cleanupText = cleanup.length
+    ? cleanup.map(item => `- ${item.label}: ${item.count}`).join('\n')
+    : '- nenhum registro auxiliar';
+  return { blockingText, cleanupText, blocking };
+}
+
+async function hardDeleteClientDirectly(clientId) {
+  const cliente = clientesData.find(c => String(c.id) === String(clientId));
+  if (!cliente) return toast('Cliente não encontrado na lista atual', 'err');
+  try {
+    const preview = await requestBackendJson(`/api/customers/${encodeURIComponent(clientId)}/hard-delete-preview`, { cache: 'no-store' });
+    const { blockingText, cleanupText, blocking } = describeHardDeleteImpact(preview);
+    if (blocking.length) {
+      alert(`Não é seguro apagar definitivamente este cliente.\n\nVínculos encontrados:\n${blockingText}\n\nUse Inativar ou Mesclar para preservar o histórico.`);
+      return;
+    }
+    if (!confirmAction(`Apagar definitivamente o cliente "${cliente.nome}"?\n\nIsso remove o cadastro do banco e também:\n${cleanupText}\n\nEsta ação não deve ser usada para clientes com histórico real.`)) return;
+    const typed = window.prompt(`Para confirmar, digite exatamente o nome do cliente:\n${cliente.nome}`, '');
+    if (typed === null) return;
+    const result = await requestBackendJson(`/api/customers/${encodeURIComponent(clientId)}/hard-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ confirmName: typed })
+    });
+    clientesData = clientesData.filter(c => String(c.id) !== String(clientId));
+    clientesTotal = Math.max(0, Number(clientesTotal || 0) - 1);
+    toast(result.message || 'Cliente apagado definitivamente', 'ok');
+    await renderClientes();
+  } catch (error) {
+    if (error.payload?.code === 'customer_hard_delete_blocked') {
+      const { blockingText } = describeHardDeleteImpact(error.payload.impact);
+      alert(`Não é seguro apagar definitivamente este cliente.\n\nVínculos encontrados:\n${blockingText}\n\nUse Inativar ou Mesclar.`);
+      return;
+    }
+    toast('Erro ao apagar definitivamente: ' + (error.message || error), 'err');
+  }
 }
 
 // ════════════════════════════════════════════════

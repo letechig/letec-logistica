@@ -1865,8 +1865,18 @@ async function resolveAuditActor(req) {
     };
   }
 
+  const appSession = await authenticateAppSession(req).catch(() => null);
+  if (appSession?.appUser) {
+    return {
+      actor_id: appSession.appUser.id || null,
+      actor_email: appSession.appUser.email || null,
+      actor_name: appSession.appUser.name || appSession.appUser.email || null,
+      actor_source: appSession.appUser.emergency ? 'app_emergency_session' : 'app_user_session'
+    };
+  }
+
   const token = extractBearerToken(req);
-  if (token && !token.startsWith('tech_')) {
+  if (token && !token.startsWith('tech_') && !token.startsWith('app_')) {
     try {
       const { data, error } = await getSupabaseClient().auth.getUser(token);
       if (!error && data?.user) {
@@ -4949,6 +4959,142 @@ app.delete('/api/customers/:id', strictLimiter, async (req, res) => {
   } catch (error) {
     console.error('[DELETE /api/customers/:id] Error:', error.message);
     res.status(500).json({ error: 'Falha ao remover cliente' });
+  }
+});
+
+const CUSTOMER_HARD_DELETE_BLOCKERS = [
+  { table: 'services', column: 'cliente_id', key: 'services_cliente_id', label: 'servicos vinculados por ID' },
+  { table: 'services', column: 'customer_id', key: 'services_customer_id', label: 'servicos vinculados por customer_id' },
+  { table: 'customer_service_history', column: 'customer_id', key: 'customer_service_history', label: 'historico operacional' }
+];
+
+const CUSTOMER_HARD_DELETE_CLEANUP = [
+  { table: 'customer_addresses', column: 'customer_id', key: 'customer_addresses', label: 'enderecos do cadastro' },
+  { table: 'customer_aliases', column: 'customer_id', key: 'customer_aliases', label: 'apelidos/aliases' },
+  { table: 'contracts', column: 'customer_id', key: 'contracts', label: 'contratos cadastrados' },
+  { table: 'data_reviews', column: 'customer_id', key: 'data_reviews', label: 'pendencias de revisao' },
+  { table: 'customer_reminders', column: 'customer_id', key: 'customer_reminders', label: 'lembretes do cliente' }
+];
+
+async function safeCountRelation(db, relation, value) {
+  if (value === undefined || value === null || value === '') return { ...relation, count: 0 };
+  try {
+    const { data, error, count } = await db
+      .from(relation.table)
+      .select('id', { count: 'exact' })
+      .eq(relation.column, value)
+      .limit(500);
+    if (error) {
+      if (isMissingRelationError(error) || getMissingSchemaColumn(error)) return { ...relation, count: 0, skipped: true };
+      throw error;
+    }
+    return { ...relation, count: Number.isFinite(Number(count)) ? Number(count) : (data || []).length };
+  } catch (error) {
+    if (isMissingRelationError(error) || getMissingSchemaColumn(error)) return { ...relation, count: 0, skipped: true };
+    throw error;
+  }
+}
+
+async function safeDeleteRelation(db, relation, value) {
+  if (value === undefined || value === null || value === '') return { ...relation, deleted: 0 };
+  try {
+    const { data, error } = await db
+      .from(relation.table)
+      .delete()
+      .eq(relation.column, value)
+      .select('id');
+    if (error) {
+      if (isMissingRelationError(error) || getMissingSchemaColumn(error)) return { ...relation, deleted: 0, skipped: true };
+      throw error;
+    }
+    return { ...relation, deleted: (data || []).length };
+  } catch (error) {
+    if (isMissingRelationError(error) || getMissingSchemaColumn(error)) return { ...relation, deleted: 0, skipped: true };
+    throw error;
+  }
+}
+
+async function buildCustomerHardDeleteImpact(db, customer) {
+  const customerId = customer?.id;
+  const blockers = await Promise.all(CUSTOMER_HARD_DELETE_BLOCKERS.map(relation => safeCountRelation(db, relation, customerId)));
+  if (customer?.nome) {
+    blockers.push(await safeCountRelation(db, {
+      table: 'services',
+      column: 'cliente',
+      key: 'services_cliente_name',
+      label: 'servicos vinculados pelo nome'
+    }, customer.nome));
+  }
+  const cleanup = await Promise.all(CUSTOMER_HARD_DELETE_CLEANUP.map(relation => safeCountRelation(db, relation, customerId)));
+  const blocking = blockers.filter(item => item.count > 0);
+  return {
+    can_delete: blocking.length === 0,
+    blockers,
+    blocking,
+    cleanup
+  };
+}
+
+app.get('/api/customers/:id/hard-delete-preview', async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const customerId = /^\d+$/.test(String(req.params.id || '')) ? Number(req.params.id) : req.params.id;
+    const customer = await maybeSingle(db.from('customers').select('*').eq('id', customerId));
+    if (!customer) return res.status(404).json({ error: 'Cliente nao encontrado', code: 'customer_not_found' });
+    const impact = await buildCustomerHardDeleteImpact(db, customer);
+    res.json({ customer: { id: customer.id, nome: customer.nome }, ...impact });
+  } catch (error) {
+    console.error('[GET /api/customers/:id/hard-delete-preview] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao validar exclusao definitiva do cliente' });
+  }
+});
+
+app.post('/api/customers/:id/hard-delete', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const customerId = /^\d+$/.test(String(req.params.id || '')) ? Number(req.params.id) : req.params.id;
+    const customer = await maybeSingle(db.from('customers').select('*').eq('id', customerId));
+    if (!customer) return res.status(404).json({ error: 'Cliente nao encontrado', code: 'customer_not_found' });
+
+    const confirmName = String(req.body?.confirmName || req.body?.nome || '').trim();
+    if (normalizeCustomerName(confirmName) !== normalizeCustomerName(customer.nome)) {
+      return res.status(400).json({ error: 'Nome de confirmacao nao confere com o cliente', code: 'customer_name_confirmation_required' });
+    }
+
+    const impact = await buildCustomerHardDeleteImpact(db, customer);
+    if (!impact.can_delete) {
+      return res.status(409).json({
+        error: 'Cliente possui historico vinculado. Use inativar ou mesclar em vez de apagar.',
+        code: 'customer_hard_delete_blocked',
+        impact
+      });
+    }
+
+    const cleaned = [];
+    for (const relation of CUSTOMER_HARD_DELETE_CLEANUP) {
+      cleaned.push(await safeDeleteRelation(db, relation, customerId));
+    }
+
+    const { data, error } = await db
+      .from('customers')
+      .delete()
+      .eq('id', customerId)
+      .select();
+    if (error) throw error;
+    if (!(data || []).length) return res.status(404).json({ error: 'Cliente nao encontrado', code: 'customer_not_found' });
+
+    res.json({
+      message: 'Cliente apagado definitivamente',
+      customer: data[0],
+      cleanup: cleaned
+    });
+  } catch (error) {
+    console.error('[POST /api/customers/:id/hard-delete] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao apagar cliente definitivamente' });
   }
 });
 

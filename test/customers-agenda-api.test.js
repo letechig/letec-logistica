@@ -1,6 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+async function adminHeaders(baseUrl) {
+  const response = await fetch(`${baseUrl}/api/app-auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'letechigienizacaoosp@gmail.com', password: 'Letec@835778' })
+  });
+  assert.equal(response.status, 201);
+  const payload = await response.json();
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${payload.token}`
+  };
+}
+
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
 process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'anon';
 
@@ -258,6 +272,52 @@ test('GET /api/customers esconde status inativo mesmo em cadastro legado ativo',
     assert.equal(inactiveList.status, 200);
     const inactiveRows = await inactiveList.json();
     assert.equal(inactiveRows.some(customer => customer.id === 99), true);
+  });
+});
+
+test('POST /api/customers/:id/hard-delete apaga cadastro sem historico e limpa auxiliares', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers.push({ id: 77, nome: 'Cliente Erro Cadastro', nome_normalizado: 'CLIENTE ERRO CADASTRO', ativo: true });
+    state.customer_addresses.push({ id: 770, customer_id: 77, endereco: 'Rua Errada' });
+    state.customer_aliases.push({ id: 771, customer_id: 77, alias: 'Erro' });
+    state.contracts.push({ id: 772, customer_id: 77, tipo_servico: 'Rascunho' });
+    state.data_reviews.push({ id: 773, customer_id: 77, tipo_problema: 'erro_importacao' });
+    state.customer_reminders.push({ id: 774, customer_id: 77, mensagem: 'rascunho' });
+
+    const headers = await adminHeaders(baseUrl);
+    const preview = await fetch(`${baseUrl}/api/customers/77/hard-delete-preview`, { headers });
+    assert.equal(preview.status, 200);
+    const previewPayload = await preview.json();
+    assert.equal(previewPayload.can_delete, true);
+
+    const response = await fetch(`${baseUrl}/api/customers/77/hard-delete`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ confirmName: 'Cliente Erro Cadastro' })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(state.customers.some(customer => customer.id === 77), false);
+    assert.equal(state.customer_addresses.some(item => item.customer_id === 77), false);
+    assert.equal(state.customer_aliases.some(item => item.customer_id === 77), false);
+    assert.equal(state.contracts.some(item => item.customer_id === 77), false);
+    assert.equal(state.data_reviews.some(item => item.customer_id === 77), false);
+    assert.equal(state.customer_reminders.some(item => item.customer_id === 77), false);
+  });
+});
+
+test('POST /api/customers/:id/hard-delete bloqueia cliente com historico operacional', async () => {
+  await withServer(async (baseUrl) => {
+    const headers = await adminHeaders(baseUrl);
+    const response = await fetch(`${baseUrl}/api/customers/2/hard-delete`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ confirmName: 'Beta Cliente' })
+    });
+    assert.equal(response.status, 409);
+    const payload = await response.json();
+    assert.equal(payload.code, 'customer_hard_delete_blocked');
+    assert.equal(payload.impact.can_delete, false);
+    assert.ok(payload.impact.blocking.some(item => item.count > 0));
   });
 });
 
