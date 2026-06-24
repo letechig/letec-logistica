@@ -3403,6 +3403,32 @@ app.post('/api/app-auth/login', technicianLoginLimiter, async (req, res) => {
       if (isMissingRelationError(error)) return null;
       throw error;
     });
+    if (!appUser) {
+      const { count, error: countError } = await db
+        .from('app_users')
+        .select('id', { count: 'exact', head: true })
+        .eq('active', true);
+      if (countError && !isMissingRelationError(countError)) throw countError;
+      if (!countError && Number(count || 0) === 0) {
+        const now = new Date().toISOString();
+        const { data: created, error: createError } = await db
+          .from('app_users')
+          .upsert({
+            email,
+            name: 'Admin Letec',
+            role: 'admin',
+            active: true,
+            password_hash: hashPassword(password),
+            password_updated_at: now,
+            session_revoked_at: now
+          }, { onConflict: 'email' })
+          .select()
+          .limit(1);
+        if (createError) throw createError;
+        req.body.__bootstrapped_app_admin = true;
+        return res.status(201).json(await createAppLoginSession(db, created?.[0], req));
+      }
+    }
     if (!appUser || !appUser.password_hash || !verifyPassword(password, appUser.password_hash)) {
       return res.status(401).json({ error: 'Email ou senha invalido', code: 'invalid_credentials' });
     }
@@ -3410,30 +3436,39 @@ app.post('/api/app-auth/login', technicianLoginLimiter, async (req, res) => {
       return res.status(403).json({ error: 'Perfil sem permissao de acesso interno', code: 'invalid_role' });
     }
 
-    const token = generateAppSessionToken();
-    const now = new Date();
-    const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const sessionPayload = {
-      app_user_id: appUser.id,
-      session_token_hash: hashToken(token),
-      expires_at: expires.toISOString(),
-      last_seen_at: now.toISOString(),
-      ip: req.ip || null,
-      user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null
-    };
-    const { data, error } = await db.from('app_user_sessions').insert([sessionPayload]).select();
-    if (error) throw error;
-    res.status(201).json({
-      token,
-      expires_at: expires.toISOString(),
-      user: publicAppUser(appUser),
-      session_id: data?.[0]?.id || null
-    });
+    res.status(201).json(await createAppLoginSession(db, appUser, req));
   } catch (error) {
     console.error('[POST /api/app-auth/login] Error:', error.message);
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao autenticar usuario interno' });
   }
 });
+
+async function createAppLoginSession(db, appUser, req) {
+  if (!appUser?.id) {
+    const error = new Error('Usuario interno nao encontrado apos criacao');
+    error.status = 500;
+    throw error;
+  }
+  const token = generateAppSessionToken();
+  const now = new Date();
+  const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const sessionPayload = {
+    app_user_id: appUser.id,
+    session_token_hash: hashToken(token),
+    expires_at: expires.toISOString(),
+    last_seen_at: now.toISOString(),
+    ip: req.ip || null,
+    user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null
+  };
+  const { data, error } = await db.from('app_user_sessions').insert([sessionPayload]).select();
+  if (error) throw error;
+  return {
+    token,
+    expires_at: expires.toISOString(),
+    user: publicAppUser(appUser),
+    session_id: data?.[0]?.id || null
+  };
+}
 
 app.post('/api/app-auth/logout', async (req, res) => {
   try {
