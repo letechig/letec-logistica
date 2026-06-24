@@ -1701,6 +1701,13 @@ async function requireAdminOrOperator(req, res) {
   return null;
 }
 
+async function requireAdmin(req, res) {
+  const actor = await resolveAppUserRole(req);
+  if (actor && String(actor.role || '').toLowerCase() === 'admin') return actor;
+  res.status(403).json({ error: 'Acesso restrito a admin', code: 'admin_required' });
+  return null;
+}
+
 function isTechnicianPortalRequest(req) {
   return firstHeader(req, 'x-portal-client') === 'technician-portal' || !!extractTechnicianToken(req);
 }
@@ -3453,6 +3460,127 @@ app.get('/api/app-auth/me', async (req, res) => {
   } catch (error) {
     console.error('[GET /api/app-auth/me] Error:', error.message);
     res.status(500).json({ error: 'Falha ao validar sessao interna' });
+  }
+});
+
+function normalizeAppUserPayload(input = {}, options = {}) {
+  const payload = {};
+  if (!options.partial || input.email !== undefined) {
+    const email = normalizeEmail(input.email || '');
+    if (email) payload.email = email;
+  }
+  if (!options.partial || input.name !== undefined || input.nome !== undefined) {
+    const name = cleanNullableText(input.name || input.nome || '', 160);
+    if (name !== undefined) payload.name = name;
+  }
+  if (!options.partial || input.role !== undefined) {
+    const role = String(input.role || '').trim().toLowerCase();
+    if (['admin', 'operador'].includes(role)) payload.role = role;
+  }
+  if (!options.partial || input.active !== undefined) {
+    payload.active = input.active !== false;
+  }
+  if (input.password !== undefined || input.senha !== undefined) {
+    payload.password_hash = hashPassword(input.password || input.senha || '');
+    payload.password_updated_at = new Date().toISOString();
+    payload.session_revoked_at = new Date().toISOString();
+  }
+  return payload;
+}
+
+app.get('/api/app-users', async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const { data, error } = await db
+      .from('app_users')
+      .select('id,auth_user_id,email,name,role,active,created_at,updated_at,password_updated_at,session_revoked_at')
+      .order('email', { ascending: true });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/app-users] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar usuarios internos' });
+  }
+});
+
+app.post('/api/app-users', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const payload = normalizeAppUserPayload(req.body || {});
+    if (!payload.email) return res.status(400).json({ error: 'Email e obrigatorio' });
+    if (!payload.role) payload.role = 'operador';
+    if (!payload.password_hash) return res.status(400).json({ error: 'Senha e obrigatoria para novo usuario' });
+
+    const { data, error } = await db
+      .from('app_users')
+      .insert([payload])
+      .select('id,auth_user_id,email,name,role,active,created_at,updated_at,password_updated_at,session_revoked_at');
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Ja existe usuario interno com este email' });
+      throw error;
+    }
+    res.status(201).json(data?.[0] || null);
+  } catch (error) {
+    console.error('[POST /api/app-users] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar usuario interno' });
+  }
+});
+
+app.put('/api/app-users/:id', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const payload = normalizeAppUserPayload(req.body || {}, { partial: true });
+    if (!Object.keys(payload).length) return res.status(400).json({ error: 'Nenhum campo valido para atualizar' });
+    payload.updated_at = new Date().toISOString();
+
+    const { data, error } = await db
+      .from('app_users')
+      .update(payload)
+      .eq('id', req.params.id)
+      .select('id,auth_user_id,email,name,role,active,created_at,updated_at,password_updated_at,session_revoked_at');
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Ja existe usuario interno com este email' });
+      throw error;
+    }
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Usuario interno nao encontrado' });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/app-users/:id] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao atualizar usuario interno' });
+  }
+});
+
+app.post('/api/app-users/:id/revoke', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const now = new Date().toISOString();
+    const { data, error } = await db
+      .from('app_users')
+      .update({ session_revoked_at: now, updated_at: now })
+      .eq('id', req.params.id)
+      .select('id,auth_user_id,email,name,role,active,created_at,updated_at,password_updated_at,session_revoked_at');
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Usuario interno nao encontrado' });
+    try {
+      await db.from('app_user_sessions')
+        .update({ revoked_at: now })
+        .eq('app_user_id', req.params.id)
+        .select();
+    } catch(e) {}
+    res.json(updated);
+  } catch (error) {
+    console.error('[POST /api/app-users/:id/revoke] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao revogar sessoes do usuario interno' });
   }
 });
 

@@ -4618,11 +4618,13 @@ async function carregarVeiculos(){
         <button class="btn btn-ghost btn-sm" onclick="showConfigTab('veiculos')" id="cfg-tab-veiculos">🚗 Veículos</button>
         <button class="btn btn-ghost btn-sm" onclick="showConfigTab('tipos')" id="cfg-tab-tipos">📋 Tipos de Serviço</button>
         <button class="btn btn-ghost btn-sm" onclick="showConfigTab('operacional')" id="cfg-tab-operacional">📱 Operacional</button>
+        <button class="btn btn-ghost btn-sm" onclick="showConfigTab('usuarios')" id="cfg-tab-usuarios">🔐 Usuários</button>
       </div>
       <div id="config-tecnicos"></div>
       <div id="config-veiculos" style="display:none"></div>
       <div id="config-tipos" style="display:none"></div>
       <div id="config-operacional" style="display:none"></div>
+      <div id="config-usuarios" style="display:none"></div>
     </div>
 
   </div><!-- /content -->
@@ -19384,7 +19386,7 @@ async function saveInventoryMovement() {
 // CONFIGURAÇÕES (ADMIN)
 // ════════════════════════════════════════════════
 function showConfigTab(tab) {
-  ['tecnicos','veiculos','tipos','operacional'].forEach(t => {
+  ['tecnicos','veiculos','tipos','operacional','usuarios'].forEach(t => {
     document.getElementById('config-' + t).style.display = t === tab ? '' : 'none';
     document.getElementById('cfg-tab-' + t).className = t === tab ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
   });
@@ -19392,8 +19394,152 @@ function showConfigTab(tab) {
   if (tab === 'veiculos') carregarVeiculosConfig();
   if (tab === 'tipos') carregarTiposServicoConfig();
   if (tab === 'operacional') carregarOperacionalConfig();
+  if (tab === 'usuarios') carregarUsuariosConfig();
 }
 function renderConfig() { showConfigTab('tecnicos'); }
+
+async function carregarUsuariosConfig() {
+  const container = document.getElementById('config-usuarios');
+  if (!container) return;
+  container.innerHTML = '<div class="text-muted">Carregando...</div>';
+  try {
+    const users = await requestBackendJson('/api/app-users');
+    container.innerHTML = `
+      <div class="card" style="margin-bottom:16px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">
+          <div>
+            <div class="card-label">🔐 Usuários internos (${users.length})</div>
+            <div class="section-sub" style="font-size:12px;margin-top:4px">Acessos individuais para quem usa o painel administrativo.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="formNovoUsuario()">+ Novo usuário</button>
+        </div>
+        <div id="form-novo-usuario" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg2);border-radius:var(--r2)">
+          <div class="form-row fr-3 mb3">
+            <div class="field"><label>Nome</label><input type="text" id="cfg-user-name" placeholder="Nome do usuário"></div>
+            <div class="field"><label>Email</label><input type="email" id="cfg-user-email" placeholder="usuario@empresa.com"></div>
+            <div class="field"><label>Perfil</label><select class="fsel" id="cfg-user-role"><option value="operador">Operador</option><option value="admin">Admin</option></select></div>
+          </div>
+          <div class="form-row fr-2 mb3">
+            <div class="field"><label>Senha inicial</label><input type="text" id="cfg-user-password" placeholder="Mínimo 6 caracteres"></div>
+            <div class="field"><label>Status</label><select class="fsel" id="cfg-user-active"><option value="true">Ativo</option><option value="false">Inativo</option></select></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="salvarUsuarioInterno()">Salvar usuário</button>
+            <button class="btn btn-ghost btn-sm" onclick="gerarSenhaUsuarioCampo()">Gerar senha</button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('form-novo-usuario').style.display='none'">Cancelar</button>
+          </div>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Status</th><th>Senha</th><th>Ações</th></tr></thead>
+          <tbody>${users.map(u => `<tr>
+            <td class="bold">${sanitize(u.name || '—')}</td>
+            <td class="mono">${sanitize(u.email || '—')}</td>
+            <td><span class="chip ${u.role === 'admin' ? 'chip-blue' : 'chip-green'}">${sanitize(u.role || '—')}</span></td>
+            <td>${u.active ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td>
+            <td>${u.password_updated_at ? `<span class="chip chip-green">Configurada</span>` : '<span class="chip chip-orange">Sem senha</span>'}</td>
+            <td style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="editarUsuarioInterno(${jsArg(u.id)}, ${jsArg(u.name || '')}, ${jsArg(u.email || '')}, ${jsArg(u.role || 'operador')}, ${u.active ? 'true' : 'false'})">Editar</button>
+              <button class="btn btn-ghost btn-sm" onclick="trocarSenhaUsuarioInterno(${jsArg(u.id)}, ${jsArg(u.email || '')})">Trocar senha</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleUsuarioInterno(${jsArg(u.id)}, ${u.active ? 'false' : 'true'})">${u.active ? 'Desativar' : 'Ativar'}</button>
+              <button class="btn btn-ghost btn-sm" onclick="revogarUsuarioInterno(${jsArg(u.id)})">Revogar</button>
+            </td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+  } catch(e) {
+    container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + sanitize(e.message) + '</div>';
+  }
+}
+
+function gerarSenhaTemporariaUsuario() {
+  return `Letec@${Math.floor(100000 + Math.random() * 900000)}`;
+}
+
+function gerarSenhaUsuarioCampo() {
+  const el = document.getElementById('cfg-user-password');
+  if (el) el.value = gerarSenhaTemporariaUsuario();
+}
+
+function formNovoUsuario() {
+  document.getElementById('form-novo-usuario').style.display = '';
+  document.getElementById('cfg-user-name').value = '';
+  document.getElementById('cfg-user-email').value = '';
+  document.getElementById('cfg-user-role').value = 'operador';
+  document.getElementById('cfg-user-active').value = 'true';
+  document.getElementById('cfg-user-password').value = gerarSenhaTemporariaUsuario();
+  document.getElementById('cfg-user-name').focus();
+}
+
+async function salvarUsuarioInterno() {
+  const name = document.getElementById('cfg-user-name')?.value.trim() || '';
+  const email = document.getElementById('cfg-user-email')?.value.trim() || '';
+  const role = document.getElementById('cfg-user-role')?.value || 'operador';
+  const active = document.getElementById('cfg-user-active')?.value !== 'false';
+  const password = document.getElementById('cfg-user-password')?.value || '';
+  if (!email || !password) { toast('Preencha email e senha.', 'err'); return; }
+  try {
+    await requestBackendJson('/api/app-users', { method:'POST', body: JSON.stringify({ name, email, role, active, password }) });
+    toast('✅ Usuário criado!', 'ok');
+    alert(`Usuário criado:\nEmail: ${email}\nSenha: ${password}\n\nEntregue essa senha apenas para a pessoa responsável.`);
+    await carregarUsuariosConfig();
+  } catch(e) {
+    toast('❌ Erro ao criar usuário: ' + e.message, 'err');
+  }
+}
+
+async function editarUsuarioInterno(id, name, email, role, active) {
+  const novoNome = prompt('Nome do usuário:', name || '') ?? name;
+  const novoEmail = prompt('Email do usuário:', email || '') ?? email;
+  const novoRole = prompt('Perfil (admin ou operador):', role || 'operador') ?? role;
+  if (!['admin','operador'].includes(String(novoRole).toLowerCase())) { toast('Perfil inválido.', 'err'); return; }
+  try {
+    await requestBackendJson(`/api/app-users/${encodeURIComponent(id)}`, {
+      method:'PUT',
+      body: JSON.stringify({ name: novoNome, email: novoEmail, role: String(novoRole).toLowerCase(), active })
+    });
+    toast('✅ Usuário atualizado!', 'ok');
+    await carregarUsuariosConfig();
+  } catch(e) {
+    toast('❌ Erro ao atualizar usuário: ' + e.message, 'err');
+  }
+}
+
+async function trocarSenhaUsuarioInterno(id, email) {
+  const password = prompt(`Nova senha para ${email}:`, gerarSenhaTemporariaUsuario());
+  if (!password) return;
+  if (password.length < 6) { toast('Senha deve ter pelo menos 6 caracteres.', 'err'); return; }
+  try {
+    await requestBackendJson(`/api/app-users/${encodeURIComponent(id)}`, { method:'PUT', body: JSON.stringify({ password }) });
+    toast('✅ Senha alterada!', 'ok');
+    alert(`Nova senha de ${email}:\n${password}`);
+    await carregarUsuariosConfig();
+  } catch(e) {
+    toast('❌ Erro ao trocar senha: ' + e.message, 'err');
+  }
+}
+
+async function toggleUsuarioInterno(id, active) {
+  if (!confirmAction(active ? 'Ativar este usuário?' : 'Desativar este usuário e revogar sessões?')) return;
+  try {
+    await requestBackendJson(`/api/app-users/${encodeURIComponent(id)}`, { method:'PUT', body: JSON.stringify({ active }) });
+    if (!active) await requestBackendJson(`/api/app-users/${encodeURIComponent(id)}/revoke`, { method:'POST', body: JSON.stringify({}) });
+    toast(active ? '✅ Usuário ativado' : '⚠️ Usuário desativado', 'ok');
+    await carregarUsuariosConfig();
+  } catch(e) {
+    toast('❌ Erro: ' + e.message, 'err');
+  }
+}
+
+async function revogarUsuarioInterno(id) {
+  if (!confirmAction('Revogar sessões abertas deste usuário?')) return;
+  try {
+    await requestBackendJson(`/api/app-users/${encodeURIComponent(id)}/revoke`, { method:'POST', body: JSON.stringify({}) });
+    toast('✅ Sessões revogadas', 'ok');
+    await carregarUsuariosConfig();
+  } catch(e) {
+    toast('❌ Erro ao revogar: ' + e.message, 'err');
+  }
+}
 
 function carregarOperacionalConfig() {
   const container = document.getElementById('config-operacional');
