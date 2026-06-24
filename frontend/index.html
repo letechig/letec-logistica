@@ -5210,6 +5210,10 @@ async function carregarVeiculos(){
 }
 .op-map-summary-label { color:var(--text3); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
 .op-map-summary-value { margin-top:2px; font-family:var(--display); font-size:18px; font-weight:800; }
+.op-map-summary-unavailable { font-size:12px; line-height:1.25; color:var(--text3); font-family:var(--body); font-weight:700; }
+.op-map-controls-line { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.op-map-controls-line .fsel { min-width:160px; }
+.op-map-side-kicker { color:var(--text3); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
 .op-map-list { display:flex; flex-direction:column; gap:8px; }
 .op-map-item {
   border:1px solid var(--border);
@@ -5226,6 +5230,60 @@ async function carregarVeiculos(){
 .op-map-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
 .op-map-item-client { font-weight:800; font-size:12px; color:var(--text); }
 .op-map-item-meta { margin-top:5px; color:var(--text2); font-size:11px; line-height:1.45; display:flex; flex-direction:column; gap:2px; }
+.op-map-item-main { display:flex; gap:8px; align-items:flex-start; min-width:0; }
+.op-map-item-order {
+  width:24px;
+  height:24px;
+  flex:0 0 24px;
+  border-radius:99px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:800;
+  color:var(--text2);
+}
+.op-map-item-body { min-width:0; flex:1; }
+.op-map-item-actions { margin-top:9px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.op-map-item-actions .btn, .op-map-item-actions a {
+  min-height:28px;
+  padding:5px 8px;
+  border-radius:6px;
+  font-size:10px;
+  font-weight:800;
+  text-decoration:none;
+}
+.op-map-route-link { border:1px solid var(--border2); color:var(--blue); background:var(--blue-bg); display:inline-flex; align-items:center; justify-content:center; }
+.op-map-group { display:flex; flex-direction:column; gap:8px; }
+.op-map-group-title {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  padding:7px 9px;
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--bg2);
+  font-size:11px;
+  font-weight:800;
+  color:var(--text2);
+}
+.op-map-alerts {
+  border:1px solid rgba(234,88,12,.28);
+  border-radius:var(--r2);
+  background:var(--orange-bg);
+  padding:9px;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+.op-map-alerts-head { display:flex; justify-content:space-between; gap:8px; align-items:center; font-weight:800; font-size:12px; color:var(--orange); }
+.op-map-alerts-list { display:flex; flex-direction:column; gap:5px; }
+.op-map-alert-row { font-size:11px; color:var(--text2); line-height:1.35; }
+.op-map-alert-row strong { color:var(--text); }
 .op-map-empty { padding:24px; text-align:center; color:var(--text3); }
 .op-map-pin {
   width:18px;
@@ -10241,6 +10299,7 @@ const operationalMapState = {
   hojeEquipe: '',
   hojeVeiculo: '',
   hojeStatus: '',
+  hojeGroupBy: 'none',
   maps: {},
   markers: {},
   geocodeCache: (() => {
@@ -10318,6 +10377,7 @@ function opMapBuildItems(sourceServices = [], options = {}) {
     .map(service => {
       const F = sf(service);
       const statusKey = opMapStatusKey(service, refDate);
+      const veiculo = F.veiculo || rotVeiculoPreferencial([service], '');
       return {
         id: service.id,
         service,
@@ -10325,7 +10385,9 @@ function opMapBuildItems(sourceServices = [], options = {}) {
         horario: F.horario,
         endereco: opMapServiceAddress(service),
         equipe: F.equipe || 'Sem equipe',
-        veiculo: F.veiculo || rotVeiculoPreferencial([service], ''),
+        veiculo,
+        hasEquipe: serviceTemEquipe(service),
+        hasVeiculo: !!String(veiculo || '').trim(),
         statusKey,
         statusLabel: opMapStatusMeta(statusKey).label,
         tipo: F.tipo || F.tipoLabel || '',
@@ -10394,23 +10456,52 @@ function opMapOpenBase() {
   window.open(url, '_blank');
 }
 
+function opMapShortAddress(address = '', max = 82) {
+  const clean = String(address || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return 'Sem endereço';
+  return clean.length > max ? `${clean.slice(0, max - 3)}...` : clean;
+}
+
+function opMapDateLabel(dateStr = '') {
+  const parts = String(dateStr || '').split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}` : (dateStr || 'Sem data');
+}
+
+function opMapLateMinutes(item = {}) {
+  if (item.statusKey !== 'atrasado' || !item.date) return null;
+  const svcMin = hojeParseMin(item.horario || '');
+  const date = new Date(`${item.date}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setMinutes(Number.isFinite(svcMin) ? svcMin : 0);
+  const diff = Math.round((Date.now() - date.getTime()) / 60000);
+  return diff > 0 ? diff : null;
+}
+
+function opMapLateLabel(item = {}) {
+  const minutes = opMapLateMinutes(item);
+  if (!Number.isFinite(minutes)) return '';
+  if (typeof formatarMinutosHM === 'function') return `Atraso: ${formatarMinutosHM(minutes)}`;
+  return `Atraso: ${minutes} min`;
+}
+
 function opMapPopupHtml(item, renderAfter = 'renderHoje()') {
   const meta = opMapStatusMeta(item.statusKey);
   const id = jsArg(item.id);
   const route = opMapRouteUrl(item);
+  const shortAddress = opMapShortAddress(item.endereco);
   return `<div class="op-map-popup">
     <div class="op-map-popup-title">${sanitize(item.cliente)}</div>
     <div class="op-map-popup-line"><strong>Horário:</strong> ${sanitize(item.horario || '—')}</div>
-    <div class="op-map-popup-line"><strong>Endereço:</strong> ${sanitize(item.endereco || 'Sem endereço')}</div>
     <div class="op-map-popup-line"><strong>Equipe:</strong> ${sanitize(item.equipe || 'Sem equipe')}</div>
     <div class="op-map-popup-line"><strong>Veículo:</strong> ${sanitize(item.veiculo || '—')}</div>
+    <div class="op-map-popup-line"><strong>Endereço:</strong> ${sanitize(shortAddress)}</div>
     <div class="op-map-popup-line"><span class="chip ${meta.chip}">${meta.label}</span></div>
     <div class="op-map-popup-actions">
       <button class="primary" onclick="openEditSvc(${id})">Abrir serviço</button>
       <button onclick="comEnviarConfirmacaoServico(${id})">Enviar WhatsApp</button>
       ${item.statusKey !== 'executado' ? `<button class="green" onclick="setSt(${id},'executado');${renderAfter}">Marcar executado</button>` : ''}
       ${item.statusKey !== 'executado' ? `<button class="orange" onclick="setSt(${id},'reagendado');${renderAfter}">Reagendar</button>` : ''}
-      <a href="${route}" target="_blank" rel="noopener">Abrir rota</a>
+      <a href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Abrir rota</a>
     </div>
   </div>`;
 }
@@ -10474,8 +10565,149 @@ function opMapOptionsHtml(values, placeholder, selected = '') {
   return `<option value="">${placeholder}</option>` + unique.map(value => `<option value="${escapeHtmlAttr(value)}" ${value === selected ? 'selected' : ''}>${sanitize(value)}</option>`).join('');
 }
 
-function opMapListHtml(items = [], canvasId = '') {
+function opMapGroupItems(items = [], groupBy = 'none') {
+  if (groupBy !== 'vehicle' && groupBy !== 'team') return [{ label:'', items:[...(items || [])] }];
+  const groups = new Map();
+  (items || []).forEach(item => {
+    const label = groupBy === 'vehicle'
+      ? (item.hasVeiculo ? item.veiculo : 'Sem veículo')
+      : (item.hasEquipe ? item.equipe : 'Sem equipe');
+    const key = normalizarNome(label || 'sem-grupo') || 'sem-grupo';
+    if (!groups.has(key)) groups.set(key, { label, items: [] });
+    groups.get(key).items.push(item);
+  });
+  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function opMapGroupSelectHtml(selected = 'none') {
+  const value = selected || 'none';
+  return `<select class="fsel" onchange="opMapSetHojeFilter('hojeGroupBy',this.value)">
+    <option value="none" ${value === 'none' ? 'selected' : ''}>Lista única</option>
+    <option value="vehicle" ${value === 'vehicle' ? 'selected' : ''}>Agrupar por veículo</option>
+    <option value="team" ${value === 'team' ? 'selected' : ''}>Agrupar por equipe</option>
+  </select>`;
+}
+
+function opMapAddressIncomplete(item = {}) {
+  const normalized = normalizarNome(item.endereco || '');
+  return !normalized || normalized.length < 8 || normalized.includes('sem endereco');
+}
+
+function opMapSlotKey(item = {}, field = 'equipe') {
+  const min = hojeParseMin(item.horario || '');
+  if (!item.date || !Number.isFinite(min)) return '';
+  const value = field === 'veiculo' ? item.veiculo : item.equipe;
+  if (!value) return '';
+  return `${normalizarNome(value)}|${item.date}|${min}`;
+}
+
+function opMapOperationalAlerts(items = []) {
+  const alerts = [];
+  const teamSlots = {};
+  const vehicleSlots = {};
+  const push = (kind, title, item, detail = '') => {
+    alerts.push({ kind, title, service: item?.cliente || 'Serviço', detail });
+  };
+
+  (items || []).forEach(item => {
+    const dateTime = `${opMapDateLabel(item.date)} ${item.horario || ''}`.trim();
+    if (!item.hasEquipe) push('noTeam', 'Serviço sem equipe definida', item, dateTime);
+    if (!item.hasVeiculo) push('noVehicle', 'Serviço sem veículo definido', item, dateTime);
+    if (opMapAddressIncomplete(item)) push('noAddress', 'Serviço sem endereço completo', item, dateTime);
+    if (!item.location) push('noLocation', 'Serviço sem coordenada no mapa', item, dateTime);
+
+    if (item.hasEquipe) {
+      const key = opMapSlotKey(item, 'equipe');
+      if (key) (teamSlots[key] = teamSlots[key] || []).push(item);
+    }
+    if (item.hasVeiculo) {
+      const key = opMapSlotKey(item, 'veiculo');
+      if (key) (vehicleSlots[key] = vehicleSlots[key] || []).push(item);
+    }
+  });
+
+  Object.values(teamSlots).filter(group => group.length > 1).forEach(group => {
+    const first = group[0];
+    alerts.push({
+      kind: 'teamConflict',
+      title: 'Mesma equipe no mesmo horário',
+      service: group.map(item => item.cliente).join(' / '),
+      detail: `${first.equipe} - ${opMapDateLabel(first.date)} ${first.horario || ''}`.trim()
+    });
+  });
+
+  Object.values(vehicleSlots).filter(group => group.length > 1).forEach(group => {
+    const first = group[0];
+    alerts.push({
+      kind: 'vehicleConflict',
+      title: 'Mesmo veículo no mesmo horário',
+      service: group.map(item => item.cliente).join(' / '),
+      detail: `${first.veiculo} - ${opMapDateLabel(first.date)} ${first.horario || ''}`.trim()
+    });
+  });
+
+  return alerts;
+}
+
+function opMapAlertsHtml(items = []) {
+  const alerts = opMapOperationalAlerts(items);
+  if (!alerts.length) return '';
+  const visible = alerts.slice(0, 8);
+  const hidden = alerts.length - visible.length;
+  return `<div class="op-map-alerts">
+    <div class="op-map-alerts-head"><span>Atenções do dia</span><span>${alerts.length}</span></div>
+    <div class="op-map-alerts-list">
+      ${visible.map(alert => `<div class="op-map-alert-row"><strong>${sanitize(alert.title)}:</strong> ${sanitize(alert.service)}${alert.detail ? ` · ${sanitize(alert.detail)}` : ''}</div>`).join('')}
+      ${hidden > 0 ? `<div class="op-map-alert-row"><strong>+${hidden}</strong> atenção(ões) adicionais nos filtros atuais.</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function opMapDetailedItemHtml(item, index, canvasId = '') {
+  const meta = opMapStatusMeta(item.statusKey);
+  const colorClass = meta.color === 'blue' ? '' : meta.color;
+  const id = jsArg(item.id);
+  const route = opMapRouteUrl(item);
+  const late = opMapLateLabel(item);
+  return `<div class="op-map-item ${colorClass}" onclick="opMapFocus('${canvasId}', ${id})">
+    <div class="op-map-item-head">
+      <div class="op-map-item-main">
+        <div class="op-map-item-order">${index}</div>
+        <div class="op-map-item-body">
+          <div class="op-map-item-client">${sanitize(item.cliente)}</div>
+          <div class="op-map-item-meta">
+            <span>${sanitize(opMapDateLabel(item.date))} · ${sanitize(item.horario || '—')}</span>
+            <span>Equipe: ${sanitize(item.hasEquipe ? item.equipe : 'Sem equipe')}</span>
+            <span>Veículo: ${sanitize(item.hasVeiculo ? item.veiculo : 'Sem veículo')}</span>
+            <span>${sanitize(item.tipo || 'Serviço')}</span>
+            <span>${sanitize(opMapShortAddress(item.endereco))}</span>
+            ${late ? `<span style="color:var(--red);font-weight:800">${sanitize(late)}</span>` : ''}
+            ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : ''}
+          </div>
+        </div>
+      </div>
+      <span class="chip ${meta.chip}">${meta.label}</span>
+    </div>
+    <div class="op-map-item-actions" onclick="event.stopPropagation()">
+      <button class="btn btn-ghost btn-xs" onclick="openEditSvc(${id})">Abrir serviço</button>
+      <a class="op-map-route-link" href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Abrir rota</a>
+      ${renderServiceCardActions(item.service, { afterStatusChange:';renderHoje()', detailsLabel:'Abrir serviço', detailAction:`openEditSvc(${id})` })}
+    </div>
+  </div>`;
+}
+
+function opMapListHtml(items = [], canvasId = '', options = {}) {
   if (!items.length) return '<div class="op-map-empty">Nenhum serviço para os filtros selecionados.</div>';
+  if (options.detailed) {
+    let counter = 0;
+    const groups = opMapGroupItems(items, options.groupBy || 'none');
+    return `<div class="op-map-list">${groups.map(group => {
+      const groupHead = options.groupBy && options.groupBy !== 'none'
+        ? `<div class="op-map-group-title"><span>${sanitize(group.label || 'Sem grupo')}</span><span>${group.items.length}</span></div>`
+        : '';
+      return `<div class="op-map-group">${groupHead}${group.items.map(item => opMapDetailedItemHtml(item, ++counter, canvasId)).join('')}</div>`;
+    }).join('')}</div>`;
+  }
   return `<div class="op-map-list">${items.map((item, index) => {
     const meta = opMapStatusMeta(item.statusKey);
     const colorClass = meta.color === 'blue' ? '' : meta.color;
@@ -10498,16 +10730,20 @@ function opMapSummaryHtml(items = [], routeGroups = []) {
   const total = items.length;
   const delayed = items.filter(i => i.statusKey === 'atrasado').length;
   const pending = items.filter(i => i.statusKey === 'pendente' || i.statusKey === 'critico').length;
-  const vehicles = new Set(items.map(i => i.veiculo).filter(v => v && v !== '—')).size;
+  const vehicles = new Set(items.filter(i => i.hasVeiculo).map(i => i.veiculo).filter(Boolean)).size;
   const routeKm = Math.round((routeGroups || []).reduce((sum, group) => sum + Number(group.kmTotal || 0), 0));
   const routeMin = Math.round((routeGroups || []).reduce((sum, group) => sum + Number(group.tempoTotalMin || 0), 0));
+  const kmValue = routeKm > 0 ? `${routeKm} km` : '<span class="op-map-summary-unavailable">Estimativa indisponível</span>';
+  const minValue = routeMin > 0
+    ? (typeof formatarMinutosHM === 'function' ? formatarMinutosHM(routeMin) : `${routeMin} min`)
+    : '<span class="op-map-summary-unavailable">Estimativa indisponível</span>';
   return `<div class="op-map-summary-grid">
     <div class="op-map-summary"><div class="op-map-summary-label">Serviços</div><div class="op-map-summary-value">${total}</div></div>
     <div class="op-map-summary"><div class="op-map-summary-label">Veículos</div><div class="op-map-summary-value">${vehicles}</div></div>
     <div class="op-map-summary"><div class="op-map-summary-label">Atrasados</div><div class="op-map-summary-value" style="color:var(--red)">${delayed}</div></div>
     <div class="op-map-summary"><div class="op-map-summary-label">Pendentes</div><div class="op-map-summary-value" style="color:var(--orange)">${pending}</div></div>
-    <div class="op-map-summary"><div class="op-map-summary-label">KM estimado</div><div class="op-map-summary-value">${routeKm ? `${routeKm} km` : '—'}</div></div>
-    <div class="op-map-summary"><div class="op-map-summary-label">Tempo desloc.</div><div class="op-map-summary-value">${routeMin ? formatarMinutosHM(routeMin) : '—'}</div></div>
+    <div class="op-map-summary"><div class="op-map-summary-label">KM estimado</div><div class="op-map-summary-value">${kmValue}</div></div>
+    <div class="op-map-summary"><div class="op-map-summary-label">Tempo desloc.</div><div class="op-map-summary-value">${minValue}</div></div>
   </div>`;
 }
 
@@ -10540,6 +10776,21 @@ function opMapSetHojeRange(range) {
 function opMapSetHojeFilter(field, value) {
   operationalMapState[field] = value || '';
   renderHoje();
+}
+
+function opMapHojeSideHtml(items = []) {
+  return `<div class="op-map-side-title"><span>Serviços no mapa</span><span>${items.length}</span></div>
+    ${opMapSummaryHtml(items, [])}
+    ${opMapAlertsHtml(items)}
+    <div class="op-map-controls-line">
+      <div>
+        <div class="op-map-side-title"><span>Lista de serviços</span><span>${items.length}</span></div>
+        <div class="op-map-side-kicker">Ordem atual: por horário</div>
+      </div>
+      ${opMapGroupSelectHtml(operationalMapState.hojeGroupBy)}
+    </div>
+    ${opMapListHtml(items, 'op-map-hoje-canvas', { detailed:true, groupBy: operationalMapState.hojeGroupBy })}
+    <div class="op-map-note">Serviços sem coordenada ficam na lista e podem abrir rota pelo endereço no Google Maps.</div>`;
 }
 
 function renderOperationalMapHoje(daySvcs = [], date = '') {
@@ -10583,10 +10834,7 @@ function renderOperationalMapHoje(daySvcs = [], date = '') {
     <div class="op-map-layout">
       <div id="op-map-hoje-canvas" class="op-map-canvas"></div>
       <div class="op-map-side">
-        <div class="op-map-side-title"><span>Serviços no mapa</span><span>${filtered.length}</span></div>
-        ${opMapSummaryHtml(filtered, [])}
-        ${opMapListHtml(filtered, 'op-map-hoje-canvas')}
-        <div class="op-map-note">Serviços sem coordenada ficam na lista e podem abrir rota pelo endereço no Google Maps.</div>
+        ${opMapHojeSideHtml(filtered)}
       </div>
     </div>
   </div>`;
@@ -10594,7 +10842,7 @@ function renderOperationalMapHoje(daySvcs = [], date = '') {
     opMapRenderLeaflet('op-map-hoje-canvas', items, { renderAfter:'renderHoje()' });
     const side = el.querySelector('.op-map-side');
     if (side) {
-      side.innerHTML = `<div class="op-map-side-title"><span>Serviços no mapa</span><span>${items.length}</span></div>${opMapSummaryHtml(items, [])}${opMapListHtml(items, 'op-map-hoje-canvas')}<div class="op-map-note">Serviços sem coordenada ficam na lista e podem abrir rota pelo endereço no Google Maps.</div>`;
+      side.innerHTML = opMapHojeSideHtml(items);
     }
   });
 }
