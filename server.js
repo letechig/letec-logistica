@@ -226,6 +226,10 @@ function customerStatusAliases(value) {
   return normalized ? [normalized] : [];
 }
 
+function isInactiveCustomerRecord(customer = {}) {
+  return customer?.ativo === false || normalizeCustomerOperationalStatus(customer?.status_operacional) === 'Inativo';
+}
+
 function normalizeAddress(value) {
   return normalizeLooseText(value)
     .replace(/\bAVENIDA\b/g, 'AV')
@@ -4816,12 +4820,13 @@ app.get('/api/customers', async (req, res) => {
     const page = Math.max(parseInt(rawPage, 10) || 1, 1);
     const offset = Math.max(parseInt(rawOffset, 10) || ((page - 1) * limit), 0);
     const normalizedStatusFilter = normalizeCustomerOperationalStatus(status_operacional);
+    const includeInactiveCustomers = String(include_inactive) === 'true' || normalizedStatusFilter === 'Inativo';
     let query = db
       .from('customers')
       .select('*', hasPagination ? { count: 'exact' } : undefined)
       .order('nome', { ascending: true });
 
-    if (String(include_inactive) !== 'true' && normalizedStatusFilter !== 'Inativo') {
+    if (!includeInactiveCustomers) {
       query = query.eq('ativo', true);
     }
     
@@ -4855,11 +4860,14 @@ app.get('/api/customers', async (req, res) => {
     
     const { data, error, count } = await query;
     if (error) throw error;
-    const normalizedData = (data || []).map(row => ({
+    let normalizedData = (data || []).map(row => ({
       ...row,
       status_operacional: normalizeCustomerOperationalStatus(row.status_operacional) || row.status_operacional,
       prioridade: normalizeCustomerPriority(row.prioridade) || row.prioridade
     }));
+    if (!includeInactiveCustomers) {
+      normalizedData = normalizedData.filter(row => !isInactiveCustomerRecord(row));
+    }
     if (hasPagination) {
       return res.json({ items: normalizedData, total: count || 0, page, limit, offset });
     }

@@ -238,6 +238,29 @@ test('DELETE /api/customers/:id inativa cliente sem apagar histórico', async ()
   });
 });
 
+test('GET /api/customers esconde status inativo mesmo em cadastro legado ativo', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers.push({
+      id: 99,
+      nome: 'Cliente Inativo Legado',
+      nome_normalizado: 'CLIENTE INATIVO LEGADO',
+      telefone: '559999999999',
+      ativo: true,
+      status_operacional: 'Inativo'
+    });
+
+    const activeList = await fetch(`${baseUrl}/api/customers?limit=500`);
+    assert.equal(activeList.status, 200);
+    const activeRows = await activeList.json();
+    assert.equal(activeRows.some(customer => customer.id === 99), false);
+
+    const inactiveList = await fetch(`${baseUrl}/api/customers?status_operacional=Inativo&include_inactive=true&limit=500`);
+    assert.equal(inactiveList.status, 200);
+    const inactiveRows = await inactiveList.json();
+    assert.equal(inactiveRows.some(customer => customer.id === 99), true);
+  });
+});
+
 test('POST /api/customers cria cliente basico mesmo sem colunas opcionais legadas', async () => {
   await withServer(async (baseUrl, state) => {
     state.__missingColumns = {

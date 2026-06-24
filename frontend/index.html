@@ -5032,7 +5032,7 @@ async function carregarVeiculos(){
 
     <div class="client-modal-footer">
       <button class="client-btn secondary" onclick="requestCloseClientModal()">Cancelar</button>
-      <button class="client-btn danger-outline" id="cli-form-del" style="display:none" onclick="deleteClient()">Deletar</button>
+      <button class="client-btn danger-outline" id="cli-form-del" style="display:none" onclick="deleteClient()">Inativar</button>
       <div class="client-footer-spacer"></div>
       <button class="client-btn primary" id="cli-form-save" onclick="saveClient()">Salvar alterações</button>
     </div>
@@ -12949,7 +12949,7 @@ function criarMenuContextualCliente(clienteId) {
     </div>
     <div class="ctx-separator"></div>
     <div style="padding:4px">
-      <button class="ctx-item danger" onclick="deleteClientDirectly(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('trash')} Excluir cliente</button>
+      <button class="ctx-item danger" onclick="deleteClientDirectly(${jsArg(clienteId)}); fecharMenusClientes()">${inlineIcon('trash')} Inativar cliente</button>
     </div>`;
 }
 
@@ -14615,7 +14615,7 @@ async function mergeDuplicates(groupIndex) {
 
 async function deleteCustomerById(clientId, clientName, options = {}) {
   if (!clientId) return false;
-  if (!confirmAction(`Tem certeza que deseja remover o cliente "${clientName}"?`)) return false;
+  if (!confirmAction(`Inativar o cliente "${clientName}"? Ele sairá da lista de ativos, mas o histórico de serviços será preservado.`)) return false;
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/customers/${clientId}`, {
@@ -14631,7 +14631,7 @@ async function deleteCustomerById(clientId, clientName, options = {}) {
     if (options.closeModal) closeClientModal({ force: true });
     clientesData = clientesData.filter(c => String(c.id) !== String(clientId));
     clientesTotal = Math.max(0, Number(clientesTotal || 0) - 1);
-    toast(result.message || 'Cliente removido com sucesso', 'ok');
+    toast(result.message || 'Cliente inativado com sucesso', 'ok');
     await renderClientes();
     return true;
   } catch (error) {
