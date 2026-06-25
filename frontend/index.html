@@ -3941,15 +3941,12 @@ async function carregarVeiculos(){
             <button class="btn btn-ghost btn-sm" onclick="opMapSetRoteirosPeriod('week',0)">Semana</button>
           </div>
           <input type="date" class="fsel" id="rot-data" onchange="renderMapaRoteiros()">
-          <button class="btn btn-primary btn-sm" onclick="rotGerarDoSistema()">Montar roteiro do dia</button>
+          <button class="btn btn-primary btn-sm" onclick="rotGerarDoSistema()">Montar roteiro</button>
         </div>
       </div>
 
-      <div class="flow-guide">
-        <div class="flow-guide-step"><span class="flow-guide-num">1</span><div><div class="flow-guide-title">Escolha o período</div><div class="flow-guide-text">Revise dia, amanhã ou semana antes de executar a operação.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">2</span><div><div class="flow-guide-title">Analise a distribuição</div><div class="flow-guide-text">Compare equipes, veículos e serviços sem rota definida.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Abra rotas</div><div class="flow-guide-text">Use Google Maps por parada ou por grupo quando houver endereço suficiente.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">4</span><div><div class="flow-guide-title">Prepare ajustes</div><div class="flow-guide-text">Abra o serviço para corrigir equipe, veículo, endereço ou horário.</div></div></div>
+      <div class="rot-plan-hint">
+        <span>Fluxo:</span> escolher período · revisar pendências · montar roteiro · aprovar · enviar aos técnicos · abrir rotas.
       </div>
 
       <div class="op-map-toolbar op-map-toolbar-full">
@@ -4014,9 +4011,14 @@ async function carregarVeiculos(){
       </div>
 
       <div id="rot-sugestao-wrap" style="display:none;margin-bottom:20px">
-        <div class="section-title" style="font-size:18px;margin-bottom:4px">Sugestão de Rota</div>
-        <div class="section-sub" style="margin-bottom:14px">Ordem otimizada por técnico com base em horário + proximidade do endereço</div>
-        <div id="rot-sugestao-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px"></div>
+        <div class="rot-plan-section-head">
+          <div>
+            <div class="rot-plan-section-title">Sugestão de roteiro</div>
+            <div class="rot-plan-section-sub">Ordem sugerida com base em horário, equipe, veículo e proximidade quando disponível.</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">Copiar todos</button>
+        </div>
+        <div id="rot-sugestao-grid" class="rot-plan-board"></div>
       </div>
 
       <div id="customer-reminders-panel" style="display:none;margin-bottom:20px"></div>
@@ -5374,6 +5376,124 @@ async function carregarVeiculos(){
 .op-map-plan-stop-actions { margin-top:6px; margin-left:32px; display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
 .op-map-plan-route-disabled { color:var(--text3); font-size:10px; font-weight:800; }
 .op-map-plan-note { color:var(--text3); font-size:11px; line-height:1.45; }
+.rot-plan-hint {
+  margin:-4px 0 14px;
+  padding:9px 12px;
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--card);
+  color:var(--text2);
+  font-size:12px;
+  line-height:1.45;
+}
+.rot-plan-hint span { font-weight:900; color:var(--blue2); }
+.rot-plan-summary-band {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
+  gap:8px;
+  margin-bottom:12px;
+}
+.rot-plan-summary-card {
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--card2);
+  padding:10px;
+  min-height:58px;
+}
+.rot-plan-summary-label {
+  color:var(--text3);
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.rot-plan-summary-value {
+  margin-top:4px;
+  font-family:var(--display);
+  font-size:18px;
+  font-weight:900;
+  color:var(--text);
+  line-height:1.1;
+}
+.rot-plan-summary-value.small {
+  font-family:var(--body);
+  font-size:11px;
+  line-height:1.25;
+  color:var(--text3);
+}
+.rot-plan-board {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:12px;
+  margin:14px 0 20px;
+}
+.rot-plan-section-card {
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  background:var(--card);
+  padding:14px;
+  margin-bottom:16px;
+}
+.rot-plan-section-card.warn { border-color:rgba(234,88,12,.28); background:var(--orange-bg); }
+.rot-plan-section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px; }
+.rot-plan-section-title { font-family:var(--display); font-size:16px; font-weight:900; color:var(--text); }
+.rot-plan-section-sub { margin-top:3px; color:var(--text3); font-size:11px; line-height:1.45; }
+.rot-plan-route-card {
+  border:1px solid var(--border);
+  border-top:3px solid var(--blue);
+  border-radius:var(--r);
+  background:var(--card);
+  padding:13px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.rot-plan-route-card.approved { border-top-color:var(--green); }
+.rot-plan-route-card.sent { border-top-color:var(--blue2); background:var(--blue-bg); }
+.rot-plan-route-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.rot-plan-route-title { font-family:var(--display); font-size:14px; font-weight:900; color:var(--text); }
+.rot-plan-route-meta { margin-top:3px; color:var(--text3); font-size:10px; line-height:1.45; }
+.rot-plan-route-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+.rot-plan-route-kpi { padding:7px; border-radius:var(--r2); background:var(--surface); text-align:center; min-width:0; }
+.rot-plan-route-kpi strong { display:block; font-family:var(--mono); font-size:12px; color:var(--text); }
+.rot-plan-route-kpi span { display:block; margin-top:2px; font-size:9px; color:var(--text3); }
+.rot-plan-route-stops { display:flex; flex-direction:column; gap:6px; }
+.rot-plan-route-stop {
+  display:grid;
+  grid-template-columns:24px minmax(0,1fr) auto;
+  gap:8px;
+  align-items:start;
+  padding:7px;
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--bg2);
+}
+.rot-plan-route-stop strong { display:block; font-size:11px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rot-plan-route-stop span { display:block; margin-top:2px; font-size:10px; color:var(--text3); }
+.rot-plan-route-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.rot-plan-status {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:900;
+  white-space:nowrap;
+}
+.rot-plan-status.suggestion { background:var(--blue-bg); color:var(--blue2); }
+.rot-plan-status.approved { background:var(--green-bg); color:var(--green); }
+.rot-plan-status.sent { background:rgba(37,99,235,.12); color:var(--blue2); }
+.rot-plan-status.empty { background:var(--bg2); color:var(--text3); }
+.rot-plan-side-status { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.rot-plan-side-stat { padding:8px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card2); }
+.rot-plan-side-stat strong { display:block; font-family:var(--mono); color:var(--text); font-size:14px; }
+.rot-plan-side-stat span { color:var(--text3); font-size:9px; text-transform:uppercase; letter-spacing:.06em; }
+.rot-plan-week-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+.rot-plan-week-day { border:1px solid var(--border); border-radius:var(--r2); background:var(--card); padding:11px; }
+.rot-plan-week-day.warn { border-color:rgba(234,88,12,.3); background:var(--orange-bg); }
+.rot-plan-week-day.ok { border-color:rgba(22,163,74,.25); background:var(--green-bg); }
+.op-map-pin.route-active { transform:scale(1.18); box-shadow:0 0 0 4px rgba(37,99,235,.22), 0 8px 18px rgba(15,23,42,.22); }
+.op-map-pin.route-muted { opacity:.38; filter:grayscale(.45); }
 .op-map-group { display:flex; flex-direction:column; gap:8px; }
 .op-map-group-title {
   display:flex;
@@ -10682,6 +10802,7 @@ function opMapPopupHtml(item, options = {}) {
     <div class="op-map-popup-line"><strong>Equipe:</strong> ${sanitize(item.equipe || 'Sem equipe')}</div>
     <div class="op-map-popup-line"><strong>Veículo:</strong> ${sanitize(item.veiculo || '—')}</div>
     ${planning ? `<div class="op-map-popup-line"><strong>Tipo:</strong> ${sanitize(item.tipo || 'Serviço')}</div>` : ''}
+    ${planning && item.routeLabel ? `<div class="op-map-popup-line"><strong>Roteiro:</strong> ${sanitize(item.routeLabel)} · ${sanitize(rotRouteStatusMeta(item.routeStatus).label)}</div>` : ''}
     <div class="op-map-popup-line"><strong>Endereço:</strong> ${sanitize(shortAddress)}</div>
     <div class="op-map-popup-line"><span class="chip ${meta.chip}">${meta.label}</span></div>
     <div class="op-map-popup-actions">
@@ -11264,6 +11385,494 @@ function opMapPlanningSideHtml(items = [], view = 'list', period = 'day', routeG
     ${items.length ? groupsHtml : '<div class="op-map-empty">Nenhum serviço para os filtros selecionados.</div>'}
     ${opMapUndefinedRouteHtml(items, canvasId)}
     ${opMapPlanningAlertsHtml(items)}`;
+}
+
+function rotPlanningStatusStore() {
+  try { return JSON.parse(localStorage.getItem(ROT_PLANNING_STATUS_KEY) || '{}') || {}; }
+  catch(e) { return {}; }
+}
+
+function rotPersistPlanningStatus(store = {}) {
+  try { localStorage.setItem(ROT_PLANNING_STATUS_KEY, JSON.stringify(store || {})); }
+  catch(e) {}
+}
+
+function rotRouteServices(route = {}) {
+  const fromSequence = Array.isArray(route.sequencia)
+    ? route.sequencia.map(step => step?.servico || step?.service || null).filter(Boolean)
+    : [];
+  const fromServices = Array.isArray(route.svcs) ? route.svcs.filter(Boolean) : [];
+  const source = fromSequence.length ? fromSequence : fromServices;
+  const seen = new Set();
+  return source.filter(service => {
+    const key = rotServiceKey(service);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function rotRouteServiceIds(route = {}) {
+  return rotRouteServices(route)
+    .map(service => String(service.id ?? rotServiceKey(service)))
+    .filter(Boolean)
+    .sort();
+}
+
+function rotPlanningRouteKey(route, data) {
+  const ids = rotRouteServiceIds(route).join(',');
+  return [
+    data || rotDadosData || document.getElementById('rot-data')?.value || '',
+    normalizarNome(route?.equipe || 'sem-equipe'),
+    normalizarNome(route?.veiculo || 'sem-veiculo'),
+    ids
+  ].join('|');
+}
+
+function rotRouteStatusMeta(status = 'suggestion') {
+  const map = {
+    suggestion: { key:'suggestion', label:'Sugestão', cls:'suggestion' },
+    approved: { key:'approved', label:'Aprovado', cls:'approved' },
+    sent: { key:'sent', label:'Enviado', cls:'sent' },
+    empty: { key:'empty', label:'Sem roteiro', cls:'empty' }
+  };
+  return map[status] || map.suggestion;
+}
+
+function rotGetRouteStatus(route, data) {
+  const store = rotPlanningStatusStore();
+  const key = rotPlanningRouteKey(route, data);
+  const status = store[key]?.status || store[key] || 'suggestion';
+  return ['suggestion', 'approved', 'sent'].includes(status) ? status : 'suggestion';
+}
+
+function rotSetRouteStatus(route, data, status) {
+  if (!route) return;
+  const key = rotPlanningRouteKey(route, data);
+  const store = rotPlanningStatusStore();
+  store[key] = {
+    status,
+    updatedAt: new Date().toISOString()
+  };
+  rotPersistPlanningStatus(store);
+}
+
+function rotRouteStatusChip(status = 'suggestion') {
+  const meta = rotRouteStatusMeta(status);
+  return `<span class="rot-plan-status ${meta.cls}">${meta.label}</span>`;
+}
+
+function rotPlanningRouteStatusCounts(routes = [], data = '') {
+  const counts = { suggestion:0, approved:0, sent:0 };
+  (routes || []).forEach(route => {
+    const status = rotGetRouteStatus(route, data);
+    counts[status] = (counts[status] || 0) + 1;
+  });
+  return counts;
+}
+
+function rotRouteStops(route = {}) {
+  if (Array.isArray(route.sequencia) && route.sequencia.length) return groupConsecutiveOperationalStops(route.sequencia);
+  return rotRouteServices(route).map((service, index) => ({
+    ordem: index + 1,
+    servicoBase: service,
+    items: [{ servico: service, horarioAgendadoMin: getHorarioServicoMin(service) }],
+    deslocamentoMin: 0,
+    km: 0
+  }));
+}
+
+function rotRouteItems(route = {}, data = '') {
+  return opMapBuildItems(rotRouteServices(route), { date: data || rotDadosData });
+}
+
+function rotRouteGoogleUrl(route = {}, data = '') {
+  return opMapGroupRouteUrl(rotRouteItems(route, data));
+}
+
+function rotRouteMetricValue(value, suffix = '', formatter = null) {
+  const num = Number(value || 0);
+  if (!Number.isFinite(num) || num <= 0) return 'Estimativa indisponível';
+  if (formatter) return formatter(num);
+  return `${num}${suffix}`;
+}
+
+function rotPlanningSummaryHtml(items = [], routeGroups = [], data = '') {
+  const c = opMapPlanningCounts(items, routeGroups);
+  const routeStatus = rotPlanningRouteStatusCounts(routeGroups, data);
+  const kmValue = c.hasKm ? `${Number(c.routeKm || 0).toFixed(1).replace('.', ',')} km` : '<span class="op-map-summary-unavailable">Estimativa indisponível</span>';
+  const minValue = c.hasMin
+    ? (typeof formatarMinutosHM === 'function' ? formatarMinutosHM(Math.round(c.routeMin)) : `${Math.round(c.routeMin)} min`)
+    : '<span class="op-map-summary-unavailable">Estimativa indisponível</span>';
+  const cards = [
+    ['Serviços', c.total],
+    ['Rotas', routeGroups.length],
+    ['Equipes', c.teams],
+    ['Veículos', c.vehicles],
+    ['Pendentes', c.pendentes, 'color:var(--orange)'],
+    ['Atrasados', c.atrasados, 'color:var(--red)'],
+    ['Executados', c.executados, 'color:var(--green)'],
+    ['Reagendados', c.reagendados, 'color:var(--orange)'],
+    ['Sem equipe', c.semEquipe],
+    ['Sem veículo', c.semVeiculo],
+    ['Sem endereço', c.semEndereco],
+    ['Sem geo', c.semGeo],
+    ['Aprovadas', routeStatus.approved, 'color:var(--green)'],
+    ['Enviadas', routeStatus.sent, 'color:var(--blue2)'],
+    ['KM estimado', kmValue, '', true],
+    ['Tempo estimado', minValue, '', true]
+  ];
+  return `<div class="rot-plan-summary-band">${cards.map(([label, value, style = '', raw = false]) => `<div class="rot-plan-summary-card">
+    <div class="rot-plan-summary-label">${sanitize(label)}</div>
+    <div class="rot-plan-summary-value ${raw ? 'small' : ''}" style="${escapeHtmlAttr(style)}">${raw ? value : sanitize(value)}</div>
+  </div>`).join('')}</div>`;
+}
+
+function rotUndefinedRouteItems(items = []) {
+  const issuesById = new Map();
+  const addIssue = (item, issue) => {
+    const key = String(item.id);
+    if (!issuesById.has(key)) issuesById.set(key, new Set());
+    issuesById.get(key).add(issue);
+  };
+  const teamSlots = {};
+  const vehicleSlots = {};
+
+  (items || []).forEach(item => {
+    if (!item.hasEquipe) addIssue(item, 'Sem equipe');
+    if (!item.hasVeiculo) addIssue(item, 'Sem veículo');
+    if (opMapAddressIncomplete(item)) addIssue(item, 'Sem endereço');
+    if (!item.location) addIssue(item, 'Sem geolocalização');
+    const horario = String(item.horario || '').trim();
+    if (!horario || horario === '—') addIssue(item, 'Sem horário');
+    if (item.hasEquipe) {
+      const key = opMapSlotKey(item, 'equipe');
+      if (key) (teamSlots[key] = teamSlots[key] || []).push(item);
+    }
+    if (item.hasVeiculo) {
+      const key = opMapSlotKey(item, 'veiculo');
+      if (key) (vehicleSlots[key] = vehicleSlots[key] || []).push(item);
+    }
+  });
+
+  Object.values(teamSlots).filter(group => group.length > 1).forEach(group => group.forEach(item => addIssue(item, 'Conflito de equipe')));
+  Object.values(vehicleSlots).filter(group => group.length > 1).forEach(group => group.forEach(item => addIssue(item, 'Conflito de veículo')));
+
+  return (items || [])
+    .map(item => ({
+      item,
+      issues: Array.from(issuesById.get(String(item.id)) || [])
+    }))
+    .filter(row => row.issues.length);
+}
+
+function rotUndefinedRouteSectionHtml(items = [], canvasId = '') {
+  const rows = rotUndefinedRouteItems(items);
+  const visible = rows.slice(0, 12);
+  const hidden = rows.length - visible.length;
+  return `<div class="rot-plan-section-card ${rows.length ? 'warn' : ''}">
+    <div class="rot-plan-section-head">
+      <div>
+        <div class="rot-plan-section-title">Sem rota definida</div>
+        <div class="rot-plan-section-sub">${rows.length ? 'Serviços que precisam de correção antes de entrar no planejamento.' : 'Todos os serviços do período possuem dados suficientes para planejamento.'}</div>
+      </div>
+      <span class="chip ${rows.length ? 'chip-orange' : 'chip-green'}">${rows.length} item(s)</span>
+    </div>
+    ${rows.length ? `<div class="op-map-list">${visible.map(({ item, issues }) => `<div class="op-map-item ${opMapPinClass(item)}">
+      <div class="op-map-item-head">
+        <div class="op-map-item-client">${sanitize(item.cliente)}</div>
+        <span class="chip chip-orange">${sanitize(issues[0])}</span>
+      </div>
+      <div class="op-map-item-meta">
+        <span>${sanitize(opMapDateLabel(item.date))} · ${sanitize(item.horario || '—')} · ${sanitize(item.hasEquipe ? item.equipe : 'Sem equipe')}</span>
+        <span>${sanitize(item.hasVeiculo ? item.veiculo : 'Sem veículo')} · ${sanitize(issues.join(' · '))}</span>
+        <span>${sanitize(opMapShortAddress(item.endereco, 96))}</span>
+      </div>
+      <div class="op-map-quick-actions">
+        <button class="op-map-mini-btn primary" onclick="openEditSvc(${jsArg(item.id)})">Abrir serviço</button>
+        ${item.location ? `<button class="op-map-mini-btn" onclick="opMapFocus('${canvasId}', ${jsArg(item.id)})">Ver no mapa</button>` : ''}
+      </div>
+    </div>`).join('')}</div>` : '<div class="op-map-plan-note">Nenhuma pendência logística nos filtros atuais.</div>'}
+    ${hidden > 0 ? `<div class="op-map-plan-note">+${hidden} serviço(s) com pendência logística.</div>` : ''}
+  </div>`;
+}
+
+function rotOpenPlanningDay(date) {
+  const dateEl = document.getElementById('rot-data');
+  const periodEl = document.getElementById('mapa-rot-periodo');
+  const viewEl = document.getElementById('mapa-rot-view');
+  if (dateEl) dateEl.value = date;
+  if (periodEl) periodEl.value = 'day';
+  if (viewEl && viewEl.value === 'day') viewEl.value = 'list';
+  renderMapaRoteiros(date);
+}
+
+function rotWeeklyPlanningHtml(items = []) {
+  const groups = new Map();
+  (items || []).forEach(item => {
+    const key = item.date || 'sem-data';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  });
+  const rows = [...groups.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  if (!rows.length) {
+    return `<div class="rot-plan-section-card"><div class="rot-plan-section-title">Planejamento semanal</div><div class="rot-plan-section-sub">Nenhum serviço nos filtros atuais.</div></div>`;
+  }
+  return `<div class="rot-plan-section-card">
+    <div class="rot-plan-section-head">
+      <div>
+        <div class="rot-plan-section-title">Planejamento semanal por dia</div>
+        <div class="rot-plan-section-sub">Abra um dia para montar roteiro, aprovar e enviar aos técnicos.</div>
+      </div>
+      <span class="chip chip-blue">${rows.length} dia(s)</span>
+    </div>
+    <div class="rot-plan-week-grid">${rows.map(([date, dayItems]) => {
+      const counts = opMapPlanningCounts(dayItems, []);
+      const issues = rotUndefinedRouteItems(dayItems).length;
+      const conflicts = opMapOperationalAlerts(dayItems).filter(alert => alert.kind === 'teamConflict' || alert.kind === 'vehicleConflict').length;
+      const ready = issues === 0 && conflicts === 0;
+      return `<div class="rot-plan-week-day ${ready ? 'ok' : 'warn'}">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div class="rot-plan-route-title">${sanitize(opMapPlanningDayLabel(date))}</div>
+            <div class="rot-plan-route-meta">${counts.total} serviço(s) · ${counts.vehicles} veículo(s) · ${counts.teams} equipe(s)</div>
+          </div>
+          <span class="chip ${ready ? 'chip-green' : 'chip-orange'}">${ready ? 'Pronto para roteiro' : 'Precisa revisão'}</span>
+        </div>
+        <div class="rot-plan-route-meta">${issues} pendência(s) · ${conflicts} conflito(s)</div>
+        <div class="rot-plan-route-actions" style="margin-top:10px">
+          <button class="op-map-mini-btn primary" onclick="rotOpenPlanningDay(${jsArg(date)})">Abrir dia</button>
+        </div>
+      </div>`;
+    }).join('')}</div>
+  </div>`;
+}
+
+function rotAnnotateItemsWithRoutes(items = [], routeGroups = [], data = '') {
+  const routeByService = new Map();
+  (routeGroups || []).forEach((route, index) => {
+    const status = rotGetRouteStatus(route, data);
+    const label = `Rota ${index + 1} — ${route.veiculo || route.equipe || 'sem veículo'}`;
+    rotRouteServiceIds(route).forEach(id => routeByService.set(String(id), { index, label, status }));
+  });
+  (items || []).forEach(item => {
+    const info = routeByService.get(String(item.id));
+    if (info) {
+      item.routeIndex = info.index;
+      item.routeLabel = info.label;
+      item.routeStatus = info.status;
+    } else {
+      delete item.routeIndex;
+      delete item.routeLabel;
+      delete item.routeStatus;
+    }
+  });
+  return items;
+}
+
+function rotPlanningSideRouteHtml(route = {}, index = 0, data = '') {
+  const status = rotGetRouteStatus(route, data);
+  const stops = rotRouteStops(route);
+  const km = Number(route.kmTotal || 0) > 0 ? `${rotKmFmt(route.kmTotal)} km` : 'Estimativa indisponível';
+  const tempo = Number(route.tempoTotalMin || 0) > 0 ? formatarMinutosHM(route.tempoTotalMin) : 'Estimativa indisponível';
+  return `<div class="op-map-plan-group">
+    <div class="op-map-plan-group-head">
+      <div>
+        <div class="op-map-plan-group-title">Rota ${index + 1} — ${sanitize(route.veiculo || 'Sem veículo')}</div>
+        <div class="op-map-plan-group-meta">Equipe: ${sanitize(route.equipe || 'Sem equipe')}</div>
+        <div class="op-map-plan-group-meta">${stops.length} parada(s) · ${sanitize(km)} · ${sanitize(tempo)}</div>
+      </div>
+      ${rotRouteStatusChip(status)}
+    </div>
+    <div class="rot-plan-route-actions">
+      <button class="op-map-mini-btn primary" onclick="rotFocusRoute(${index})">Ver detalhes</button>
+      <button class="op-map-mini-btn" onclick="rotOpenRouteMaps(${index})">Abrir rota</button>
+      ${status === 'suggestion' ? `<button class="op-map-mini-btn" onclick="rotApproveRoute(${index})">Aprovar</button>` : ''}
+      ${status !== 'sent' ? `<button class="op-map-mini-btn" onclick="rotSendRoute(${index})">Enviar</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function rotPlanningSideHtml(items = [], period = 'day', routeGroups = [], canvasId = '', data = '') {
+  const undefinedCount = rotUndefinedRouteItems(items).length;
+  if (period === 'week') {
+    const days = new Set(items.map(item => item.date).filter(Boolean)).size;
+    return `<div class="op-map-plan-head">
+      <div>
+        <div class="op-map-plan-title">Planejamento de rotas</div>
+        <div class="op-map-plan-sub">Visão semanal para escolher o dia e montar roteiro.</div>
+      </div>
+    </div>
+    <div class="rot-plan-side-status">
+      <div class="rot-plan-side-stat"><strong>${items.length}</strong><span>serviços</span></div>
+      <div class="rot-plan-side-stat"><strong>${days}</strong><span>dias</span></div>
+      <div class="rot-plan-side-stat"><strong>${undefinedCount}</strong><span>sem rota</span></div>
+      <div class="rot-plan-side-stat"><strong>0</strong><span>rotas montadas</span></div>
+    </div>
+    ${opMapLegendHtml()}
+    <div class="op-map-plan-note">A semana mostra distribuição e pendências. Abra um dia para gerar sugestão, aprovar e enviar o roteiro.</div>`;
+  }
+  const statusCounts = rotPlanningRouteStatusCounts(routeGroups, data);
+  if (!routeGroups.length) {
+    return `<div class="op-map-plan-head">
+      <div>
+        <div class="op-map-plan-title">Planejamento de rotas</div>
+        <div class="op-map-plan-sub">Status do período: sem roteiro definido.</div>
+      </div>
+      ${rotRouteStatusChip('empty')}
+    </div>
+    <div class="rot-plan-side-status">
+      <div class="rot-plan-side-stat"><strong>${items.length}</strong><span>serviços</span></div>
+      <div class="rot-plan-side-stat"><strong>0</strong><span>sugeridas</span></div>
+      <div class="rot-plan-side-stat"><strong>0</strong><span>aprovadas</span></div>
+      <div class="rot-plan-side-stat"><strong>${undefinedCount}</strong><span>sem rota</span></div>
+    </div>
+    ${opMapLegendHtml()}
+    <button class="btn btn-primary btn-sm w100" onclick="rotGerarDoSistema()">Montar roteiro</button>
+    <div class="op-map-plan-note">Depois de montar, as rotas aparecem aqui com ações para aprovar, copiar, enviar e abrir no Google Maps.</div>`;
+  }
+  return `<div class="op-map-plan-head">
+      <div>
+        <div class="op-map-plan-title">Planejamento de rotas</div>
+        <div class="op-map-plan-sub">Status do período: ${routeGroups.length} rota(s) sugerida(s).</div>
+      </div>
+    </div>
+    <div class="rot-plan-side-status">
+      <div class="rot-plan-side-stat"><strong>${items.length}</strong><span>serviços</span></div>
+      <div class="rot-plan-side-stat"><strong>${statusCounts.suggestion}</strong><span>sugestões</span></div>
+      <div class="rot-plan-side-stat"><strong>${statusCounts.approved}</strong><span>aprovadas</span></div>
+      <div class="rot-plan-side-stat"><strong>${statusCounts.sent}</strong><span>enviadas</span></div>
+    </div>
+    ${opMapLegendHtml()}
+    <div class="op-map-plan-stops">${routeGroups.map((route, index) => rotPlanningSideRouteHtml(route, index, data)).join('')}</div>`;
+}
+
+function rotPlanningRouteCardHtml(route = {}, index = 0, data = '') {
+  const status = rotGetRouteStatus(route, data);
+  const stops = rotRouteStops(route);
+  const diagnostico = uniqueReasons([...(route.blockReasons || []), ...(route.warningReasons || [])]);
+  const km = Number(route.kmTotal || 0) > 0 ? `${rotKmFmt(route.kmTotal)} km` : 'Estimativa indisponível';
+  const tempo = Number(route.tempoTotalMin || 0) > 0 ? formatarMinutosHM(route.tempoTotalMin) : 'Estimativa indisponível';
+  const ocupacao = Number.isFinite(Number(route.ocupacaoPct)) ? `${route.ocupacaoPct}%` : '—';
+  const visibleStops = stops.slice(0, 5);
+  const hidden = stops.length - visibleStops.length;
+  return `<div class="rot-plan-route-card ${rotRouteStatusMeta(status).cls}">
+    <div class="rot-plan-route-head">
+      <div>
+        <div class="rot-plan-route-title">Rota ${index + 1} — ${sanitize(route.veiculo || 'Sem veículo')}</div>
+        <div class="rot-plan-route-meta">Equipe: ${sanitize(route.equipe || 'Sem equipe')}</div>
+      </div>
+      ${rotRouteStatusChip(status)}
+    </div>
+    ${diagnostico.length ? `<div class="op-map-plan-note" style="color:${route.severity === 'block' ? 'var(--red)' : 'var(--orange)'};font-weight:800">${sanitize(diagnostico.join(' · '))}</div>` : ''}
+    <div class="rot-plan-route-kpis">
+      <div class="rot-plan-route-kpi"><strong>${stops.length}</strong><span>paradas</span></div>
+      <div class="rot-plan-route-kpi"><strong>${sanitize(km)}</strong><span>km</span></div>
+      <div class="rot-plan-route-kpi"><strong>${sanitize(tempo)}</strong><span>tempo</span></div>
+      <div class="rot-plan-route-kpi"><strong>${sanitize(ocupacao)}</strong><span>ocupação</span></div>
+    </div>
+    <div class="rot-plan-route-stops">
+      ${visibleStops.map(stop => {
+        const base = sf(stop.servicoBase);
+        const itemCount = stop.items?.length || 1;
+        return `<div class="rot-plan-route-stop">
+          <div class="op-map-item-order">${stop.ordem}</div>
+          <div>
+            <strong>${sanitize(base.cliente || 'Cliente')}</strong>
+            <span>${sanitize(formatarJanelaOperacional(stop.inicioSugeridoMin, stop.fimSugeridoMin))} · ${sanitize(opMapShortAddress(stop.servicoBase?.endereco || '', 64))}</span>
+          </div>
+          <span class="chip chip-gray">${itemCount}</span>
+        </div>`;
+      }).join('')}
+      ${hidden > 0 ? `<div class="op-map-plan-note">+${hidden} parada(s) adicionais nesta rota.</div>` : ''}
+    </div>
+    <div class="rot-plan-route-actions">
+      <button class="op-map-mini-btn primary" onclick="rotFocusRoute(${index})">Ver detalhes</button>
+      <button class="op-map-mini-btn" onclick="rotOpenRouteMaps(${index})">Abrir rota</button>
+      <button class="op-map-mini-btn" onclick="rotCopyRouteText(${index})">Copiar roteiro</button>
+      ${status === 'suggestion' ? `<button class="op-map-mini-btn" onclick="rotApproveRoute(${index})">Aprovar roteiro</button>` : ''}
+      ${status !== 'sent' ? `<button class="op-map-mini-btn" onclick="rotSendRoute(${index})">Enviar roteiro</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function rotRefreshPlanningViews() {
+  const data = rotDadosData || document.getElementById('rot-data')?.value || '';
+  rotRenderizarSugestoes(rotDados || []);
+  if (currentPage === 'roteiro') renderMapaRoteiros(data);
+}
+
+function rotApproveRoute(index) {
+  const route = rotDados[index];
+  if (!route) return;
+  const data = rotDadosData || document.getElementById('rot-data')?.value || '';
+  rotSetRouteStatus(route, data, 'approved');
+  toast('Roteiro aprovado', 'ok');
+  rotRefreshPlanningViews();
+}
+
+function rotMarkRouteSent(index, options = {}) {
+  const route = rotDados[index];
+  if (!route) return;
+  const data = rotDadosData || document.getElementById('rot-data')?.value || '';
+  rotSetRouteStatus(route, data, 'sent');
+  if (!options.silent) toast('Roteiro marcado como enviado', 'ok');
+  if (!options.skipRefresh) rotRefreshPlanningViews();
+}
+
+function rotRouteText(index) {
+  const route = rotDados[index];
+  if (!route) return '';
+  const data = rotDadosData || document.getElementById('rot-data')?.value || '';
+  return route.whatsappText || rotMontarTextoWhatsApp(route, data);
+}
+
+function rotCopyRouteText(index) {
+  const text = rotRouteText(index);
+  if (!text) { toast('Roteiro não encontrado', 'err'); return; }
+  navigator.clipboard.writeText(text.trim())
+    .then(() => toast('Roteiro copiado', 'ok'))
+    .catch(() => toast('Erro ao copiar roteiro', 'err'));
+}
+
+function rotSendRoute(index) {
+  const text = rotRouteText(index);
+  if (!text) { toast('Roteiro não encontrado', 'err'); return; }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text.trim())}`, '_blank');
+  rotMarkRouteSent(index, { silent:true });
+  toast('WhatsApp aberto e roteiro marcado como enviado', 'ok');
+}
+
+function rotOpenRouteMaps(index) {
+  const route = rotDados[index];
+  if (!route) return;
+  const data = rotDadosData || document.getElementById('rot-data')?.value || '';
+  const url = rotRouteGoogleUrl(route, data);
+  if (!url) { toast('Endereço insuficiente para rota', 'warn'); return; }
+  rotFocusRoute(index);
+  window.open(url, '_blank');
+}
+
+function rotApplyRouteHighlight(ids = [], canvasId = 'op-map-roteiros-canvas') {
+  const selected = new Set((ids || []).map(String));
+  operationalMapState.routeHighlightIds = selected;
+  const markers = operationalMapState.markers[canvasId] || {};
+  Object.entries(markers).forEach(([id, marker]) => {
+    const el = marker.getElement?.();
+    const pin = el?.querySelector?.('.op-map-pin');
+    if (!pin) return;
+    pin.classList.toggle('route-active', selected.has(String(id)));
+    pin.classList.toggle('route-muted', selected.size > 0 && !selected.has(String(id)));
+  });
+}
+
+function rotFocusRoute(index) {
+  const route = rotDados[index];
+  if (!route) return;
+  const ids = rotRouteServiceIds(route);
+  rotApplyRouteHighlight(ids);
+  const firstId = ids[0];
+  if (firstId) opMapFocus('op-map-roteiros-canvas', firstId);
 }
 
 function opMapSetHojeRange(range) {
@@ -16456,6 +17065,7 @@ function confirmAction(message){
 
 let rotDados = [];     // [{equipe, veiculo, svcs:[], sequencia, whatsappText}]
 let rotDadosData = '';
+const ROT_PLANNING_STATUS_KEY = 'letec_route_planning_status_v1';
 const ROT_FALLBACK_MSG = 'Rota otimizada indisponível (configure Google Maps API)';
 const ROT_BASE_PLUS_CODE = 'R. Maria José Rangel, 135 - Vila Sao Paulo, São Paulo - SP';
 const rotDistanceCache = new Map();
@@ -16915,7 +17525,8 @@ function salvarSuporteWhatsAppConfig() {
       portalLink: rotMontarLinkPortal(eq, data),
       portalText: rotMontarTextoPortal(eq, data)
     }));
-    rotRenderizarLocal(rotDados, data);
+    rotRenderizarSugestoes(rotDados);
+    if (currentPage === 'roteiro') renderMapaRoteiros(data);
   }
 }
 
@@ -17680,6 +18291,7 @@ function renderMapaRoteiros(dateOverride = '') {
   const container = document.getElementById('mapa-roteiros-operacional');
   if (!container) return;
   const routeGroups = periodo === 'day' && rotDadosData === date ? rotDados : [];
+  rotAnnotateItemsWithRoutes(filtered, routeGroups, date);
   const periodTitle = periodo === 'week' ? 'Mapa logístico da semana' : 'Mapa logístico do dia';
   const boundsLabel = bounds.start === bounds.end ? bounds.start : `${bounds.start} até ${bounds.end}`;
   container.innerHTML = `<div class="op-map-card">
@@ -17690,19 +18302,31 @@ function renderMapaRoteiros(dateOverride = '') {
       </div>
       <button class="btn btn-ghost btn-sm" onclick="opMapOpenBase()">Abrir base</button>
     </div>
+    <div id="rot-plan-summary-slot">
+      ${rotPlanningSummaryHtml(filtered, routeGroups, date)}
+    </div>
     <div class="op-map-layout">
       <div id="op-map-roteiros-canvas" class="op-map-canvas"></div>
       <div class="op-map-side">
-        ${opMapPlanningSideHtml(filtered, viewValue, periodo, routeGroups, 'op-map-roteiros-canvas')}
+        ${rotPlanningSideHtml(filtered, periodo, routeGroups, 'op-map-roteiros-canvas', date)}
       </div>
     </div>
+  </div>
+  <div id="rot-plan-secondary-slot">
+    ${periodo === 'week' ? rotWeeklyPlanningHtml(filtered) : rotUndefinedRouteSectionHtml(filtered, 'op-map-roteiros-canvas')}
   </div>`;
   opMapResolveLocations(filtered).then(items => {
+    rotAnnotateItemsWithRoutes(items, routeGroups, date);
     opMapRenderLeaflet('op-map-roteiros-canvas', items, { renderAfter:'renderMapaRoteiros()', compactPopup:true, planningPopup:true });
+    const summary = container.querySelector('#rot-plan-summary-slot');
+    if (summary) summary.innerHTML = rotPlanningSummaryHtml(items, routeGroups, date);
     const side = container.querySelector('.op-map-side');
     if (side) {
-      side.innerHTML = opMapPlanningSideHtml(items, viewValue, periodo, routeGroups, 'op-map-roteiros-canvas');
+      side.innerHTML = rotPlanningSideHtml(items, periodo, routeGroups, 'op-map-roteiros-canvas', date);
     }
+    const secondary = container.querySelector('#rot-plan-secondary-slot');
+    if (secondary) secondary.innerHTML = periodo === 'week' ? rotWeeklyPlanningHtml(items) : rotUndefinedRouteSectionHtml(items, 'op-map-roteiros-canvas');
+    if (operationalMapState.routeHighlightIds?.size) rotApplyRouteHighlight(Array.from(operationalMapState.routeHighlightIds));
   });
 }
 
@@ -17796,13 +18420,13 @@ async function rotGerarDoSistema() {
       });
     }
 
-    // KPIs
+    // A faixa de resumo do mapa substitui os KPIs e ações antigas para evitar duplicidade visual.
     const exec = daySvcsRoteiraveis.filter(s=>(s.status||s.st)==='executado').length;
     const pend = daySvcsRoteiraveis.length - exec;
     const tempoTotal = rotDados.reduce((acc, eq) => acc + eq.tempoTotalMin, 0);
     const kmTotal = Math.round(rotDados.reduce((acc, eq) => acc + eq.kmTotal, 0));
-    document.getElementById('rot-kpis').style.display       = '';
-    document.getElementById('rot-actions').style.display    = 'flex';
+    document.getElementById('rot-kpis').style.display       = 'none';
+    document.getElementById('rot-actions').style.display    = 'none';
     document.getElementById('rot-empty').style.display      = 'none';
     document.getElementById('rot-kpi-total').textContent    = daySvcsRoteiraveis.length;
     document.getElementById('rot-kpi-equipes').textContent  = rotDados.length;
@@ -17814,7 +18438,7 @@ async function rotGerarDoSistema() {
     rotRenderizarSugestoes(rotDados);
     renderCustomerRemindersPanel(daySvcs, data);
     renderMapaRoteiros(data);
-    rotRenderizarLocal(rotDados, data);
+    document.getElementById('rot-equipes-grid').innerHTML = '';
   } catch (e) {
     console.error('Erro ao gerar roteiro do dia:', e);
     rotDados = [];
@@ -18229,71 +18853,8 @@ function rotRenderizarSugestoes(equipes) {
   }
 
   wrap.style.display = '';
-  const paleta = ['#2563eb','#16a34a','#0891b2','#ea580c','#7c3aed','#b45309','#dc2626'];
-
-  grid.innerHTML = equipes.map((eq, gi) => {
-    const cor = eq.equipe.startsWith('⚠') ? '#94a3b8' : paleta[gi % paleta.length];
-    const severityColor = getRouteSeverityColor(eq.severity);
-    const severityBg = getRouteSeverityBg(eq.severity);
-    const severityLabel = getRouteSeverityLabel(eq.severity);
-    const diagnostico = uniqueReasons([...(eq.blockReasons || []), ...(eq.warningReasons || [])]);
-    const metricasOperacionais = eq.scoreOperacional !== null && eq.scoreOperacional !== undefined
-      ? `Score ${eq.scoreOperacional} · ${eq.classificacaoOperacional || '—'} · conf. ${eq.confiabilidadeGeral || '—'} · atraso ${eq.atrasoTotalMin || 0}min · espera ${eq.esperaTotalMin || 0}min`
-      : '';
-    return `<div class="card" style="padding:16px;border-top:3px solid ${cor}">
-      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
-        <div>
-          <div style="font-family:var(--display);font-size:15px;font-weight:800;color:${cor}">${eq.equipe}</div>
-          <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">🚗 ${eq.veiculo || '—'} · ${eq.sequencia.length} parada(s)</div>
-          ${eq.rotaAviso ? `<div style="margin-top:5px;font-size:10px;color:var(--orange);font-family:var(--mono)">${eq.rotaAviso}</div>` : ''}
-          <div style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;background:${severityBg};color:${severityColor};font-size:10px;font-family:var(--mono);font-weight:700">${severityLabel}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:${cor}">${eq.ocupacaoPct}%</div>
-          <div style="font-size:10px;color:var(--text3)">ocupação</div>
-        </div>
-      </div>
-      ${diagnostico.length ? `<div style="margin:-2px 0 12px 0;font-size:10px;color:${severityColor};font-family:var(--mono)">${diagnostico.join(' · ')}</div>` : ''}
-      ${metricasOperacionais ? `<div style="margin:-4px 0 12px 0;font-size:10px;color:var(--text2);font-family:var(--mono)">${metricasOperacionais}</div>` : ''}
-
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
-        <div style="padding:8px;background:var(--surface);border-radius:var(--r2);text-align:center">
-          <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text)">${eq.sequencia.length}</div>
-          <div style="font-size:9px;color:var(--text3)">serviços</div>
-        </div>
-        <div style="padding:8px;background:var(--surface);border-radius:var(--r2);text-align:center">
-          <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text)">${formatarMinutosHM(eq.tempoTotalMin)}</div>
-          <div style="font-size:9px;color:var(--text3)">tempo total</div>
-        </div>
-        <div style="padding:8px;background:var(--surface);border-radius:var(--r2);text-align:center">
-          <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text)">${eq.kmTotal} km</div>
-          <div style="font-size:9px;color:var(--text3)">km aprox.</div>
-        </div>
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:8px">
-        ${eq.sequencia.map(item => {
-          const F = sf(item.servico);
-          const itemReasons = uniqueReasons([...(item.blockReasons || []), ...(item.warningReasons || [])]);
-          return `
-            ${item.ordem > 1 ? `<div style="margin-left:36px;font-size:10px;color:var(--text3);font-family:var(--mono)">↳ ${item.deslocamentoMin} min | ${rotKmFmt(item.km)} km</div>` : ''}
-            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2)">
-              <div style="width:26px;height:26px;border-radius:999px;background:${cor}18;color:${cor};display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:11px;flex-shrink:0">${item.ordem}</div>
-              <div style="min-width:0;flex:1">
-                <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:2px">
-                  <span style="font-weight:700;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.cliente}</span>
-                  <span style="font-family:var(--mono);font-size:10px;color:${cor};flex-shrink:0">${formatarJanelaOperacional(item.inicioSugeridoMin, item.fimSugeridoMin)}</span>
-                </div>
-                <div style="font-size:10px;color:var(--text2)">${F.tipo || F.tipoLabel || '—'} · ${item.bairro} · ${formatarMinutosHM(item.duracaoServicoMin)}</div>
-                <div style="font-size:10px;color:var(--text3);margin-top:2px">Agendado: ${item.horarioAgendadoMin !== null && item.horarioAgendadoMin !== undefined ? formatarHoraDoDia(item.horarioAgendadoMin) : '—'} · Sugestão: ${formatarJanelaOperacional(item.inicioSugeridoMin, item.fimSugeridoMin)}</div>
-                ${itemReasons.length ? `<div style="font-size:10px;color:${item.severity === 'block' ? 'var(--red)' : 'var(--orange)'};margin-top:2px;font-family:var(--mono)">${itemReasons.join(' · ')}</div>` : ''}
-                ${item.servico.endereco ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${item.servico.endereco}</div>` : ''}
-              </div>
-            </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }).join('');
+  const data = rotDadosData || document.getElementById('rot-data')?.value || '';
+  grid.innerHTML = equipes.map((eq, gi) => rotPlanningRouteCardHtml(eq, gi, data)).join('');
 }
 
 // ─── Renderizar cards por equipe ─────────────
@@ -18438,6 +18999,7 @@ function rotWhatsAppPortal(index) {
   const texto = eq.portalText || rotMontarTextoPortal(eq, document.getElementById('rot-data')?.value);
   const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
   window.open(url, '_blank');
+  rotMarkRouteSent(index, { silent:true });
 }
 
 function rotCopiarLinkPortal(index) {
@@ -18457,6 +19019,9 @@ function rotWhatsAppTudo() {
   const txt = rotDados.map(eq => eq.whatsappText).join('\n\n');
   const url = `https://wa.me/?text=${encodeURIComponent(txt.trim())}`;
   window.open(url, '_blank');
+  rotDados.forEach((eq, index) => rotMarkRouteSent(index, { silent:true, skipRefresh:true }));
+  rotRefreshPlanningViews();
+  toast(`${rotDados.length} roteiro(s) marcados como enviados`, 'ok');
 }
 
 function rotCopiarTudo() {
