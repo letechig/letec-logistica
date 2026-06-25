@@ -3932,26 +3932,36 @@ async function carregarVeiculos(){
       <div class="flex ic sb mb3">
         <div>
           <div class="section-title">Mapa & Roteiros</div>
-            <div class="section-sub">Visualize serviços no mapa, filtre equipes e monte a sequência do dia.</div>
+            <div class="section-sub">Planeje rotas por equipe, veículo e período.</div>
         </div>
         <div class="flex gap2" style="flex-wrap:wrap;align-items:center">
-          <input type="date" class="fsel" id="rot-data" onchange="rotGerarDoSistema()">
+          <div class="op-map-range">
+            <button class="btn btn-ghost btn-sm" onclick="opMapSetRoteirosPeriod('day',0)">Hoje</button>
+            <button class="btn btn-ghost btn-sm" onclick="opMapSetRoteirosPeriod('day',1)">Amanhã</button>
+            <button class="btn btn-ghost btn-sm" onclick="opMapSetRoteirosPeriod('week',0)">Semana</button>
+          </div>
+          <input type="date" class="fsel" id="rot-data" onchange="renderMapaRoteiros()">
           <button class="btn btn-primary btn-sm" onclick="rotGerarDoSistema()">Montar roteiro do dia</button>
         </div>
       </div>
 
       <div class="flow-guide">
-        <div class="flow-guide-step"><span class="flow-guide-num">1</span><div><div class="flow-guide-title">Escolha a data</div><div class="flow-guide-text">Use a data do dia ou revise um período específico.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">2</span><div><div class="flow-guide-title">Monte o roteiro</div><div class="flow-guide-text">O sistema agrupa por técnico e mostra a sequência.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Revise por técnico</div><div class="flow-guide-text">Confira horários, endereços e alertas antes de enviar.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">4</span><div><div class="flow-guide-title">Enviar ou copiar</div><div class="flow-guide-text">Envie aos técnicos ou use copiar como fallback.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">1</span><div><div class="flow-guide-title">Escolha o período</div><div class="flow-guide-text">Revise dia, amanhã ou semana antes de executar a operação.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">2</span><div><div class="flow-guide-title">Analise a distribuição</div><div class="flow-guide-text">Compare equipes, veículos e serviços sem rota definida.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Abra rotas</div><div class="flow-guide-text">Use Google Maps por parada ou por grupo quando houver endereço suficiente.</div></div></div>
+        <div class="flow-guide-step"><span class="flow-guide-num">4</span><div><div class="flow-guide-title">Prepare ajustes</div><div class="flow-guide-text">Abra o serviço para corrigir equipe, veículo, endereço ou horário.</div></div></div>
       </div>
 
       <div class="op-map-toolbar op-map-toolbar-full">
         <select class="fsel" id="mapa-rot-periodo" onchange="renderMapaRoteiros()">
-          <option value="day">Dia</option>
-          <option value="week">Semana</option>
-          <option value="month">Mês</option>
+          <option value="day">Dia da data</option>
+          <option value="week">Semana da data</option>
+        </select>
+        <select class="fsel" id="mapa-rot-view" onchange="renderMapaRoteiros()">
+          <option value="list">Visualizar: Lista geral</option>
+          <option value="vehicle">Visualizar: Por veículo</option>
+          <option value="team">Visualizar: Por equipe</option>
+          <option value="day">Visualizar: Por dia</option>
         </select>
         <select class="fsel" id="mapa-rot-equipe" onchange="renderMapaRoteiros()"></select>
         <select class="fsel" id="mapa-rot-veiculo" onchange="renderMapaRoteiros()"></select>
@@ -5307,6 +5317,63 @@ async function carregarVeiculos(){
 .op-map-legend-dot.green { background:var(--green); }
 .op-map-legend-dot.gray { background:#94a3b8; }
 .op-map-legend-token { display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+.op-map-plan-head { display:flex; flex-direction:column; gap:4px; }
+.op-map-plan-title { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; font-weight:900; font-size:13px; color:var(--text); }
+.op-map-plan-sub { color:var(--text3); font-size:11px; line-height:1.35; }
+.op-map-plan-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.op-map-plan-kpi {
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--card2);
+  padding:8px;
+}
+.op-map-plan-kpi-label { color:var(--text3); font-size:9px; text-transform:uppercase; letter-spacing:.08em; }
+.op-map-plan-kpi-value { margin-top:2px; font-family:var(--display); font-size:16px; font-weight:900; color:var(--text); }
+.op-map-plan-kpi-value.small { font-family:var(--body); font-size:11px; line-height:1.25; color:var(--text3); }
+.op-map-plan-section {
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--card);
+  padding:9px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.op-map-plan-section.warn { border-color:rgba(234,88,12,.28); background:var(--orange-bg); }
+.op-map-plan-section-title { display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:900; font-size:12px; color:var(--text); }
+.op-map-plan-group {
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:var(--card2);
+  padding:8px;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+.op-map-plan-group-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.op-map-plan-group-title { font-weight:900; font-size:12px; color:var(--text); }
+.op-map-plan-group-meta { margin-top:3px; color:var(--text3); font-size:10px; line-height:1.35; }
+.op-map-plan-stops { display:flex; flex-direction:column; gap:6px; }
+.op-map-plan-stop {
+  border:1px solid var(--border);
+  border-left:3px solid var(--blue);
+  border-radius:var(--r2);
+  background:var(--card);
+  padding:7px;
+  cursor:pointer;
+}
+.op-map-plan-stop.red { border-left-color:var(--red); }
+.op-map-plan-stop.orange { border-left-color:var(--orange); }
+.op-map-plan-stop.green { border-left-color:var(--green); }
+.op-map-plan-stop.gray { border-left-color:#94a3b8; }
+.op-map-plan-stop-row { display:grid; grid-template-columns:24px minmax(0,1fr) auto; gap:8px; align-items:start; }
+.op-map-plan-stop-main { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.op-map-plan-stop-client { font-weight:900; font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.op-map-plan-stop-meta { display:flex; flex-wrap:wrap; gap:5px; color:var(--text2); font-size:10px; line-height:1.25; }
+.op-map-plan-stop-time { font-family:var(--mono); color:var(--text); font-weight:900; }
+.op-map-plan-stop-actions { margin-top:6px; margin-left:32px; display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.op-map-plan-route-disabled { color:var(--text3); font-size:10px; font-weight:800; }
+.op-map-plan-note { color:var(--text3); font-size:11px; line-height:1.45; }
 .op-map-group { display:flex; flex-direction:column; gap:8px; }
 .op-map-group-title {
   display:flex;
@@ -8062,7 +8129,7 @@ function renderVeiculosSelect(selectId, selectedValue = '') {
 const PAGE_META = {
   dashboard:  { title:'Dashboard / Gestão', sub:'Resumo gerencial e indicadores' },
   agenda:     { title:'Agenda de Serviços', sub:'Planeje, cadastre e acompanhe os serviços' },
-  roteiro:    { title:'Mapa & Roteiros',    sub:'Visualize serviços, equipes, veículos e sequência operacional' },
+  roteiro:    { title:'Mapa & Roteiros',    sub:'Planeje rotas por equipe, veículo e período' },
   comunicacao:{ title:'WhatsApp e Confirmações', sub:'Confirmações, lembretes e mensagens enviadas' },
   rotas:      { title:'Rotas & KM',          sub:'Eficiência de deslocamento e KM rodados' },
   checklist:  { title:'Checklist Diário',   sub:'Registro de saída, retorno e conferência' },
@@ -8187,7 +8254,7 @@ function refreshPageAfterModuleLoad(page) {
     equipes: renderEquipes,
     'servicos-funcionario': renderServicosFuncionario,
     historico: renderHist,
-    roteiro: rotGerarDoSistema
+    roteiro: renderMapaRoteiros
   };
   if (renderers[page]) renderers[page]();
   updateBadges();
@@ -8267,7 +8334,7 @@ window.nav = function(page, btn) {
   document.getElementById('page-sub').textContent   = meta.sub   || '';
   currentPage = page;
   try { localStorage.setItem(CURRENT_PAGE_PREF_KEY, page); } catch(e) {}
-  const renders = { dashboard: renderDash, agenda: renderAgenda, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, 'servicos-funcionario': renderServicosFuncionario, historico: renderHist, roteiro: rotGerarDoSistema };
+  const renders = { dashboard: renderDash, agenda: renderAgenda, hoje: renderHoje, rotas: renderRotas, frota: renderFrota, estoque: renderInventory, equipes: renderEquipes, 'servicos-funcionario': renderServicosFuncionario, historico: renderHist, roteiro: renderMapaRoteiros };
   if (renders[page]) renders[page]();
   ensureModuleLoaded(page).catch(() => {});
   updateBadges();
@@ -8645,8 +8712,8 @@ function calIrParaHoje() {
 // Alias: calRenderMonth → renderAgenda (mantido para compatibilidade de chamadas externas)
 function calRenderMonth() { renderAgenda(); }
 
-// Alias: renderRoteiro → rotGerarDoSistema (mantido para compatibilidade de chamadas externas)
-function renderRoteiro() { rotGerarDoSistema(); }
+// Alias: renderRoteiro → renderMapaRoteiros (mantido para compatibilidade de chamadas externas)
+function renderRoteiro() { renderMapaRoteiros(); }
 
 function agSetView(v) {
   agView = v;
@@ -9687,7 +9754,7 @@ function irParaRoteiro(dt) {
   const rd = document.getElementById('rot-data');
   if (rd) rd.value = dt;
   nav('roteiro', document.querySelector('[onclick*="roteiro"]'));
-  setTimeout(() => rotGerarDoSistema(), 50);
+  setTimeout(() => renderMapaRoteiros(dt), 50);
 }
 
 // ── Drag-and-Drop ─────────────────────────────────────────
@@ -10599,9 +10666,10 @@ function opMapLateLabel(item = {}) {
 function opMapPopupHtml(item, options = {}) {
   const renderAfter = typeof options === 'string' ? options : (options.renderAfter || 'renderHoje()');
   const compact = typeof options === 'object' && !!options.compactPopup;
+  const planning = typeof options === 'object' && !!options.planningPopup;
   const meta = opMapStatusMeta(item.statusKey);
   const id = jsArg(item.id);
-  const route = opMapRouteUrl(item);
+  const route = planning ? opMapRouteUrlForPlanning(item) : opMapRouteUrl(item);
   const shortAddress = opMapShortAddress(item.endereco);
   const secondaryActions = compact ? '' : `
       <button onclick="comEnviarConfirmacaoServico(${id})">Enviar WhatsApp</button>
@@ -10609,15 +10677,17 @@ function opMapPopupHtml(item, options = {}) {
       ${item.statusKey !== 'executado' ? `<button class="orange" onclick="setSt(${id},'reagendado');${renderAfter}">Reagendar</button>` : ''}`;
   return `<div class="op-map-popup">
     <div class="op-map-popup-title">${sanitize(item.cliente)}</div>
+    ${planning ? `<div class="op-map-popup-line"><strong>Data:</strong> ${sanitize(opMapDateLabel(item.date))}</div>` : ''}
     <div class="op-map-popup-line"><strong>Horário:</strong> ${sanitize(item.horario || '—')}</div>
     <div class="op-map-popup-line"><strong>Equipe:</strong> ${sanitize(item.equipe || 'Sem equipe')}</div>
     <div class="op-map-popup-line"><strong>Veículo:</strong> ${sanitize(item.veiculo || '—')}</div>
+    ${planning ? `<div class="op-map-popup-line"><strong>Tipo:</strong> ${sanitize(item.tipo || 'Serviço')}</div>` : ''}
     <div class="op-map-popup-line"><strong>Endereço:</strong> ${sanitize(shortAddress)}</div>
     <div class="op-map-popup-line"><span class="chip ${meta.chip}">${meta.label}</span></div>
     <div class="op-map-popup-actions">
       <button class="primary" onclick="openEditSvc(${id})">Abrir serviço</button>
       ${secondaryActions}
-      <a href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Abrir rota</a>
+      ${route ? `<a href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Abrir rota</a>` : '<span class="op-map-plan-route-disabled">Endereço insuficiente para rota</span>'}
     </div>
   </div>`;
 }
@@ -10881,6 +10951,319 @@ function opMapVehicleSummaryHtml(items = []) {
     <div class="op-map-item-head"><div class="op-map-item-client">${sanitize(vehicle)}</div><span class="chip chip-blue">${row.total} serviço(s)</span></div>
     <div class="op-map-item-meta"><span>Atrasados: ${row.atrasados} · Pendentes: ${row.pendentes}</span><span>KM/tempo: calculado quando houver rota do dia.</span></div>
   </div>`).join('')}</div>`;
+}
+
+function opMapSetRoteirosPeriod(period = 'day', offsetDays = 0) {
+  const today = new Date().toISOString().split('T')[0];
+  const selectedDate = opMapDateShift(today, offsetDays);
+  const dateEl = document.getElementById('rot-data');
+  const periodEl = document.getElementById('mapa-rot-periodo');
+  const viewEl = document.getElementById('mapa-rot-view');
+
+  if (dateEl) dateEl.value = selectedDate;
+  if (periodEl) periodEl.value = period === 'week' ? 'week' : 'day';
+  if (viewEl && period !== 'week' && viewEl.value === 'day') viewEl.value = 'list';
+  renderMapaRoteiros(selectedDate);
+}
+
+function opMapRoteirosView(period = 'day') {
+  const viewEl = document.getElementById('mapa-rot-view');
+  if (!viewEl) return 'list';
+  const dayOption = viewEl.querySelector('option[value="day"]');
+  if (dayOption) dayOption.disabled = period !== 'week';
+  const allowed = ['list', 'vehicle', 'team', 'day'];
+  let value = allowed.includes(viewEl.value) ? viewEl.value : 'list';
+  if (period !== 'week' && value === 'day') {
+    value = 'list';
+    viewEl.value = value;
+  }
+  return value;
+}
+
+function opMapRouteTarget(item = {}) {
+  if (item.location) return `${item.location.lat},${item.location.lng}`;
+  if (!opMapAddressIncomplete(item)) return item.endereco;
+  return '';
+}
+
+function opMapCanRouteItem(item = {}) {
+  return !!opMapRouteTarget(item);
+}
+
+function opMapRouteActionHtml(item = {}) {
+  const target = opMapRouteTarget(item);
+  if (!target) return '<span class="op-map-plan-route-disabled">Endereço insuficiente para rota</span>';
+  const params = new URLSearchParams({
+    api: '1',
+    origin: `${OP_MAP_BASE_COORDS.lat},${OP_MAP_BASE_COORDS.lng}`,
+    destination: target,
+    travelmode: 'driving'
+  });
+  return `<a class="op-map-mini-btn" href="https://www.google.com/maps/dir/?${params.toString()}" target="_blank" rel="noopener">Rota</a>`;
+}
+
+function opMapRouteUrlForPlanning(item = {}) {
+  const target = opMapRouteTarget(item);
+  if (!target) return '';
+  const params = new URLSearchParams({
+    api: '1',
+    origin: `${OP_MAP_BASE_COORDS.lat},${OP_MAP_BASE_COORDS.lng}`,
+    destination: target,
+    travelmode: 'driving'
+  });
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function opMapGroupRouteUrl(items = []) {
+  const ordered = [...(items || [])].sort((a, b) =>
+    (a.date || '').localeCompare(b.date || '') ||
+    (a.horario || '99:99').localeCompare(b.horario || '99:99')
+  );
+  const stops = ordered.map(opMapRouteTarget).filter(Boolean);
+  if (!stops.length) return '';
+  if (stops.length === 1) {
+    const item = ordered.find(stop => opMapRouteTarget(stop) === stops[0]) || ordered[0];
+    return opMapRouteUrlForPlanning(item);
+  }
+  const destination = stops[stops.length - 1];
+  const waypoints = stops.slice(0, -1);
+  const params = new URLSearchParams({
+    api: '1',
+    origin: `${OP_MAP_BASE_COORDS.lat},${OP_MAP_BASE_COORDS.lng}`,
+    destination,
+    travelmode: 'driving'
+  });
+  if (waypoints.length) params.set('waypoints', waypoints.slice(0, 8).join('|'));
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function opMapGroupRouteActionHtml(items = []) {
+  const url = opMapGroupRouteUrl(items);
+  if (!url) return '<span class="op-map-plan-route-disabled">Endereço insuficiente para rota</span>';
+  return `<a class="op-map-mini-btn primary" href="${escapeHtmlAttr(url)}" target="_blank" rel="noopener">Abrir rota do grupo</a>`;
+}
+
+function opMapPlanningIssueLabels(item = {}) {
+  return [
+    !item.hasEquipe ? 'Sem equipe' : '',
+    !item.hasVeiculo ? 'Sem veículo' : '',
+    opMapAddressIncomplete(item) ? 'Endereço incompleto' : '',
+    !item.location ? 'Sem geolocalização' : ''
+  ].filter(Boolean);
+}
+
+function opMapPlanningRouteMetricsForItems(items = [], routeGroups = []) {
+  const itemIds = new Set((items || []).map(item => String(item.id)));
+  const matchingGroups = (routeGroups || []).filter(group => {
+    const groupIds = new Set();
+    (group.svcs || []).forEach(service => groupIds.add(String(service.id)));
+    (group.sequencia || []).forEach(step => {
+      const service = step.servico || step.service || {};
+      if (service.id !== undefined && service.id !== null) groupIds.add(String(service.id));
+    });
+    return [...groupIds].some(id => itemIds.has(id));
+  });
+  const km = matchingGroups.reduce((sum, group) => sum + Number(group.kmTotal || 0), 0);
+  const min = matchingGroups.reduce((sum, group) => sum + Number(group.tempoTotalMin || group.tempoDeslocamentoMin || 0), 0);
+  return {
+    hasKm: km > 0,
+    hasMin: min > 0,
+    km,
+    min,
+    groups: matchingGroups.length
+  };
+}
+
+function opMapPlanningCounts(items = [], routeGroups = []) {
+  const teams = new Set(items.filter(item => item.hasEquipe).map(item => item.equipe).filter(Boolean));
+  const vehicles = new Set(items.filter(item => item.hasVeiculo).map(item => item.veiculo).filter(Boolean));
+  const metrics = opMapPlanningRouteMetricsForItems(items, routeGroups);
+  return {
+    total: items.length,
+    teams: teams.size,
+    vehicles: vehicles.size,
+    atrasados: items.filter(item => item.statusKey === 'atrasado').length,
+    pendentes: items.filter(item => item.statusKey === 'pendente' || item.statusKey === 'critico').length,
+    executados: items.filter(item => item.statusKey === 'executado').length,
+    reagendados: items.filter(item => String(item.service?.status || item.service?.st || '').toLowerCase() === 'reagendado').length,
+    semEquipe: items.filter(item => !item.hasEquipe).length,
+    semVeiculo: items.filter(item => !item.hasVeiculo).length,
+    semEndereco: items.filter(opMapAddressIncomplete).length,
+    semGeo: items.filter(item => !item.location).length,
+    routeKm: metrics.km,
+    routeMin: metrics.min,
+    hasKm: metrics.hasKm,
+    hasMin: metrics.hasMin
+  };
+}
+
+function opMapPlanningMetricHtml(value, available = true) {
+  if (!available) return '<span class="op-map-summary-unavailable">Estimativa indisponível</span>';
+  return sanitize(value);
+}
+
+function opMapPlanningSummaryHtml(items = [], routeGroups = []) {
+  const c = opMapPlanningCounts(items, routeGroups);
+  const kmValue = c.hasKm ? `${Number(c.routeKm || 0).toFixed(1).replace('.', ',')} km` : '';
+  const minValue = c.hasMin
+    ? (typeof formatarMinutosHM === 'function' ? formatarMinutosHM(Math.round(c.routeMin)) : `${Math.round(c.routeMin)} min`)
+    : '';
+  const cards = [
+    ['Serviços', c.total],
+    ['Equipes', c.teams],
+    ['Veículos', c.vehicles],
+    ['Pendentes', c.pendentes, 'color:var(--orange)'],
+    ['Executados', c.executados, 'color:var(--green)'],
+    ['Atrasados', c.atrasados, 'color:var(--red)'],
+    ['Reagendados', c.reagendados, 'color:var(--orange)'],
+    ['Sem equipe', c.semEquipe],
+    ['Sem veículo', c.semVeiculo],
+    ['Sem endereço', c.semEndereco],
+    ['Sem geo', c.semGeo],
+    ['KM estimado', opMapPlanningMetricHtml(kmValue, c.hasKm), '', true],
+    ['Tempo desloc.', opMapPlanningMetricHtml(minValue, c.hasMin), '', true]
+  ];
+  return `<div class="op-map-plan-summary">${cards.map(([label, value, style = '', raw = false]) => `<div class="op-map-plan-kpi">
+    <div class="op-map-plan-kpi-label">${sanitize(label)}</div>
+    <div class="op-map-plan-kpi-value ${raw ? 'small' : ''}" style="${escapeHtmlAttr(style)}">${raw ? value : sanitize(value)}</div>
+  </div>`).join('')}</div>`;
+}
+
+function opMapPlanningDayLabel(dateStr = '') {
+  if (!dateStr) return 'Sem data';
+  const date = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return opMapDateLabel(dateStr);
+  const weekDay = date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+  return `${opMapDateLabel(dateStr)} · ${weekDay}`;
+}
+
+function opMapPlanningGroups(items = [], view = 'list') {
+  if (view === 'list') return [{ label:'Lista geral', items:[...(items || [])] }];
+  const groups = new Map();
+  (items || []).forEach(item => {
+    let label = 'Sem grupo';
+    if (view === 'vehicle') label = item.hasVeiculo ? item.veiculo : 'Sem veículo';
+    if (view === 'team') label = item.hasEquipe ? item.equipe : 'Sem equipe';
+    if (view === 'day') label = item.date || 'Sem data';
+    const key = view === 'day' ? label : (normalizarNome(label) || 'sem-grupo');
+    if (!groups.has(key)) groups.set(key, { label, items: [] });
+    groups.get(key).items.push(item);
+  });
+  const rows = [...groups.values()];
+  if (view === 'day') return rows.sort((a, b) => String(a.label).localeCompare(String(b.label))).map(group => ({ ...group, label: opMapPlanningDayLabel(group.label) }));
+  return rows.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+}
+
+function opMapPlanningStopHtml(item, index, canvasId = '') {
+  const meta = opMapStatusMeta(item.statusKey);
+  const colorClass = opMapPinClass(item);
+  const id = jsArg(item.id);
+  const late = opMapLateLabel(item);
+  const issues = opMapPlanningIssueLabels(item);
+  return `<div class="op-map-plan-stop ${colorClass}" onclick="opMapFocus('${canvasId}', ${id})">
+    <div class="op-map-plan-stop-row">
+      <div class="op-map-item-order">${index}</div>
+      <div class="op-map-plan-stop-main">
+        <div class="op-map-plan-stop-client" title="${escapeHtmlAttr(item.cliente)}">${sanitize(item.cliente)}</div>
+        <div class="op-map-plan-stop-meta">
+          <span class="op-map-plan-stop-time">${sanitize(opMapDateLabel(item.date))} · ${sanitize(item.horario || '—')}</span>
+          <span>${sanitize(item.hasEquipe ? item.equipe : 'Sem equipe')}</span>
+          <span>${sanitize(opMapVehicleIcon(item))} ${sanitize(item.hasVeiculo ? item.veiculo : 'Sem veículo')}</span>
+          <span>${sanitize(item.tipo || 'Serviço')}</span>
+        </div>
+        <div class="op-map-plan-stop-meta">
+          <span>${sanitize(opMapShortAddress(item.endereco, 66))}</span>
+          ${late ? `<span style="color:var(--red);font-weight:800">${sanitize(late)}</span>` : ''}
+          ${issues.map(issue => `<span class="op-map-mini-warn">${sanitize(issue)}</span>`).join('')}
+        </div>
+      </div>
+      <span class="chip ${meta.chip}">${opMapQuickStatusLabel(item.statusKey)}</span>
+    </div>
+    <div class="op-map-plan-stop-actions" onclick="event.stopPropagation()">
+      <button class="op-map-mini-btn primary" onclick="openEditSvc(${id})">Abrir serviço</button>
+      ${opMapRouteActionHtml(item)}
+    </div>
+  </div>`;
+}
+
+function opMapPlanningGroupHtml(group = {}, startIndex = 0, canvasId = '', routeGroups = []) {
+  const items = group.items || [];
+  const c = opMapPlanningCounts(items, routeGroups);
+  const kmText = c.hasKm ? `${Number(c.routeKm || 0).toFixed(1).replace('.', ',')} km` : 'Estimativa indisponível';
+  const minText = c.hasMin
+    ? (typeof formatarMinutosHM === 'function' ? formatarMinutosHM(Math.round(c.routeMin)) : `${Math.round(c.routeMin)} min`)
+    : 'Estimativa indisponível';
+  return `<div class="op-map-plan-group">
+    <div class="op-map-plan-group-head">
+      <div>
+        <div class="op-map-plan-group-title">${sanitize(group.label || 'Lista geral')}</div>
+        <div class="op-map-plan-group-meta">${items.length} serviço(s) · ${c.vehicles} veículo(s) · ${c.teams} equipe(s) · ${c.atrasados} atrasado(s) · ${c.pendentes} pendente(s)</div>
+        <div class="op-map-plan-group-meta">KM: ${sanitize(kmText)} · Tempo: ${sanitize(minText)}</div>
+      </div>
+      <div onclick="event.stopPropagation()">${opMapGroupRouteActionHtml(items)}</div>
+    </div>
+    <div class="op-map-plan-stops">${items.map((item, index) => opMapPlanningStopHtml(item, startIndex + index + 1, canvasId)).join('')}</div>
+  </div>`;
+}
+
+function opMapUndefinedRouteItems(items = []) {
+  return (items || []).filter(item => !item.hasEquipe || !item.hasVeiculo || opMapAddressIncomplete(item) || !item.location);
+}
+
+function opMapUndefinedRouteHtml(items = [], canvasId = '') {
+  const undefinedItems = opMapUndefinedRouteItems(items);
+  const visible = undefinedItems.slice(0, 8);
+  const hidden = undefinedItems.length - visible.length;
+  return `<div class="op-map-plan-section warn">
+    <div class="op-map-plan-section-title"><span>Sem rota definida</span><span>${undefinedItems.length}</span></div>
+    ${undefinedItems.length ? visible.map(item => `<div class="op-map-alert-row">
+      <strong>${sanitize(item.cliente)}:</strong> ${sanitize(opMapPlanningIssueLabels(item).join(' · ') || 'Pendência logística')}
+      <button class="op-map-mini-btn" onclick="openEditSvc(${jsArg(item.id)})">Abrir</button>
+      ${item.location ? `<button class="op-map-mini-btn" onclick="opMapFocus('${canvasId}', ${jsArg(item.id)})">Mapa</button>` : ''}
+    </div>`).join('') : '<div class="op-map-plan-note">Nenhum serviço sem rota definida nos filtros atuais.</div>'}
+    ${hidden > 0 ? `<div class="op-map-plan-note">+${hidden} serviço(s) com pendência logística.</div>` : ''}
+  </div>`;
+}
+
+function opMapPlanningAlertsHtml(items = []) {
+  const alerts = opMapOperationalAlerts(items);
+  const visible = alerts.slice(0, 10);
+  const hidden = alerts.length - visible.length;
+  return `<div class="op-map-plan-section">
+    <div class="op-map-plan-section-title"><span>Atenções logísticas</span><span>${alerts.length}</span></div>
+    ${alerts.length ? visible.map(alert => `<div class="op-map-alert-row"><strong>${sanitize(alert.title)}:</strong> ${sanitize(alert.service)}${alert.detail ? ` · ${sanitize(alert.detail)}` : ''}</div>`).join('') : '<div class="op-map-plan-note">Nenhuma atenção logística encontrada para este período.</div>'}
+    ${hidden > 0 ? `<div class="op-map-plan-note">+${hidden} atenção(ões) adicionais nos filtros atuais.</div>` : ''}
+  </div>`;
+}
+
+function opMapPlanningSideHtml(items = [], view = 'list', period = 'day', routeGroups = [], canvasId = '') {
+  const views = {
+    list: 'Lista geral',
+    vehicle: 'Por veículo',
+    team: 'Por equipe',
+    day: 'Por dia'
+  };
+  const normalizedView = period === 'week' ? view : (view === 'day' ? 'list' : view);
+  const groups = opMapPlanningGroups(items, normalizedView);
+  let counter = 0;
+  const groupsHtml = groups.map(group => {
+    const html = opMapPlanningGroupHtml(group, counter, canvasId, routeGroups);
+    counter += (group.items || []).length;
+    return html;
+  }).join('');
+  return `<div class="op-map-plan-head">
+      <div>
+        <div class="op-map-plan-title">Planejamento de rotas</div>
+        <div class="op-map-plan-sub">${items.length} serviço(s) · ${sanitize(views[normalizedView] || views.list)}</div>
+      </div>
+      ${opMapGroupRouteActionHtml(items)}
+    </div>
+    ${opMapPlanningSummaryHtml(items, routeGroups)}
+    ${opMapLegendHtml()}
+    <div class="op-map-plan-note">Ordem atual: por horário. A roteirização automática futura usará esta estrutura como base.</div>
+    ${items.length ? groupsHtml : '<div class="op-map-empty">Nenhum serviço para os filtros selecionados.</div>'}
+    ${opMapUndefinedRouteHtml(items, canvasId)}
+    ${opMapPlanningAlertsHtml(items)}`;
 }
 
 function opMapSetHojeRange(range) {
@@ -16072,6 +16455,7 @@ function confirmAction(message){
 // ════════════════════════════════════════════════
 
 let rotDados = [];     // [{equipe, veiculo, svcs:[], sequencia, whatsappText}]
+let rotDadosData = '';
 const ROT_FALLBACK_MSG = 'Rota otimizada indisponível (configure Google Maps API)';
 const ROT_BASE_PLUS_CODE = 'R. Maria José Rangel, 135 - Vila Sao Paulo, São Paulo - SP';
 const rotDistanceCache = new Map();
@@ -17261,9 +17645,14 @@ async function comEnviarLembreteServico(id) {
 }
 
 function renderMapaRoteiros(dateOverride = '') {
-  const date = dateOverride || document.getElementById('rot-data')?.value || new Date().toISOString().split('T')[0];
+  const dateEl = document.getElementById('rot-data');
+  const date = dateOverride || dateEl?.value || new Date().toISOString().split('T')[0];
+  if (dateEl && dateEl.value !== date) dateEl.value = date;
   const periodoEl = document.getElementById('mapa-rot-periodo');
-  const periodo = periodoEl?.value || 'day';
+  let periodo = periodoEl?.value || 'day';
+  if (periodo !== 'week') periodo = 'day';
+  if (periodoEl && periodoEl.value !== periodo) periodoEl.value = periodo;
+  const viewValue = opMapRoteirosView(periodo);
   const bounds = opMapPeriodBounds(date, periodo);
   const source = services.filter(s => opMapServiceInBounds(s, bounds));
   const allItems = opMapBuildItems(source, { date });
@@ -17283,40 +17672,36 @@ function renderMapaRoteiros(dateOverride = '') {
   if (tipoEl) tipoEl.innerHTML = opMapOptionsHtml(allItems.map(i => i.tipo), 'Todos os tipos', tipoValue);
 
   const filtered = opMapFilterItems(allItems, {
-    equipe: equipeValue,
-    veiculo: veiculoValue,
+    equipe: equipeEl?.value || '',
+    veiculo: veiculoEl?.value || '',
     status: statusValue,
-    tipo: tipoValue
+    tipo: tipoEl?.value || ''
   });
   const container = document.getElementById('mapa-roteiros-operacional');
   if (!container) return;
-  const routeGroups = periodo === 'day' ? rotDados : [];
-  const periodLabel = periodo === 'month' ? 'mês' : periodo === 'week' ? 'semana' : 'dia';
+  const routeGroups = periodo === 'day' && rotDadosData === date ? rotDados : [];
+  const periodTitle = periodo === 'week' ? 'Mapa logístico da semana' : 'Mapa logístico do dia';
+  const boundsLabel = bounds.start === bounds.end ? bounds.start : `${bounds.start} até ${bounds.end}`;
   container.innerHTML = `<div class="op-map-card">
     <div class="op-map-head">
       <div>
-        <div class="op-map-title">Mapa operacional do ${periodLabel}</div>
-        <div class="op-map-sub">${bounds.start === bounds.end ? bounds.start : `${bounds.start} até ${bounds.end}`} · ${filtered.length} serviço(s)</div>
+        <div class="op-map-title">${periodTitle}</div>
+        <div class="op-map-sub">${boundsLabel} · ${filtered.length} serviço(s) · planejamento operacional</div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="opMapOpenBase()">Abrir base</button>
     </div>
     <div class="op-map-layout">
       <div id="op-map-roteiros-canvas" class="op-map-canvas"></div>
       <div class="op-map-side">
-        <div class="op-map-side-title"><span>Resumo por veículo</span><span>${filtered.length}</span></div>
-        ${opMapSummaryHtml(filtered, routeGroups)}
-        ${opMapVehicleSummaryHtml(filtered)}
-        <div class="op-map-side-title"><span>Ordem dos serviços</span><span>${filtered.length}</span></div>
-        ${opMapListHtml(filtered, 'op-map-roteiros-canvas')}
-        <div class="op-map-note">Roteirização automática diária, semanal e mensal ficará preparada sobre esta estrutura em etapa futura.</div>
+        ${opMapPlanningSideHtml(filtered, viewValue, periodo, routeGroups, 'op-map-roteiros-canvas')}
       </div>
     </div>
   </div>`;
   opMapResolveLocations(filtered).then(items => {
-    opMapRenderLeaflet('op-map-roteiros-canvas', items, { renderAfter:'rotGerarDoSistema()' });
+    opMapRenderLeaflet('op-map-roteiros-canvas', items, { renderAfter:'renderMapaRoteiros()', compactPopup:true, planningPopup:true });
     const side = container.querySelector('.op-map-side');
     if (side) {
-      side.innerHTML = `<div class="op-map-side-title"><span>Resumo por veículo</span><span>${items.length}</span></div>${opMapSummaryHtml(items, routeGroups)}${opMapVehicleSummaryHtml(items)}<div class="op-map-side-title"><span>Ordem dos serviços</span><span>${items.length}</span></div>${opMapListHtml(items, 'op-map-roteiros-canvas')}<div class="op-map-note">Roteirização automática diária, semanal e mensal ficará preparada sobre esta estrutura em etapa futura.</div>`;
+      side.innerHTML = opMapPlanningSideHtml(items, viewValue, periodo, routeGroups, 'op-map-roteiros-canvas');
     }
   });
 }
@@ -17325,6 +17710,11 @@ function renderMapaRoteiros(dateOverride = '') {
 async function rotGerarDoSistema() {
   const data = document.getElementById('rot-data')?.value;
   if (!data) { toast('Selecione uma data', 'err'); return; }
+  const periodoEl = document.getElementById('mapa-rot-periodo');
+  const viewEl = document.getElementById('mapa-rot-view');
+  if (periodoEl) periodoEl.value = 'day';
+  if (viewEl && viewEl.value === 'day') viewEl.value = 'list';
+  rotDadosData = data;
   try {
     const daySvcs = services.filter(s => getServiceDateValue(s) === data);
     if (!daySvcs.length) {
@@ -19189,7 +19579,7 @@ function refreshPages() {
   updateBadges();
   if (currentPage === 'agenda') renderAgenda();
   if (currentPage === 'hoje') renderHoje();
-  if (currentPage === 'roteiro') rotGerarDoSistema();
+  if (currentPage === 'roteiro') renderMapaRoteiros();
   if (currentPage === 'estoque') renderInventory();
   if (currentPage === 'servicos-funcionario') renderServicosFuncionario();
 }
@@ -19224,7 +19614,7 @@ function init(){
   const hd=document.getElementById('hoje-date');if(hd)hd.value=today;
   const rd=document.getElementById('rota-date');if(rd)rd.value=today;
   const cd=document.getElementById('cl-data');if(cd)cd.value=today;
-  // Roteiro: inicializar com hoje e gerar
+  // Roteiro: inicializar com hoje
   const rotd=document.getElementById('rot-data');if(rotd)rotd.value=today;
   // Footer date
   const footerDate = document.getElementById('footer-date');
