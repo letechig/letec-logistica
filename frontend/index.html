@@ -14925,12 +14925,32 @@ function dedupGroupHtml(group, groupIndex, focusIds = []) {
     </div>`;
 }
 
+async function fetchDeduplicationAudit() {
+  try {
+    const audit = await requestBackendJson('/api/customers/deduplication-audit');
+    return { ...(audit || {}), legacy: false, groups: audit?.groups || [] };
+  } catch (error) {
+    if (Number(error.status) !== 404) throw error;
+    const groups = await requestBackendJson('/api/customers/duplicates');
+    return {
+      ok: true,
+      legacy: true,
+      total_groups: Array.isArray(groups) ? groups.length : 0,
+      high_confidence: 0,
+      review: Array.isArray(groups) ? groups.length : 0,
+      customers_affected: (Array.isArray(groups) ? groups : []).reduce((total, group) => total + (group.group?.length || 0), 0),
+      links_to_move: 0,
+      groups: Array.isArray(groups) ? groups : []
+    };
+  }
+}
+
 async function loadDuplicates() {
   try {
     const content = document.getElementById('duplicates-content');
     content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">🔍 Procurando duplicatas em toda a base...</div>';
 
-    const audit = await requestBackendJson('/api/customers/deduplication-audit');
+    const audit = await fetchDeduplicationAudit();
     const focusIds = _duplicatesModalState.focusIds || [];
     const duplicates = audit.groups || [];
     const filteredDuplicates = focusIds.length
@@ -14965,6 +14985,7 @@ async function loadDuplicates() {
         <div style="font-size:12px;color:var(--text3)">
           ${affected} cliente(s) aparecem em grupos suspeitos. Revise, marque os grupos aprovados e use <b>Mesclar selecionados</b>.
           ${focusIds.length ? `<div style="color:var(--orange);margin-top:6px">Filtro ativo para clientes relacionados a ${sanitize(_duplicatesModalState.sourceName || 'este alerta')}.</div>` : ''}
+          ${audit.legacy ? '<div style="color:var(--orange);margin-top:6px">Backend ainda não atualizou o saneamento novo; usando modo compatível temporário.</div>' : ''}
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:16px">
@@ -15026,10 +15047,27 @@ async function mergeSelectedDuplicates(groupIndexes = null) {
   if (!confirmAction(`Mesclar ${groups.length} grupo(s) e inativar ${duplicatesCount} cadastro(s) duplicado(s)?\n\nO histórico será preservado e reapontado para o cliente principal.`)) return;
 
   try {
-    const result = await requestBackendJson('/api/customers/deduplication-merge', {
-      method: 'POST',
-      body: JSON.stringify({ groups })
-    });
+    let result;
+    try {
+      result = await requestBackendJson('/api/customers/deduplication-merge', {
+        method: 'POST',
+        body: JSON.stringify({ groups })
+      });
+    } catch (error) {
+      if (Number(error.status) !== 404) throw error;
+      const legacyResults = [];
+      for (const group of groups) {
+        legacyResults.push(await requestBackendJson('/api/customers/merge', {
+          method: 'POST',
+          body: JSON.stringify(group)
+        }));
+      }
+      result = {
+        message: `${legacyResults.length} grupo(s) mesclado(s) em modo compatível.`,
+        results: legacyResults,
+        legacy: true
+      };
+    }
     toast(result.message || 'Clientes mesclados com segurança', 'ok');
     await loadDuplicates();
     await renderClientes();
