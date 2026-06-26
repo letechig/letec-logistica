@@ -164,6 +164,20 @@
       white-space:nowrap;
     }
     .install-app-btn.visible { display:inline-flex; }
+    .session-action-btn {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:30px;
+      padding:0 10px;
+      border:1px solid #fecaca;
+      border-radius:999px;
+      background:#fff1f2;
+      color:#991b1b;
+      font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
+    }
 
     .profile-card {
       margin-top:0;
@@ -691,7 +705,7 @@
       </div>
       <div class="field">
         <label for="tech-login-pin">PIN de 6 digitos</label>
-        <input id="tech-login-pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)">
+        <input id="tech-login-pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)">
       </div>
       <button class="primary" id="tech-login-btn" type="submit">Entrar</button>
       <div class="auth-error" id="tech-login-error"></div>
@@ -708,6 +722,7 @@
         </div>
         <div class="header-actions">
           <button class="install-app-btn" id="install-app-btn" type="button" onclick="installPortalApp()">Instalar</button>
+          <button class="session-action-btn" type="button" onclick="logoutTechnician()">Sair</button>
           <div class="sync-pill" id="sync-pill"><span class="sync-dot"></span><span id="sync-text">Online</span></div>
         </div>
       </div>
@@ -735,8 +750,9 @@
           <button id="tab-ajuda" onclick="showSection('ajuda')">Ajuda</button>
           <button id="tab-mais" onclick="showSection('mais')">Mais</button>
         </nav>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px">
           <button class="danger-soft" type="button" onclick="showSection('ajuda')">Chamar ajuda</button>
+          <button class="secondary" type="button" onclick="openChangePinModal()">Trocar PIN</button>
           <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
         </div>
         <div id="message-highlight"></div>
@@ -884,6 +900,7 @@
       <div class="help-grid">
         <button class="secondary" type="button" onclick="showSection('recados')">Recados do dia</button>
         <button class="secondary" type="button" onclick="showSection('historico')">Historico do dia</button>
+        <button class="secondary" type="button" onclick="openChangePinModal()">Trocar meu PIN</button>
         <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
         <button class="secondary" type="button" onclick="logoutTechnician()">Sair do portal</button>
         <button class="danger-soft" type="button" onclick="callSupport('Enviar observacao')">Enviar observacao</button>
@@ -929,6 +946,37 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-bg" id="pin-modal" onclick="if(event.target===event.currentTarget)closeChangePinModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-title">Trocar PIN</div>
+        <div class="modal-sub">Use 6 numeros. Depois da troca, entre novamente com o PIN novo.</div>
+      </div>
+      <form onsubmit="event.preventDefault(); changeTechnicianPin();">
+        <div class="modal-body">
+          <div class="field">
+            <label for="pin-current">PIN atual</label>
+            <input id="pin-current" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" pattern="[0-9]{6}" placeholder="000000" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)">
+          </div>
+          <div class="field">
+            <label for="pin-new">Novo PIN</label>
+            <input id="pin-new" type="password" inputmode="numeric" autocomplete="new-password" maxlength="6" pattern="[0-9]{6}" placeholder="000000" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)">
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label for="pin-confirm">Confirmar novo PIN</label>
+            <input id="pin-confirm" type="password" inputmode="numeric" autocomplete="new-password" maxlength="6" pattern="[0-9]{6}" placeholder="000000" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)">
+          </div>
+          <div class="auth-error" id="pin-change-error"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="secondary" type="button" onclick="closeChangePinModal()">Cancelar</button>
+          <button class="primary" id="pin-change-btn" type="submit">Salvar novo PIN</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const params = new URLSearchParams(window.location.search);
     const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
@@ -1268,6 +1316,24 @@
       state.auth = null;
     }
 
+    async function resetTechnicianPortalSession(loginMessage = '') {
+      clearTechSession();
+      state.services = [];
+      state.messages = [];
+      state.events = [];
+      state.weekServicesByDate = {};
+      state.matchedTech = null;
+      showAuthGate(true);
+      await loadTechnicianLoginOptions();
+      const pinInput = document.getElementById('tech-login-pin');
+      if (pinInput) pinInput.value = '';
+      const errorBox = document.getElementById('tech-login-error');
+      if (errorBox) {
+        errorBox.textContent = loginMessage;
+        errorBox.style.color = loginMessage ? '#166534' : '';
+      }
+    }
+
     function techAuthHeaders() {
       const session = state.auth || loadTechSession();
       return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
@@ -1318,7 +1384,10 @@
       const pin = document.getElementById('tech-login-pin')?.value || '';
       const btn = document.getElementById('tech-login-btn');
       const errorBox = document.getElementById('tech-login-error');
-      if (errorBox) errorBox.textContent = '';
+      if (errorBox) {
+        errorBox.textContent = '';
+        errorBox.style.color = '';
+      }
       if (!technicianId || !/^\d{6}$/.test(pin)) {
         if (errorBox) errorBox.textContent = 'Selecione o tecnico e informe o PIN de 6 digitos.';
         return;
@@ -1344,16 +1413,66 @@
       }
     }
 
-    async function logoutTechnician() {
+    function resetChangePinForm() {
+      ['pin-current', 'pin-new', 'pin-confirm'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+      });
+      const errorBox = document.getElementById('pin-change-error');
+      if (errorBox) errorBox.textContent = '';
+    }
+
+    function openChangePinModal() {
+      resetChangePinForm();
+      document.getElementById('pin-modal')?.classList.add('open');
+      setTimeout(() => document.getElementById('pin-current')?.focus(), 50);
+    }
+
+    function closeChangePinModal() {
+      document.getElementById('pin-modal')?.classList.remove('open');
+      resetChangePinForm();
+    }
+
+    async function changeTechnicianPin() {
+      const currentPin = document.getElementById('pin-current')?.value || '';
+      const newPin = document.getElementById('pin-new')?.value || '';
+      const confirmPin = document.getElementById('pin-confirm')?.value || '';
+      const btn = document.getElementById('pin-change-btn');
+      const errorBox = document.getElementById('pin-change-error');
+      const setError = (message) => {
+        if (errorBox) errorBox.textContent = message;
+      };
+      setError('');
+      if (!/^\d{6}$/.test(currentPin)) return setError('Informe o PIN atual com 6 digitos.');
+      if (!/^\d{6}$/.test(newPin)) return setError('O novo PIN deve ter 6 digitos.');
+      if (newPin !== confirmPin) return setError('A confirmacao do PIN nao confere.');
+      if (newPin === currentPin) return setError('Escolha um PIN diferente do atual.');
       try {
-        await requestBackendJson('/api/technician-auth/logout', { method:'POST', body: JSON.stringify({}) });
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Salvando...';
+        }
+        await requestBackendJson('/api/technician-auth/change-pin', {
+          method: 'POST',
+          body: JSON.stringify({ current_pin: currentPin, new_pin: newPin, confirm_pin: confirmPin })
+        });
+        closeChangePinModal();
+        await resetTechnicianPortalSession('PIN alterado. Entre novamente com o PIN novo.');
+      } catch(e) {
+        setError(e.message || 'Falha ao trocar PIN.');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Salvar novo PIN';
+        }
+      }
+    }
+
+    async function logoutTechnician(options = {}) {
+      try {
+        if (!options.localOnly) await requestBackendJson('/api/technician-auth/logout', { method:'POST', body: JSON.stringify({}) });
       } catch(e) {}
-      clearTechSession();
-      state.services = [];
-      state.messages = [];
-      state.events = [];
-      showAuthGate(true);
-      await loadTechnicianLoginOptions();
+      await resetTechnicianPortalSession(options.message || '');
     }
 
     async function requestBackendJson(path, options = {}) {

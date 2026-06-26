@@ -3750,6 +3750,66 @@ app.get('/api/technician-auth/me', async (req, res) => {
   }
 });
 
+app.post('/api/technician-auth/change-pin', technicianLoginLimiter, async (req, res) => {
+  try {
+    const auth = await authenticateTechnicianSession(req);
+    if (!auth) return res.status(401).json({ error: 'Sessao do tecnico invalida ou expirada', code: 'technician_session_required' });
+
+    const currentPin = String(req.body?.current_pin || req.body?.currentPin || req.body?.pin_atual || '').replace(/\D/g, '');
+    const newPin = String(req.body?.new_pin || req.body?.newPin || req.body?.pin_novo || '').replace(/\D/g, '');
+    const confirmPin = String(req.body?.confirm_pin || req.body?.confirmPin || req.body?.confirmacao || '').replace(/\D/g, '');
+
+    if (!/^\d{6}$/.test(currentPin)) {
+      return res.status(400).json({ error: 'Informe o PIN atual com 6 digitos', code: 'invalid_current_pin' });
+    }
+    if (!/^\d{6}$/.test(newPin)) {
+      return res.status(400).json({ error: 'O novo PIN deve ter 6 digitos', code: 'invalid_new_pin' });
+    }
+    if (newPin !== confirmPin) {
+      return res.status(400).json({ error: 'A confirmacao do PIN nao confere', code: 'pin_confirmation_mismatch' });
+    }
+    if (newPin === currentPin) {
+      return res.status(400).json({ error: 'Escolha um PIN diferente do atual', code: 'same_pin' });
+    }
+
+    const db = getSupabaseClient();
+    const technician = await fetchTechnicianById(db, auth.technician.id);
+    if (!technician || technician.ativo === false || technician.portal_login_enabled === false || !technician.portal_pin_hash) {
+      return res.status(403).json({ error: 'Acesso do portal nao habilitado para este tecnico', code: 'portal_login_disabled' });
+    }
+    if (!verifyTechnicianPin(currentPin, technician.portal_pin_hash)) {
+      return res.status(401).json({ error: 'PIN atual invalido', code: 'invalid_current_pin' });
+    }
+
+    const revokedAt = new Date().toISOString();
+    const { data, error } = await db
+      .from('technicians')
+      .update({
+        portal_pin_hash: hashTechnicianPin(newPin),
+        portal_pin_updated_at: revokedAt,
+        portal_login_enabled: true,
+        portal_session_revoked_at: revokedAt
+      })
+      .eq('id', technician.id)
+      .select();
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Tecnico nao encontrado' });
+
+    try {
+      await db.from('technician_sessions')
+        .update({ revoked_at: revokedAt })
+        .eq('technician_id', technician.id)
+        .select();
+    } catch(e) {}
+
+    res.json({ ok: true, technician: publicTechnician(updated) });
+  } catch (error) {
+    console.error('[POST /api/technician-auth/change-pin] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao trocar PIN do tecnico' });
+  }
+});
+
 app.get('/api/services', async (req, res) => {
   try {
     const db = getSupabaseClient();

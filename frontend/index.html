@@ -19989,7 +19989,10 @@ async function carregarTecnicosConfig() {
     container.innerHTML = `
       <div class="card" style="margin-bottom:16px;padding:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div class="card-label">👷 Técnicos cadastrados (${items.length})</div>
+          <div>
+            <div class="card-label">👷 Técnicos cadastrados (${items.length})</div>
+            <div class="section-sub" style="font-size:12px;margin-top:4px">Trocar PIN derruba sessões antigas. Desconectar sessões mantém o PIN atual e força novo login no aparelho.</div>
+          </div>
           <button class="btn btn-primary btn-sm" onclick="formNovoTecnico()">+ Novo Técnico</button>
         </div>
         <div id="form-novo-tecnico" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg2);border-radius:var(--r2)">
@@ -20015,7 +20018,7 @@ async function carregarTecnicosConfig() {
             <td style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button>
               <button class="btn btn-ghost btn-sm" onclick="gerarPinTecnico(${jsArg(t.id)}, ${jsArg(t.nome || 'Tecnico')})">${t.has_portal_pin ? 'Trocar PIN' : 'Gerar PIN'}</button>
-              <button class="btn btn-ghost btn-sm" onclick="revogarAcessoTecnico(${jsArg(t.id)})">Revogar</button>
+              <button class="btn btn-ghost btn-sm" onclick="revogarAcessoTecnico(${jsArg(t.id)})">Desconectar sessões</button>
             </td>
           </tr>`).join('')}</tbody>
         </table></div>
@@ -20067,13 +20070,13 @@ async function gerarPinTecnico(id, nome) {
   }
 }
 async function revogarAcessoTecnico(id) {
-  if (!confirmAction('Revogar sessões abertas deste técnico? O PIN continua válido, mas ele precisará entrar novamente.')) return;
+  if (!confirmAction('Desconectar sessões abertas deste técnico? O PIN atual continua válido, mas ele precisará entrar novamente.')) return;
   try {
     await requestBackendJson(`/api/technicians/${encodeURIComponent(id)}/portal-access/revoke`, { method:'POST', body: JSON.stringify({}) });
-    toast('✅ Acesso revogado', 'ok');
+    toast('✅ Sessões desconectadas', 'ok');
     await carregarTecnicosConfig();
   } catch(e) {
-    toast('❌ Erro ao revogar acesso: ' + e.message, 'err');
+    toast('❌ Erro ao desconectar sessões: ' + e.message, 'err');
   }
 }
 async function carregarVeiculosConfig() {

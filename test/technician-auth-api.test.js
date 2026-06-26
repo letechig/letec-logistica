@@ -150,6 +150,38 @@ test('login tecnico com PIN gerado cria sessao e nao expoe hash', async () => {
   });
 });
 
+test('tecnico troca o proprio PIN e sessao antiga deixa de valer', async () => {
+  await withServer(async (baseUrl, state) => {
+    const generated = await generatePin(baseUrl, 't1');
+    const auth = await login(baseUrl, 't1', generated.pin);
+    const response = await fetch(`${baseUrl}/api/technician-auth/change-pin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${auth.token}`
+      },
+      body: JSON.stringify({ current_pin: generated.pin, new_pin: '123789', confirm_pin: '123789' })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(state.technician_sessions.every(session => session.revoked_at), true);
+
+    const oldSession = await fetch(`${baseUrl}/api/technician-auth/me`, {
+      headers: { Authorization: `Bearer ${auth.token}` }
+    });
+    assert.equal(oldSession.status, 401);
+
+    const oldPinLogin = await fetch(`${baseUrl}/api/technician-auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ technician_id: 't1', pin: generated.pin })
+    });
+    assert.equal(oldPinLogin.status, 401);
+
+    const newAuth = await login(baseUrl, 't1', '123789');
+    assert.equal(newAuth.technician.id, 't1');
+  });
+});
+
 test('portal tecnico exige sessao e filtra agenda por tecnico logado', async () => {
   await withServer(async (baseUrl) => {
     const noSession = await fetch(`${baseUrl}/api/services?date=2026-06-17`, {
