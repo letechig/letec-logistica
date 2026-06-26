@@ -5248,6 +5248,44 @@ function chooseCanonicalPrimary(customers = []) {
   })[0] || null;
 }
 
+function customerCompletenessScore(customer = {}) {
+  return [
+    customer.nome,
+    customer.telefone || customer.whatsapp,
+    customer.email,
+    customer.cpf_cnpj,
+    customer.endereco || customer.endereco_completo,
+    customer.cep,
+    customer.bairro,
+    customer.cidade,
+    customer.tipo_cliente || customer.categoria,
+    customer.status_operacional
+  ].filter(Boolean).length;
+}
+
+function dedupCustomerLinkTotal(linkCounts = {}) {
+  return Object.values(linkCounts || {}).reduce((total, count) => total + (Number(count) || 0), 0);
+}
+
+function chooseDeduplicationPrimary(customers = [], impact = {}) {
+  const byCustomer = impact?.by_customer || {};
+  return [...customers].sort((a, b) => {
+    const score = item => {
+      let value = 0;
+      const status = normalizeCustomerOperationalStatus(item.status_operacional);
+      if (item.tipo_cliente === 'Contrato' || item.categoria === 'contrato') value += 60;
+      if (status === 'Ativo') value += 35;
+      if (item.cliente_recorrente) value += 25;
+      value += dedupCustomerLinkTotal(byCustomer[String(item.id)]?.links) * 12;
+      value += customerCompletenessScore(item) * 4;
+      if (buildCustomerAddressFingerprint(item)) value += 8;
+      if (item.ativo !== false) value += 5;
+      return value;
+    };
+    return score(b) - score(a) || Number(a.id || 0) - Number(b.id || 0);
+  })[0] || chooseCanonicalPrimary(customers);
+}
+
 function canonicalMergePreview(customers = [], primaryId = null, type = 'same_name') {
   const primary = customers.find(item => String(item.id) === String(primaryId)) || chooseCanonicalPrimary(customers);
   const duplicateIds = customers.filter(item => String(item.id) !== String(primary?.id)).map(item => item.id);
@@ -5277,6 +5315,304 @@ function canonicalMergePreview(customers = [], primaryId = null, type = 'same_na
     addresses_to_create: addresses,
     aliases_to_create: [...new Set(aliases)],
     group: customers
+  };
+}
+
+const CUSTOMER_DEDUP_LINK_RELATIONS = [
+  { table: 'services', column: 'cliente_id', key: 'services_cliente_id', label: 'servicos por ID' },
+  { table: 'services', column: 'customer_id', key: 'services_customer_id', label: 'servicos por customer_id' },
+  { table: 'contracts', column: 'customer_id', key: 'contracts', label: 'contratos' },
+  { table: 'customer_service_history', column: 'customer_id', key: 'customer_service_history', label: 'historico operacional' },
+  { table: 'data_reviews', column: 'customer_id', key: 'data_reviews', label: 'revisoes de dados' },
+  { table: 'customer_reminders', column: 'customer_id', key: 'customer_reminders', label: 'lembretes' }
+];
+
+async function fetchCustomersForDeduplication(db, options = {}) {
+  const pageSize = Math.min(Math.max(Number(options.pageSize || options.limit || 1000), 100), 2000);
+  const maxPages = Math.min(Math.max(Number(options.maxPages || 200), 1), 500);
+  const search = String(options.search || '').trim();
+  const rows = [];
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = db
+      .from('customers')
+      .select('*')
+      .eq('ativo', true)
+      .order('nome', { ascending: true });
+
+    if (search) {
+      const safe = search.replace(/[%_,]/g, '').slice(0, 120);
+      query = query.or(`nome.ilike.%${safe}%,endereco.ilike.%${safe}%,endereco_completo.ilike.%${safe}%,telefone.ilike.%${safe}%,whatsapp.ilike.%${safe}%`);
+    }
+
+    if (typeof query.range === 'function') query = query.range(from, to);
+    else query = query.limit(pageSize);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const batch = data || [];
+    rows.push(...batch);
+    if (batch.length < pageSize || typeof query.range !== 'function') break;
+  }
+
+  return rows;
+}
+
+function normalizedCustomerTokens(name) {
+  return normalizeCustomerName(name).split(/\s+/).filter(token => token.length >= 3);
+}
+
+function haveSimilarCustomerNames(leftName, rightName) {
+  if (hasRelatedCustomerNames(leftName, rightName)) return true;
+  const left = normalizedCustomerTokens(leftName);
+  const right = normalizedCustomerTokens(rightName);
+  if (!left.length || !right.length) return false;
+  if (left[0] && right[0] && left[0] === right[0]) return true;
+  const shared = left.filter(token => right.includes(token));
+  const dice = (shared.length * 2) / (left.length + right.length);
+  return shared.length >= 2 && dice >= 0.6;
+}
+
+function customerBairroKey(customer = {}) {
+  return normalizeLooseText(customer.bairro || '');
+}
+
+function haveSameCep(left = {}, right = {}) {
+  const leftCep = String(left.cep || '').replace(/\D/g, '');
+  const rightCep = String(right.cep || '').replace(/\D/g, '');
+  return !!(leftCep && rightCep && leftCep === rightCep);
+}
+
+function haveSameBairro(left = {}, right = {}) {
+  const leftBairro = customerBairroKey(left);
+  const rightBairro = customerBairroKey(right);
+  return !!(leftBairro && rightBairro && leftBairro === rightBairro);
+}
+
+function haveMatchingContactOrDocument(left = {}, right = {}) {
+  const leftPhone = normalizePhone(left.telefone);
+  const rightPhone = normalizePhone(right.telefone);
+  const leftWhatsapp = normalizePhone(left.whatsapp);
+  const rightWhatsapp = normalizePhone(right.whatsapp);
+  const leftDocument = normalizeDocument(left.cpf_cnpj);
+  const rightDocument = normalizeDocument(right.cpf_cnpj);
+  return !!(
+    (leftPhone && rightPhone && leftPhone === rightPhone) ||
+    (leftWhatsapp && rightWhatsapp && leftWhatsapp === rightWhatsapp) ||
+    (leftPhone && rightWhatsapp && leftPhone === rightWhatsapp) ||
+    (leftWhatsapp && rightPhone && leftWhatsapp === rightPhone) ||
+    (leftDocument && rightDocument && leftDocument === rightDocument)
+  );
+}
+
+function haveConflictingDocument(left = {}, right = {}) {
+  const leftDocument = normalizeDocument(left.cpf_cnpj);
+  const rightDocument = normalizeDocument(right.cpf_cnpj);
+  return !!(leftDocument && rightDocument && leftDocument !== rightDocument);
+}
+
+function haveClearlyConflictingAddresses(left = {}, right = {}) {
+  const leftFp = buildCustomerAddressFingerprint(left);
+  const rightFp = buildCustomerAddressFingerprint(right);
+  if (!leftFp || !rightFp) return false;
+  if (areEquivalentCustomerAddresses(left, right)) return false;
+  if (haveSameCep(left, right) || haveSameBairro(left, right)) return false;
+  const sharedCore = addressCoreTokens(leftFp).filter(token => addressCoreTokens(rightFp).includes(token));
+  return sharedCore.length === 0;
+}
+
+function classifyDeduplicationPair(left = {}, right = {}) {
+  if (haveConflictingDocument(left, right)) return null;
+  const leftName = left.nome_normalizado || normalizeCustomerName(left.nome);
+  const rightName = right.nome_normalizado || normalizeCustomerName(right.nome);
+  if (!leftName || !rightName) return null;
+
+  const exactName = leftName === rightName;
+  const similarName = !exactName && haveSimilarCustomerNames(left.nome, right.nome);
+  if (!exactName && !similarName) return null;
+
+  const contactMatch = haveMatchingContactOrDocument(left, right);
+  const addressMatch = areEquivalentCustomerAddresses(left, right);
+  const cepMatch = haveSameCep(left, right);
+  const bairroMatch = haveSameBairro(left, right);
+  const addressConflict = haveClearlyConflictingAddresses(left, right);
+  if (addressConflict && !contactMatch) return null;
+
+  const reasons = [];
+  if (exactName) reasons.push('nome igual');
+  else reasons.push('nome parecido');
+  if (contactMatch) reasons.push('contato/documento compativel');
+  if (addressMatch) reasons.push('endereco compativel');
+  else if (cepMatch) reasons.push('CEP compativel');
+  else if (bairroMatch) reasons.push('bairro compativel');
+
+  if (exactName && (contactMatch || addressMatch || cepMatch || bairroMatch)) {
+    return { confidence: 'alta', type: 'same_name', reasons };
+  }
+  if (similarName && (contactMatch || addressMatch || cepMatch)) {
+    return { confidence: contactMatch ? 'alta' : 'revisar', type: 'similar_name_address', reasons };
+  }
+  if (exactName && !addressConflict) {
+    return { confidence: 'revisar', type: 'same_name_needs_review', reasons: [...reasons, 'dados insuficientes para alta confianca'] };
+  }
+  return null;
+}
+
+function buildDeduplicationCandidateGroups(customers = []) {
+  const parent = customers.map((_, index) => index);
+  const metaByRoot = new Map();
+  const buckets = new Map();
+  const pairKeys = new Set();
+  const addBucket = (key, index) => {
+    if (!key) return;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(index);
+  };
+  customers.forEach((customer, index) => {
+    const name = customer.nome_normalizado || normalizeCustomerName(customer.nome);
+    const firstNameToken = normalizedCustomerTokens(customer.nome)[0] || '';
+    const phone = normalizePhone(customer.telefone);
+    const whatsapp = normalizePhone(customer.whatsapp);
+    const document = normalizeDocument(customer.cpf_cnpj);
+    const cep = String(customer.cep || '').replace(/\D/g, '');
+    const address = buildCustomerAddressFingerprint(customer);
+    const bairro = customerBairroKey(customer);
+    addBucket(name ? `name:${name}` : '', index);
+    addBucket(phone ? `phone:${phone}` : '', index);
+    addBucket(whatsapp ? `phone:${whatsapp}` : '', index);
+    addBucket(document ? `doc:${document}` : '', index);
+    addBucket(cep ? `cep:${cep}` : '', index);
+    addBucket(address ? `addr:${address}` : '', index);
+    addBucket(bairro && firstNameToken ? `bairro-name:${bairro}:${firstNameToken}` : '', index);
+  });
+  for (const indexes of buckets.values()) {
+    for (let a = 0; a < indexes.length; a += 1) {
+      for (let b = a + 1; b < indexes.length; b += 1) {
+        pairKeys.add(`${indexes[a]}:${indexes[b]}`);
+      }
+    }
+  }
+  const find = index => {
+    while (parent[index] !== index) {
+      parent[index] = parent[parent[index]];
+      index = parent[index];
+    }
+    return index;
+  };
+  const merge = (leftIndex, rightIndex, match) => {
+    const leftRoot = find(leftIndex);
+    const rightRoot = find(rightIndex);
+    if (leftRoot === rightRoot) {
+      const current = metaByRoot.get(leftRoot) || { confidence: 'alta', types: new Set(), reasons: new Set() };
+      if (match.confidence !== 'alta') current.confidence = 'revisar';
+      match.reasons.forEach(reason => current.reasons.add(reason));
+      current.types.add(match.type);
+      metaByRoot.set(leftRoot, current);
+      return;
+    }
+    const target = Math.min(leftRoot, rightRoot);
+    const source = Math.max(leftRoot, rightRoot);
+    parent[source] = target;
+    const current = metaByRoot.get(target) || { confidence: 'alta', types: new Set(), reasons: new Set() };
+    const sourceMeta = metaByRoot.get(source);
+    if (sourceMeta?.confidence === 'revisar' || match.confidence !== 'alta') current.confidence = 'revisar';
+    sourceMeta?.types?.forEach(type => current.types.add(type));
+    sourceMeta?.reasons?.forEach(reason => current.reasons.add(reason));
+    current.types.add(match.type);
+    match.reasons.forEach(reason => current.reasons.add(reason));
+    metaByRoot.set(target, current);
+  };
+
+  for (const pairKey of pairKeys) {
+    const [i, j] = pairKey.split(':').map(Number);
+    const match = classifyDeduplicationPair(customers[i], customers[j]);
+    if (match) merge(i, j, match);
+  }
+
+  const grouped = new Map();
+  customers.forEach((customer, index) => {
+    const root = find(index);
+    if (!grouped.has(root)) grouped.set(root, []);
+    grouped.get(root).push(customer);
+  });
+
+  return [...grouped.entries()]
+    .filter(([, group]) => group.length > 1)
+    .map(([root, group]) => {
+      const meta = metaByRoot.get(find(root)) || { confidence: 'revisar', types: new Set(['same_name_needs_review']), reasons: new Set(['grupo suspeito']) };
+      return {
+        group,
+        confidence: meta.confidence,
+        type: meta.types.has('similar_name_address') ? 'similar_name_address' : (meta.types.values().next().value || 'same_name'),
+        reasons: [...meta.reasons]
+      };
+    });
+}
+
+async function buildDeduplicationImpact(db, customers = []) {
+  const byCustomer = {};
+  for (const customer of customers) {
+    const links = {};
+    for (const relation of CUSTOMER_DEDUP_LINK_RELATIONS) {
+      const counted = await safeCountRelation(db, relation, customer.id);
+      links[relation.key] = counted.count || 0;
+    }
+    byCustomer[String(customer.id)] = {
+      id: customer.id,
+      links,
+      total: dedupCustomerLinkTotal(links)
+    };
+  }
+  const linksToMove = Object.values(byCustomer).reduce((total, item) => total + (Number(item.total) || 0), 0);
+  return {
+    customers_affected: customers.length,
+    links_to_move: linksToMove,
+    by_customer: byCustomer
+  };
+}
+
+async function buildCustomerDeduplicationAudit(db, options = {}) {
+  const customers = await fetchCustomersForDeduplication(db, options);
+  const rawGroups = buildDeduplicationCandidateGroups(customers);
+  const groups = [];
+
+  for (const raw of rawGroups) {
+    const impact = await buildDeduplicationImpact(db, raw.group);
+    const primary = chooseDeduplicationPrimary(raw.group, impact);
+    const preview = canonicalMergePreview(raw.group, primary?.id || null, raw.type);
+    const ids = raw.group.map(customer => customer.id).sort((a, b) => Number(a) - Number(b));
+    groups.push({
+      id: `dedup-${ids.join('-')}`,
+      confidence: raw.confidence,
+      match_type: raw.type,
+      reasons: raw.reasons,
+      requires_manual: raw.confidence !== 'alta',
+      impact,
+      customer: raw.group[0],
+      ...preview,
+      suggested_primary_id: primary?.id || preview.suggested_primary_id
+    });
+  }
+
+  groups.sort((a, b) => {
+    const conf = confidence => confidence === 'alta' ? 0 : 1;
+    return conf(a.confidence) - conf(b.confidence)
+      || (b.impact?.links_to_move || 0) - (a.impact?.links_to_move || 0)
+      || String(a.group?.[0]?.nome || '').localeCompare(String(b.group?.[0]?.nome || ''));
+  });
+
+  return {
+    ok: true,
+    total_customers: customers.length,
+    total_groups: groups.length,
+    high_confidence: groups.filter(group => group.confidence === 'alta').length,
+    review: groups.filter(group => group.confidence !== 'alta').length,
+    customers_affected: groups.reduce((total, group) => total + (group.group?.length || 0), 0),
+    links_to_move: groups.reduce((total, group) => total + (group.impact?.links_to_move || 0), 0),
+    groups,
+    search: options.search || null
   };
 }
 
@@ -5412,49 +5748,81 @@ async function mergeCustomersCanonical(db, primaryId, duplicateIds = [], options
 app.get('/api/customers/duplicates', async (req, res) => {
   try {
     const db = getSupabaseClient();
-    const { data, error } = await db
-      .from('customers')
-      .select('*')
-      .eq('ativo', true)
-      .order('nome');
-
-    if (error) throw error;
-
-    const customers = data || [];
-    const visited = new Set();
-    const actualDuplicates = [];
-
-    for (let i = 0; i < customers.length; i += 1) {
-      if (visited.has(i)) continue;
-
-      const groupIndexes = [i];
-      const queue = [i];
-      visited.add(i);
-
-      while (queue.length) {
-        const currentIndex = queue.shift();
-        const current = customers[currentIndex];
-
-        for (let j = 0; j < customers.length; j += 1) {
-          if (visited.has(j)) continue;
-          if (!areDuplicateCustomers(current, customers[j])) continue;
-          visited.add(j);
-          queue.push(j);
-          groupIndexes.push(j);
-        }
-      }
-
-      if (groupIndexes.length > 1) {
-        const group = groupIndexes.map(index => customers[index]);
-        const preview = canonicalMergePreview(group, null, 'same_name');
-        actualDuplicates.push({ customer: group[0], ...preview });
-      }
-    }
-
-    res.json(actualDuplicates);
+    const audit = await buildCustomerDeduplicationAudit(db, {
+      search: req.query.search,
+      pageSize: req.query.page_size || req.query.limit || 1000
+    });
+    res.json(audit.groups);
   } catch (error) {
     console.error('[GET /api/customers/duplicates] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar duplicatas' });
+  }
+});
+
+app.get('/api/customers/deduplication-audit', async (req, res) => {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const audit = await buildCustomerDeduplicationAudit(db, {
+      search: req.query.search,
+      pageSize: req.query.page_size || req.query.limit || 1000
+    });
+    res.json(audit);
+  } catch (error) {
+    console.error('[GET /api/customers/deduplication-audit] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao auditar duplicidade de clientes' });
+  }
+});
+
+app.post('/api/customers/deduplication-merge', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const inputGroups = Array.isArray(req.body?.groups)
+      ? req.body.groups
+      : [{ primaryId: req.body?.primaryId, duplicateIds: req.body?.duplicateIds }];
+
+    const groups = inputGroups
+      .map(group => ({
+        primaryId: group?.primaryId,
+        duplicateIds: Array.isArray(group?.duplicateIds) ? [...new Set(group.duplicateIds.map(id => /^\d+$/.test(String(id)) ? Number(id) : id))] : []
+      }))
+      .filter(group => group.primaryId && group.duplicateIds.length);
+
+    if (!groups.length) {
+      return res.status(400).json({ error: 'Nenhum grupo aprovado para mesclar', code: 'deduplication_groups_required' });
+    }
+
+    const seenDuplicateIds = new Set();
+    const results = [];
+    for (const group of groups) {
+      const duplicateIds = group.duplicateIds.filter(id => {
+        const key = String(id);
+        if (seenDuplicateIds.has(key) || String(id) === String(group.primaryId)) return false;
+        seenDuplicateIds.add(key);
+        return true;
+      });
+      if (!duplicateIds.length) continue;
+      const result = await mergeCustomersCanonical(db, group.primaryId, duplicateIds, { actor, source: 'deduplication' });
+      results.push({ primaryId: group.primaryId, duplicateIds, ...result });
+    }
+
+    res.json({
+      ok: true,
+      message: `${results.length} grupo(s) mesclado(s) com seguranca.`,
+      merged_groups: results.length,
+      duplicate_customers_merged: results.reduce((total, item) => total + (item.duplicateIds?.length || 0), 0),
+      results
+    });
+  } catch (error) {
+    console.error('[POST /api/customers/deduplication-merge] Error:', error.message);
+    res.status(error.statusCode || 500).json({
+      code: error.code || 'customers_deduplication_merge_failed',
+      error: error.statusCode ? error.message : 'Falha ao mesclar duplicatas de clientes',
+      details: publicDbErrorDetails(error)
+    });
   }
 });
 

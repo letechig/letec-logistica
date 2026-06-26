@@ -19,7 +19,8 @@ function makeState() {
     data_reviews: [{ id: 40, customer_id: 2 }],
     customer_reminders: [{ id: 'rem-1', customer_id: 2 }],
     customer_addresses: [],
-    customer_aliases: []
+    customer_aliases: [],
+    app_users: [{ id: 1, auth_user_id: 'admin-1', email: 'admin@letec.test', role: 'admin', active: true }]
   };
 }
 
@@ -31,9 +32,11 @@ function makeBuilder(state, table) {
     _in: [],
     _or: null,
     _limit: null,
+    _range: null,
     select() { return builder; },
     order() { return builder; },
     limit(n) { builder._limit = n; return builder; },
+    range(from, to) { builder._range = { from, to }; return builder; },
     eq(key, value) { builder._filters.push({ key, value }); return builder; },
     in(key, values) { builder._in.push({ key, values: values.map(String) }); return builder; },
     or(expr) { builder._or = String(expr); return builder; },
@@ -53,6 +56,7 @@ function makeBuilder(state, table) {
         rows.forEach(row => Object.assign(row, builder._payload));
         return { data: rows, error: null };
       }
+      if (builder._range) return { data: rows.slice(builder._range.from, builder._range.to + 1), error: null };
       return { data: builder._limit != null ? rows.slice(0, builder._limit) : rows, error: null };
     },
     _rows() {
@@ -71,12 +75,20 @@ function makeBuilder(state, table) {
 
 function makeDb(state) {
   return {
+    auth: {
+      async getUser(token) {
+        if (token === 'admin-token') return { data: { user: { id: 'admin-1', email: 'admin@letec.test' } }, error: null };
+        return { data: { user: null }, error: new Error('invalid token') };
+      }
+    },
     from(table) {
       assert.ok(state[table], `unexpected table ${table}`);
       return makeBuilder(state, table);
     }
   };
 }
+
+const adminHeaders = { Authorization: 'Bearer admin-token' };
 
 async function withServer(fn) {
   const state = makeState();
@@ -172,5 +184,102 @@ test('Clientes V2 merge canonico deduplica unidades com enderecos equivalentes',
     assert.equal(state.customers.filter(customer => customer.ativo !== false).length, 1);
     assert.equal(state.customer_addresses.length, 1);
     assert.equal(state.customer_addresses[0].customer_id, 20);
+  });
+});
+
+test('auditoria de saneamento percorre mais de 1000 clientes e classifica duplicidades claras', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers = Array.from({ length: 1005 }, (_, index) => ({
+      id: index + 100,
+      nome: `Cliente Unico ${index + 1}`,
+      nome_normalizado: `CLIENTE UNICO ${index + 1}`,
+      ativo: true,
+      endereco: `Rua ${index + 1}, ${index + 10}`,
+      bairro: `Bairro ${index + 1}`,
+      status_operacional: 'Ativo'
+    }));
+    state.customers.push(
+      { id: 2001, nome: 'Celso', nome_normalizado: 'CELSO', ativo: true, bairro: 'Brooklin', status_operacional: 'Eventual' },
+      { id: 2002, nome: 'Celso', nome_normalizado: 'CELSO', ativo: true, bairro: 'Brooklin', status_operacional: 'Eventual' },
+      { id: 2003, nome: 'Cibo buono', nome_normalizado: 'CIBO BUONO', ativo: true, endereco: '4649 - Santo Amaro', status_operacional: 'Eventual' },
+      { id: 2004, nome: 'Cibo Buono', nome_normalizado: 'CIBO BUONO', ativo: true, endereco: '4649 Santo Amaro', status_operacional: 'Eventual' },
+      { id: 2005, nome: 'Cíntia', nome_normalizado: 'CINTIA', ativo: true, endereco: '95 - praia vermelha', status_operacional: 'Eventual' },
+      { id: 2006, nome: 'Cintia', nome_normalizado: 'CINTIA', ativo: true, endereco: '95 praia vermelha', status_operacional: 'Eventual' },
+      { id: 2007, nome: 'Cintia Kawakami', nome_normalizado: 'CINTIA KAWAKAMI', ativo: true, endereco: '3411 - Vila Do Encontro', status_operacional: 'Eventual' },
+      { id: 2008, nome: 'Cintia Kawakami', nome_normalizado: 'CINTIA KAWAKAMI', ativo: true, endereco: '3411 Vila Do Encontro', status_operacional: 'Eventual' },
+      { id: 2009, nome: 'Maria Silva', nome_normalizado: 'MARIA SILVA', ativo: true, endereco: 'Rua A, 1 - Centro', status_operacional: 'Ativo' },
+      { id: 2010, nome: 'Maria Silva', nome_normalizado: 'MARIA SILVA', ativo: true, endereco: 'Avenida B, 2 - Zona Sul', status_operacional: 'Ativo' }
+    );
+    state.services = [];
+    state.contracts = [];
+    state.customer_service_history = [];
+    state.data_reviews = [];
+    state.customer_reminders = [];
+
+    const response = await fetch(`${baseUrl}/api/customers/deduplication-audit`, { headers: adminHeaders });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.total_customers, 1015);
+    const groupIds = group => group.group.map(customer => customer.id).sort((a, b) => a - b);
+    const hasGroup = ids => payload.groups.find(group => JSON.stringify(groupIds(group)) === JSON.stringify(ids));
+    assert.equal(hasGroup([2001, 2002]).confidence, 'alta');
+    assert.equal(hasGroup([2003, 2004]).confidence, 'alta');
+    assert.equal(hasGroup([2005, 2006]).confidence, 'alta');
+    assert.equal(hasGroup([2007, 2008]).confidence, 'alta');
+    assert.equal(hasGroup([2009, 2010]), undefined);
+  });
+});
+
+test('auditoria marca nome parecido com endereco compativel como revisao', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers = [
+      { id: 3001, nome: 'Cintia Kawakami', nome_normalizado: 'CINTIA KAWAKAMI', ativo: true, endereco: 'Rua Azul, 10', status_operacional: 'Ativo' },
+      { id: 3002, nome: 'Cintia Kawa', nome_normalizado: 'CINTIA KAWA', ativo: true, endereco: 'Rua Azul 10', status_operacional: 'Ativo' }
+    ];
+    state.services = [];
+    state.contracts = [];
+    state.customer_service_history = [];
+    state.data_reviews = [];
+    state.customer_reminders = [];
+
+    const response = await fetch(`${baseUrl}/api/customers/deduplication-audit`, { headers: adminHeaders });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.groups.length, 1);
+    assert.equal(payload.groups[0].confidence, 'revisar');
+    assert.equal(payload.groups[0].requires_manual, true);
+  });
+});
+
+test('saneamento mescla grupos em lote e preserva texto historico do servico', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers.push(
+      { id: 4, nome: 'Cibo Buono', nome_normalizado: 'CIBO BUONO', ativo: true, endereco: '4649 Santo Amaro', status_operacional: 'Ativo' },
+      { id: 5, nome: 'Cibo buono', nome_normalizado: 'CIBO BUONO', ativo: true, endereco: '4649 - Santo Amaro', status_operacional: 'Ativo' }
+    );
+    state.services.push({ id: 11, cliente_id: 5, cliente: 'Cibo buono', endereco: '4649 - Santo Amaro' });
+    state.contracts.push({ id: 21, customer_id: 5, tipo_servico: 'Contrato' });
+
+    const response = await fetch(`${baseUrl}/api/customers/deduplication-merge`, {
+      method: 'POST',
+      headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groups: [
+          { primaryId: 1, duplicateIds: [2] },
+          { primaryId: 4, duplicateIds: [5] }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.merged_groups, 2);
+    assert.equal(state.customers.find(customer => customer.id === 2).ativo, false);
+    assert.equal(state.customers.find(customer => customer.id === 5).ativo, false);
+    assert.equal(state.services.find(service => service.id === 10).cliente_id, 1);
+    assert.equal(state.services.find(service => service.id === 10).cliente, 'REDE MORIAH');
+    assert.equal(state.services.find(service => service.id === 11).cliente_id, 4);
+    assert.equal(state.services.find(service => service.id === 11).cliente, 'Cibo buono');
+    assert.equal(state.contracts.find(contract => contract.id === 20).customer_id, 1);
+    assert.equal(state.contracts.find(contract => contract.id === 21).customer_id, 4);
   });
 });

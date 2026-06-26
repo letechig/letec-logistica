@@ -4403,7 +4403,7 @@ async function carregarVeiculos(){
         <div class="ui-page-actions">
           <button class="btn btn-primary btn-sm" onclick="openClientModal()">➕ Novo Cliente</button>
           <button class="btn btn-ghost btn-sm" onclick="abrirAuditoriaVinculosAgenda()">Auditar vínculos da agenda</button>
-          <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Gerenciar Duplicatas</button>
+          <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Saneamento de Clientes</button>
         </div>
       </div>
       <div id="kpi-clientes" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px">
@@ -5053,16 +5053,19 @@ async function carregarVeiculos(){
 </div>
 
 <div class="modal-bg" id="duplicates-modal" onclick="if(event.target===event.currentTarget)closeDuplicatesModal()">
-  <div class="modal" onclick="event.stopPropagation()" style="max-width:800px">
-    <div class="modal-title" id="duplicates-modal-title">🔍 Gerenciar Duplicatas de Clientes</div>
-    <div style="padding:0;flex:1;overflow-y:auto;max-height:500px">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:1040px">
+    <div class="modal-title" id="duplicates-modal-title">🔍 Saneamento de Clientes</div>
+    <div style="font-size:12px;color:var(--text3);margin-top:4px">Nenhum cliente será apagado; duplicados serão inativados e o histórico será preservado.</div>
+    <div style="padding:0;flex:1;overflow-y:auto;max-height:68vh;margin-top:12px">
       <div id="duplicates-content">
-        <div style="text-align:center;padding:40px;color:var(--text3)">Carregando duplicatas...</div>
+        <div style="text-align:center;padding:40px;color:var(--text3)">Carregando saneamento...</div>
       </div>
     </div>
     <div class="flex gap2" style="padding:16px 0;border-top:1px solid var(--border);margin-top:16px">
       <button class="btn btn-ghost btn-sm" onclick="closeDuplicatesModal()">Fechar</button>
-      <button class="btn btn-primary btn-sm" onclick="loadDuplicates()" style="margin-left:auto">🔄 Recarregar</button>
+      <button class="btn btn-ghost btn-sm" onclick="dedupSelectHighConfidence()" style="margin-left:auto">Selecionar alta confiança</button>
+      <button class="btn btn-primary btn-sm" onclick="mergeSelectedDuplicates()">Mesclar selecionados</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadDuplicates()">🔄 Recarregar</button>
     </div>
   </div>
 </div>
@@ -14838,12 +14841,14 @@ function selectGeocodeSuggestion(suggestion) {
   geocodeClientAddress();
 }
 
-let _duplicatesModalState = { focusIds: [], sourceName: '' };
+let _duplicatesModalState = { focusIds: [], sourceName: '', audit: null, groups: [] };
 
 async function openDuplicatesModal(options = {}) {
   _duplicatesModalState = {
     focusIds: Array.isArray(options.focusIds) ? options.focusIds.map(id => Number(id)).filter(Boolean) : [],
-    sourceName: String(options.sourceName || '').trim()
+    sourceName: String(options.sourceName || '').trim(),
+    audit: null,
+    groups: []
   };
   document.getElementById('duplicates-modal').classList.add('open');
   await loadDuplicates();
@@ -14851,22 +14856,88 @@ async function openDuplicatesModal(options = {}) {
 
 function closeDuplicatesModal() {
   document.getElementById('duplicates-modal').classList.remove('open');
-  _duplicatesModalState = { focusIds: [], sourceName: '' };
+  _duplicatesModalState = { focusIds: [], sourceName: '', audit: null, groups: [] };
+}
+
+function dedupConfidenceChip(confidence) {
+  return confidence === 'alta'
+    ? '<span class="chip chip-green">Alta confiança</span>'
+    : '<span class="chip chip-orange">Revisar</span>';
+}
+
+function dedupImpactTotal(group = {}) {
+  return Number(group.impact?.links_to_move || 0);
+}
+
+function dedupCustomerLine(customer = {}, group = {}, focusIds = []) {
+  const impact = group.impact?.by_customer?.[String(customer.id)]?.total || 0;
+  const endereco = customer.endereco_completo || customer.endereco || 'Sem endereço';
+  const contato = customer.whatsapp || customer.telefone || 'Sem contato';
+  const status = normalizeClienteStatus(customer.status_operacional || (customer.ativo === false ? 'Inativo' : '')) || '—';
+  return `
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700">${sanitize(customer.nome || 'Cliente sem nome')} <span class="mono" style="font-size:10px;color:var(--text3)">ID ${sanitize(customer.id || '—')}</span>${focusIds.includes(Number(customer.id)) ? ' <span style="font-size:10px;color:var(--orange)">Alerta atual</span>' : ''}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${sanitize(contato)} • ${sanitize(endereco)}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">
+        <span class="chip chip-gray">${sanitize(status)}</span>
+        <span class="chip chip-blue">${impact} vínculo(s)</span>
+      </div>
+    </div>`;
+}
+
+function dedupGroupHtml(group, groupIndex, focusIds = []) {
+  const selectedPrimary = String(group.suggested_primary_id || '');
+  const reasons = Array.isArray(group.reasons) ? group.reasons : [];
+  const addresses = group.addresses_to_create || [];
+  const aliases = group.aliases_to_create || [];
+  const links = dedupImpactTotal(group);
+  return `
+    <div style="border:1px solid var(--border2);border-radius:var(--r2);padding:14px;background:#fff">
+      <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:800;color:var(--text)">
+          <input type="checkbox" data-dedup-select="${groupIndex}" style="width:16px;height:16px;accent-color:#2563eb">
+          Grupo ${groupIndex + 1} · ${group.group.length} clientes
+        </label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${dedupConfidenceChip(group.confidence)}
+          <span class="chip chip-blue">${links} vínculo(s) a mover</span>
+          ${group.suggested_primary_id ? `<span class="chip chip-gray">Principal sugerido: ID ${sanitize(group.suggested_primary_id)}</span>` : ''}
+        </div>
+      </div>
+      ${reasons.length ? `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Motivos: ${reasons.map(reason => sanitize(reason)).join(' · ')}</div>` : ''}
+      <div style="display:grid;gap:8px">
+        ${group.group.map(customer => `
+          <label style="display:flex;gap:9px;align-items:flex-start;padding:10px;border-radius:var(--r1);background:${focusIds.includes(Number(customer.id)) ? 'var(--orange-bg)' : 'var(--bg2)'};cursor:pointer">
+            <input type="radio" name="dedup-primary-${groupIndex}" value="${escapeHtmlAttr(customer.id)}" ${String(customer.id) === selectedPrimary ? 'checked' : ''} style="margin-top:3px">
+            ${dedupCustomerLine(customer, group, focusIds)}
+          </label>
+        `).join('')}
+      </div>
+      ${(addresses.length || aliases.length) ? `
+        <div style="margin-top:10px;padding:10px;border-radius:var(--r1);background:var(--bg2);font-size:11px;color:var(--text2);display:grid;gap:6px">
+          ${addresses.length ? `<div><b>Virarão unidades:</b> ${addresses.map(item => sanitize(item.endereco || item.label || 'Endereço')).join(' · ')}</div>` : ''}
+          ${aliases.length ? `<div><b>Virarão aliases:</b> ${aliases.map(item => sanitize(item)).join(' · ')}</div>` : ''}
+        </div>
+      ` : ''}
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button class="btn btn-green btn-xs" onclick="mergeDuplicates(${groupIndex})">Mesclar este grupo</button>
+      </div>
+    </div>`;
 }
 
 async function loadDuplicates() {
   try {
     const content = document.getElementById('duplicates-content');
-    content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">🔍 Procurando duplicatas...</div>';
-    
-    const response = await fetch(`${API_BASE_URL}/api/customers/duplicates`);
-    if (!response.ok) throw new Error(`Erro: ${response.status}`);
-    
-    const duplicates = await response.json();
+    content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">🔍 Procurando duplicatas em toda a base...</div>';
+
+    const audit = await requestBackendJson('/api/customers/deduplication-audit');
     const focusIds = _duplicatesModalState.focusIds || [];
+    const duplicates = audit.groups || [];
     const filteredDuplicates = focusIds.length
       ? duplicates.filter(group => group.group.some(customer => focusIds.includes(Number(customer.id))))
       : duplicates;
+    _duplicatesModalState.audit = audit;
+    _duplicatesModalState.groups = filteredDuplicates;
     
     if (filteredDuplicates.length === 0) {
       content.innerHTML = `
@@ -14879,48 +14950,25 @@ async function loadDuplicates() {
       return;
     }
     
+    const high = filteredDuplicates.filter(group => group.confidence === 'alta').length;
+    const review = filteredDuplicates.length - high;
+    const affected = filteredDuplicates.reduce((total, group) => total + (group.group?.length || 0), 0);
+    const links = filteredDuplicates.reduce((total, group) => total + dedupImpactTotal(group), 0);
     content.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">
-          ${filteredDuplicates.length} grupo(s) de duplicata(s) encontrado(s)
+      <div style="display:grid;gap:12px;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+          <div class="card" style="padding:10px"><div class="card-label">Grupos</div><div class="card-value" style="font-size:20px">${filteredDuplicates.length}</div></div>
+          <div class="card" style="padding:10px"><div class="card-label">Alta confiança</div><div class="card-value" style="font-size:20px;color:var(--green)">${high}</div></div>
+          <div class="card" style="padding:10px"><div class="card-label">Revisar</div><div class="card-value" style="font-size:20px;color:var(--orange)">${review}</div></div>
+          <div class="card" style="padding:10px"><div class="card-label">Vínculos</div><div class="card-value" style="font-size:20px">${links}</div></div>
         </div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:16px">
-          Selecione o cliente principal em cada grupo e clique em "Mesclar" para combinar os dados.
+        <div style="font-size:12px;color:var(--text3)">
+          ${affected} cliente(s) aparecem em grupos suspeitos. Revise, marque os grupos aprovados e use <b>Mesclar selecionados</b>.
+          ${focusIds.length ? `<div style="color:var(--orange);margin-top:6px">Filtro ativo para clientes relacionados a ${sanitize(_duplicatesModalState.sourceName || 'este alerta')}.</div>` : ''}
         </div>
-        ${focusIds.length ? `<div style="font-size:12px;color:var(--orange);margin-bottom:16px">Filtro ativo para clientes relacionados a ${sanitize(_duplicatesModalState.sourceName || 'este alerta')}.</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:16px">
-        ${filteredDuplicates.map((group, groupIndex) => `
-          <div style="border:1px solid var(--border2);border-radius:var(--r2);padding:16px">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">
-              Grupo ${groupIndex + 1} - ${group.group.length} cliente(s)
-              ${group.suggested_primary_id ? `<span class="chip chip-blue" style="margin-left:6px">Principal sugerido: ID ${sanitize(group.suggested_primary_id)}</span>` : ''}
-              ${group.requires_manual ? '<span class="chip chip-orange" style="margin-left:6px">Revisao manual</span>' : ''}
-            </div>
-            <div style="display:flex;flex-direction:column;gap:8px">
-              ${group.group.map(customer => `
-                <label style="display:flex;gap:8px;align-items:center;padding:8px;border-radius:var(--r1);background:${focusIds.includes(Number(customer.id)) ? 'var(--orange-bg)' : 'var(--bg2)'};cursor:pointer">
-                  <input type="radio" name="primary-${groupIndex}" value="${customer.id}" ${String(customer.id) === String(group.suggested_primary_id || '') ? 'checked' : ''} style="margin:0">
-                  <div style="flex:1">
-                    <div style="font-weight:600">${customer.nome}${focusIds.includes(Number(customer.id)) ? ' <span style="font-size:10px;color:var(--orange)">Alerta atual</span>' : ''}</div>
-                    <div style="font-size:11px;color:var(--text3)">${customer.telefone || 'Sem telefone'} • ${customer.endereco || 'Sem endereço'}</div>
-                  </div>
-                </label>
-              `).join('')}
-            </div>
-            ${(group.addresses_to_create?.length || group.aliases_to_create?.length) ? `
-              <div style="margin-top:10px;padding:10px;border-radius:var(--r1);background:var(--bg2);font-size:11px;color:var(--text2);display:grid;gap:6px">
-                ${group.addresses_to_create?.length ? `<div><b>Virarao unidades:</b> ${group.addresses_to_create.map(item => sanitize(item.endereco || item.label || 'Endereco')).join(' · ')}</div>` : ''}
-                ${group.aliases_to_create?.length ? `<div><b>Virarao aliases:</b> ${group.aliases_to_create.map(item => sanitize(item)).join(' · ')}</div>` : ''}
-              </div>
-            ` : ''}
-            <div style="margin-top:12px;text-align:right">
-              <button class="btn btn-green btn-xs" onclick="mergeDuplicates(${groupIndex})">
-                🔗 Mesclar Selecionados
-              </button>
-            </div>
-          </div>
-        `).join('')}
+        ${filteredDuplicates.map((group, groupIndex) => dedupGroupHtml(group, groupIndex, focusIds)).join('')}
       </div>
     `;
     
@@ -14936,48 +14984,57 @@ async function loadDuplicates() {
   }
 }
 
+function dedupSelectHighConfidence() {
+  document.querySelectorAll('[data-dedup-select]').forEach(input => {
+    const group = _duplicatesModalState.groups[Number(input.dataset.dedupSelect)];
+    input.checked = group?.confidence === 'alta';
+  });
+}
+
+function dedupBuildApprovedGroups(groupIndexes = null) {
+  const indexes = Array.isArray(groupIndexes)
+    ? groupIndexes
+    : Array.from(document.querySelectorAll('[data-dedup-select]:checked')).map(input => Number(input.dataset.dedupSelect));
+  return indexes.map(groupIndex => {
+    const group = _duplicatesModalState.groups[groupIndex];
+    const selectedRadio = document.querySelector(`input[name="dedup-primary-${groupIndex}"]:checked`);
+    if (!group || !selectedRadio) return null;
+    const primaryId = selectedRadio.value;
+    const duplicateIds = (group.group || [])
+      .map(customer => customer.id)
+      .filter(id => String(id) !== String(primaryId));
+    return { primaryId, duplicateIds };
+  }).filter(group => group && group.duplicateIds.length);
+}
+
 async function mergeDuplicates(groupIndex) {
-  const selectedRadio = document.querySelector(`input[name="primary-${groupIndex}"]:checked`);
+  const selectedRadio = document.querySelector(`input[name="dedup-primary-${groupIndex}"]:checked`);
   if (!selectedRadio) {
     toast('Selecione o cliente principal primeiro', 'warn');
     return;
   }
-  
-  const primaryId = parseInt(selectedRadio.value);
-  const groupDiv = selectedRadio.closest('[style*="border:1px solid"]');
-  const duplicateRadios = groupDiv.querySelectorAll('input[type="radio"]:not(:checked)');
-  const duplicateIds = Array.from(duplicateRadios).map(r => parseInt(r.value));
-  
-  if (duplicateIds.length === 0) {
-    toast('Não há duplicatas para mesclar neste grupo', 'warn');
+  await mergeSelectedDuplicates([groupIndex]);
+}
+
+async function mergeSelectedDuplicates(groupIndexes = null) {
+  const groups = dedupBuildApprovedGroups(groupIndexes);
+  if (!groups.length) {
+    toast('Selecione ao menos um grupo para mesclar', 'warn');
     return;
   }
-  
-  if (!confirmAction(`Tem certeza que deseja mesclar ${duplicateIds.length} cliente(s) duplicado(s) no cliente principal selecionado?`)) {
-    return;
-  }
-  
+  const duplicatesCount = groups.reduce((total, group) => total + group.duplicateIds.length, 0);
+  if (!confirmAction(`Mesclar ${groups.length} grupo(s) e inativar ${duplicatesCount} cadastro(s) duplicado(s)?\n\nO histórico será preservado e reapontado para o cliente principal.`)) return;
+
   try {
-    const response = await fetch(`${API_BASE_URL}/api/customers/merge`, {
+    const result = await requestBackendJson('/api/customers/deduplication-merge', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ primaryId, duplicateIds })
+      body: JSON.stringify({ groups })
     });
-    
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || `Erro ${response.status}`);
-    }
-    
-    const result = await response.json();
-    toast(result.message, 'ok');
-    
-    // Recarregar duplicatas e lista de clientes
+    toast(result.message || 'Clientes mesclados com segurança', 'ok');
     await loadDuplicates();
     await renderClientes();
-    
   } catch (error) {
-    console.error('Erro mergeDuplicates:', error);
+    console.error('Erro mergeSelectedDuplicates:', error);
     toast('Erro ao mesclar clientes: ' + error.message, 'err');
   }
 }
