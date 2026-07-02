@@ -6,7 +6,7 @@
 - Uma conta GitHub (gratuito em github.com)
 - Uma conta Vercel (gratuito em vercel.com)
 - Cópias de 4 "chaves secretas" do Supabase
-- A chave da Google Maps API
+- As chaves do Supabase e o dominio do frontend; mapas pagos ou provedores externos de rota/geocoding nao sao necessarios no modo economico
 
 ---
 
@@ -121,7 +121,6 @@ O Vercel não roda código Node.js bem. O **Render** é gratuito e roda sua API 
 SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=seu_service_role_key_bem_longo
 SUPABASE_ANON_KEY=seu_anon_key
-GOOGLE_MAPS_API_KEY=sua_chave_do_google_maps
 ALLOWED_ORIGINS=https://seu-projeto-9abc1234.vercel.app
 PORT=8000
 ```

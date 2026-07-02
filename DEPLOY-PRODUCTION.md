@@ -11,7 +11,7 @@ Checklist rapido antes de publicar:
 - Frontend: Vercel (pasta `frontend/`)
 - Backend API: Render (arquivo `render.yaml`) ou plataforma equivalente
 - Banco: Supabase
-- Roteirizacao: Google Distance Matrix via proxy backend (`/api/maps/distance-matrix`)
+- Roteirizacao: estimativa local no backend (`/api/maps/distance-matrix`), sem API paga de mapas
 
 ## D1 - Preparacao e Staging
 
@@ -22,7 +22,6 @@ Checklist rapido antes de publicar:
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY`
   - `SUPABASE_ANON_KEY` (se necessario)
-  - `GOOGLE_MAPS_API_KEY`
   - `ALLOWED_ORIGINS` com dominio do frontend de staging
 
 2. Frontend (Vercel)
@@ -52,7 +51,7 @@ window.setLeteApiBaseUrl('https://SEU_BACKEND_STAGING.onrender.com');
 
 1. Publicar backend de producao
 - Confirmar health check: `/api/health`
-- Confirmar mapsProxy true no payload
+- Confirmar `mapsProvider: "local_estimate"`, `routingConfigured: false`, `geocodingConfigured: false` e `cepLookupConfigured: true` no payload
 
 2. Publicar frontend de producao
 - Promover deploy aprovado no Vercel
@@ -87,6 +86,8 @@ window.clearLeteApiBaseUrl();
 
 ## Observacoes
 
-- Nao expor `GOOGLE_MAPS_API_KEY` no frontend em producao.
+- Nao usar chave de mapas paga no frontend ou backend para roteirizacao.
+- Nao configurar provedor externo de rotas/geocoding nesta fase economica.
+- Validacao de endereco depende de CEP obrigatorio via `/api/cep/:cep`, com BrasilAPI/ViaCEP e cache.
 - Manter `ALLOWED_ORIGINS` restrito aos dominos reais.
 - Atualizar periodicamente chaves e segredos.

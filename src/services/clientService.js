@@ -93,6 +93,15 @@ function createClientService(deps) {
     if (payload._meta?.clienteRecorrente && !payload.periodicidade) {
       return { ok: false, status: 400, error: 'Periodicidade é obrigatória para clientes recorrentes', code: 'client_periodicity_required' };
     }
+    if (!payload.cep || String(payload.cep).replace(/\D/g, '').length !== 8) {
+      return { ok: false, status: 400, error: 'CEP e obrigatorio para validar o endereco do cliente', code: 'client_cep_required' };
+    }
+    if (!payload.numero) {
+      return { ok: false, status: 400, error: 'Numero do endereco e obrigatorio', code: 'client_address_number_required' };
+    }
+    if (!payload.rua || !payload.bairro || !payload.cidade || !payload.uf) {
+      return { ok: false, status: 400, error: 'Rua, bairro, cidade e UF sao obrigatorios apos buscar o CEP', code: 'client_structured_address_required' };
+    }
     return { ok: true };
   }
 
@@ -220,6 +229,20 @@ function createClientService(deps) {
   }
 
   async function updateClientLocation(db, customerId, addresses = []) {
+    const invalid = (addresses || []).find(item => {
+      const cep = String(item.cep || '').replace(/\D/g, '');
+      return !cep || cep.length !== 8 || !item.numero || !item.rua || !item.bairro || !item.cidade || !normalizeUf(item.uf);
+    });
+    if (invalid) {
+      return {
+        status: 400,
+        error: {
+          code: 'customer_address_required_fields',
+          error: 'Todas as unidades precisam de CEP, numero, rua, bairro, cidade e UF.'
+        }
+      };
+    }
+
     const deactivated = await runCustomerAddressWriteWithSchemaFallback(
       payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId),
       { ativo: false, updated_at: new Date().toISOString() },

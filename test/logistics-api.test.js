@@ -3,13 +3,11 @@ const assert = require('node:assert/strict');
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
 process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'anon';
-delete process.env.GOOGLE_MAPS_API_KEY;
 
 const app = require('../server');
-process.env.GOOGLE_MAPS_API_KEY = '';
 
 const technicians = [{ id: 't1', nome: 'Ana' }];
-const serviceTypes = [{ sigla: 'DS', nome: 'Desinsetização', duracao_minutos: 60 }];
+const serviceTypes = [{ sigla: 'DS', nome: 'Desinsetizacao', duracao_minutos: 60 }];
 const services = [
   { id: 1, date: '2026-05-07', horario: '08:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua A, 1' },
   { id: 2, date: '2026-05-07', horario: '10:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua B, 2' },
@@ -88,4 +86,71 @@ test('GET /api/logistics/day-route calcula roteiro usando mock Supabase', async 
     assert.equal(typeof payload.routes[0].scoreOperacional, 'number');
     assert.ok(['alta', 'baixa'].includes(payload.routes[0].confiabilidadeGeral));
   });
+});
+
+test('GET /api/health anuncia modo economico de mapas', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/health`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.mapsProvider, 'local_estimate');
+    assert.equal(payload.routingConfigured, false);
+    assert.equal(payload.geocodingConfigured, false);
+    assert.equal(payload.cepLookupConfigured, true);
+    assert.equal(payload.mapsProxy, false);
+  });
+});
+
+test('GET /api/maps/distance-matrix responde compativel sem Google configurado', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/maps/distance-matrix?origins=Rua A, 1&destinations=Rua B, 2`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.status, 'OK');
+    assert.equal(payload.provider, 'estimated');
+    assert.equal(payload.rows[0].elements[0].status, 'OK');
+    assert.equal(payload.rows[0].elements[0].origin, 'estimado');
+  });
+});
+
+test('GET /api/geocode fica desativado no modo economico', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/geocode?address=${encodeURIComponent('Rua Maria Jose Rangel, 135')}`);
+    assert.equal(response.status, 503);
+    const payload = await response.json();
+    assert.equal(payload.code, 'geocode_disabled');
+  });
+});
+
+test('GET /api/cep normaliza BrasilAPI v2 com coordenadas', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    if (String(url).startsWith('https://brasilapi.com.br/api/cep/v2/')) {
+      return new Response(JSON.stringify({
+        cep: '01001000',
+        state: 'SP',
+        city: 'Sao Paulo',
+        neighborhood: 'Se',
+        street: 'Praca da Se',
+        location: { coordinates: { latitude: '-23.55052', longitude: '-46.63331' } }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return originalFetch(url, options);
+  };
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/cep/01001000`);
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.provider, 'brasilapi');
+      assert.equal(payload.cep, '01001-000');
+      assert.equal(payload.rua, 'Praca da Se');
+      assert.equal(payload.cidade, 'Sao Paulo');
+      assert.equal(payload.latitude, -23.55052);
+      assert.equal(payload.longitude, -46.63331);
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

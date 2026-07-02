@@ -156,7 +156,7 @@ function createAppointmentService(deps) {
     let customerLink = null;
     try {
       const saveAddress = input?.salvar_unidade_cliente !== false && input?.save_customer_address !== false;
-      customerLink = await ensureCustomerForServicePayload(db, payload, { saveAddress });
+      customerLink = await ensureCustomerForServicePayload(db, payload, { saveAddress, input });
     } catch (error) {
       return { status: error.statusCode || 500, error, customerLinkFailed: true };
     }

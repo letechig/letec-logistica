@@ -4,7 +4,7 @@ Documento de referencia para manutencao segura antes de novas funcionalidades. E
 
 ## Arquivos ativos
 
-- `server.js`: backend Node.js/Express, rotas internas, Supabase, Evolution API e proxy do Google Maps.
+- `server.js`: backend Node.js/Express, rotas internas, Supabase, Evolution API, CEP e estimativa local de rotas.
 - `frontend/index.html`: aplicacao principal do sistema Letec.
 - `frontend/portal-tecnico.html`: portal tecnico.
 - `src/logistics/`: motor logistico e calculos auxiliares.
@@ -28,7 +28,6 @@ Backend:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` ou `SUPABASE_ANON_KEY`
-- `GOOGLE_MAPS_API_KEY`
 - `ALLOWED_ORIGINS`
 - `PORT`
 - `EVOLUTION_API_URL` ou `EVOLUTION_URL`
@@ -134,7 +133,7 @@ GET /api/evolution/status
 Como havia valores antigos em arquivos versionados/legados, rotacione no provedor qualquer chave que ainda esteja ativa:
 
 - Supabase publishable/anon keys expostas anteriormente.
-- Google Maps key exposta anteriormente.
+- Chave de mapas paga exposta anteriormente.
 - Qualquer token operacional que tenha sido compartilhado fora do `.env`.
 
 ## Proxima fase recomendada

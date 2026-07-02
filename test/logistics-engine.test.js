@@ -216,9 +216,9 @@ test('buildRouteForGroup cacheia distâncias repetidas e inclui retorno à base 
     async getDistance(origem, destino) {
       calls += 1;
       if (/Rua A/.test(String(origem)) && /Maria Jos[eé] Rangel/.test(String(destino))) {
-        return { km: 8, minutos: 20, origem: 'google' };
+        return { km: 8, minutos: 20, origem: 'estimado' };
       }
-      return { km: 4, minutos: 10, origem: 'google' };
+      return { km: 4, minutos: 10, origem: 'estimado' };
     },
   };
 
@@ -233,7 +233,7 @@ test('buildRouteForGroup cacheia distâncias repetidas e inclui retorno à base 
   assert.equal(route.retornoBaseMin, 20);
   assert.equal(route.retornoBaseKm, 8);
   assert.equal(route.tempoTotalMin, 90);
-  assert.equal(route.confiabilidadeGeral, 'alta');
+  assert.equal(route.confiabilidadeGeral, 'baixa');
   assert.equal(route.esperaTotalMin, 0);
   assert.equal(route.atrasoTotalMin, 10);
   assert.equal(route.scoreOperacional >= 80, true);
@@ -248,7 +248,7 @@ test('buildRouteForGroup mantém compatibilidade quando retorno à base é desat
   }, {
     serviceTypes,
     config: { incluirRetornoBase: false },
-    distanceClient: { async getDistance() { return { km: 4, minutos: 10, origem: 'google' }; } },
+    distanceClient: { async getDistance() { return { km: 4, minutos: 10, origem: 'estimado' }; } },
   });
 
   assert.equal(route.retornoBaseMin, 0);
@@ -298,9 +298,9 @@ test('validateService usa jornada com serviços, deslocamentos e retorno à base
   const routeDistance = {
     async getDistance(origem, destino) {
       if (/Rua A/.test(String(origem)) && /Rua B/.test(String(destino))) {
-        return { km: 8, minutos: 20, origem: 'google' };
+        return { km: 8, minutos: 20, origem: 'estimado' };
       }
-      return { km: 6, minutos: 15, origem: 'google' };
+      return { km: 6, minutos: 15, origem: 'estimado' };
     },
   };
 
@@ -321,7 +321,7 @@ test('validateService usa jornada com serviços, deslocamentos e retorno à base
 
   assert.equal(result.status, 'alerta');
   assert.equal(result.detalhes.regraAplicada, 'jornada_estourada');
-  assert.equal(result.confiabilidadeGeral, 'alta');
+  assert.equal(result.confiabilidadeGeral, 'baixa');
   assert.equal(Number.isFinite(result.scoreOperacional), true);
   assert.match(result.mensagens.join(' '), /incluindo deslocamentos/);
 });

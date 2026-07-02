@@ -3184,7 +3184,7 @@ gap: 6px;
     if (window.location.hostname.includes('vercel.app')) return LETEC_DEFAULT_API_BASE_URL;
     return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
   })();
-  const LETEC_BACKEND_CAPABILITIES = { checked: false, available: false, mapsProxy: false };
+  const LETEC_BACKEND_CAPABILITIES = { checked: false, available: false, mapsProxy: false, routingConfigured: false, geocodingConfigured: false, cepLookupConfigured: false, mapsProvider: 'local_estimate' };
 
   async function refreshBackendCapabilities() {
     try {
@@ -3193,11 +3193,18 @@ gap: 6px;
       const data = await response.json();
       LETEC_BACKEND_CAPABILITIES.checked = true;
       LETEC_BACKEND_CAPABILITIES.available = true;
-      LETEC_BACKEND_CAPABILITIES.mapsProxy = !!data.mapsProxy;
+      LETEC_BACKEND_CAPABILITIES.mapsProvider = data.mapsProvider || 'local_estimate';
+      LETEC_BACKEND_CAPABILITIES.routingConfigured = !!(data.routingConfigured ?? data.mapsProxy);
+      LETEC_BACKEND_CAPABILITIES.geocodingConfigured = !!data.geocodingConfigured;
+      LETEC_BACKEND_CAPABILITIES.cepLookupConfigured = !!data.cepLookupConfigured;
+      LETEC_BACKEND_CAPABILITIES.mapsProxy = LETEC_BACKEND_CAPABILITIES.routingConfigured;
       return LETEC_BACKEND_CAPABILITIES;
     } catch (e) {
       LETEC_BACKEND_CAPABILITIES.checked = true;
       LETEC_BACKEND_CAPABILITIES.available = false;
+      LETEC_BACKEND_CAPABILITIES.routingConfigured = false;
+      LETEC_BACKEND_CAPABILITIES.geocodingConfigured = false;
+      LETEC_BACKEND_CAPABILITIES.cepLookupConfigured = false;
       LETEC_BACKEND_CAPABILITIES.mapsProxy = false;
       console.warn('[Backend] Nao foi possivel consultar /api/health:', e.message || e);
       if (typeof setSyncStatus === 'function') setSyncStatus('⚠️ API indisponível — tentando usar cache local');
@@ -3445,7 +3452,11 @@ async function carregarVeiculos(){
   }
 
   function serviceBackendPayload(servico, omitId = false) {
-    return prepararParaSupabase(servico, omitId);
+    const payload = prepararParaSupabase(servico, omitId);
+    ['cep','rua','numero','bairro','cidade','uf','complemento','referencia','latitude','longitude'].forEach(key => {
+      if (servico && Object.prototype.hasOwnProperty.call(servico, key)) payload[key] = servico[key];
+    });
+    return payload;
   }
 
   async function createServiceViaBackend(servico) {
@@ -4108,9 +4119,9 @@ async function carregarVeiculos(){
           <div class="card-label mb3">📊 KM Rodados por Mês</div>
           <div id="km-analysis"></div>
         </div>
-        <!-- Link rápido Google Maps para data -->
+        <!-- Link rapido para app de mapas da data -->
         <div class="card">
-          <div class="card-label mb2">🗺 Abrir Rota no Google Maps</div>
+          <div class="card-label mb2">🗺 Abrir rota no app de mapas</div>
           <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Gera link multi-ponto com todos os clientes da data selecionada.</div>
           <input type="date" class="fsel w100" id="rota-date" onchange="renderRotas()" style="margin-bottom:12px">
           <div id="mapa-simples" style="background:var(--bg2);border-radius:var(--r2);padding:16px;min-height:160px"></div>
@@ -4859,7 +4870,7 @@ async function carregarVeiculos(){
                 <label class="client-label">Endereço completo</label>
                 <div class="client-inline">
                   <input id="cli-form-end" type="text" class="finput" placeholder="Rua, número, bairro, cidade e UF">
-                  <button class="client-btn secondary" onclick="geocodeClientAddress()" title="Validar endereço" style="min-height:42px;padding:0 12px">Validar</button>
+                  <button class="client-btn secondary" onclick="geocodeClientAddress()" title="Validar por CEP" style="min-height:42px;padding:0 12px">Validar CEP</button>
                   <button class="client-btn secondary" onclick="openClientAddressMap()" title="Abrir no mapa" style="min-height:42px;padding:0 12px">Mapa</button>
                 </div>
                 <div id="cli-geocode-suggestions" style="margin-top:8px;display:none"></div>
@@ -6357,10 +6368,10 @@ async function calcularDeslocamentoLogistico(origem, destino) {
     try {
       const [real] = await rotGoogleDistanceBatch(origem, [destino]);
       if (real && Number.isFinite(Number(real.min))) {
-        return { minutos: Number(real.min), km: Number(real.km || 0), origem: 'google' };
+        return { minutos: Number(real.min), km: Number(real.km || 0), origem: real.origem || 'estimado' };
       }
     } catch (e) {
-      console.warn('Validação logística: Google Maps indisponível, usando estimativa.', e?.message || e);
+      console.warn('Validação logística: provedor de rotas indisponível, usando estimativa.', e?.message || e);
     }
   }
   return {
@@ -6559,12 +6570,12 @@ async function calcularDeslocamentoOperacional(origem, destino, contexto = {}) {
         return {
           deslocamentoEstimadoMin: Number(real.min),
           km: Number(real.km || 0),
-          origem: 'google',
+          origem: real.origem || 'estimado',
           mensagem: ''
         };
       }
     } catch (e) {
-      logisticaDebug('[Motor Tempo Operacional] Google Maps indisponível', e?.message || e);
+      logisticaDebug('[Motor Tempo Operacional] Provedor de rotas indisponível', e?.message || e);
     }
   }
 
@@ -7180,7 +7191,7 @@ async function validarLogisticaServico(servico, options = {}) {
       const desloc = await calcularDeslocamentoLogistico(origem, destino);
       const intervaloCurto = intervalo < margemMin;
       const deslocInsuficiente = desloc.minutos !== null && intervalo < (desloc.minutos + margemMin);
-      const realMaps = desloc.origem === 'google';
+      const realMaps = false;
 
       if (resultado.intervaloDisponivelMin === null || intervalo < resultado.intervaloDisponivelMin) {
         resultado.intervaloDisponivelMin = intervalo;
@@ -7197,13 +7208,13 @@ async function validarLogisticaServico(servico, options = {}) {
         aplicarSeveridadeLogistica(resultado, 'aviso', msg);
       } else if (deslocInsuficiente) {
         const msg = realMaps
-          ? `Atenção: Google Maps indica ${desloc.minutos}min de deslocamento para ${intervalo}min disponíveis.`
+          ? `Atenção: provedor de rotas indica ${desloc.minutos}min de deslocamento para ${intervalo}min disponíveis.`
           : `Atenção: deslocamento estimado em ${desloc.minutos}min para ${intervalo}min disponíveis.`;
         resultado.detalhes.push(logisticaDetalhe('Deslocamento entre serviços', msg, 'aviso', { ...detalheBase, intervaloDisponivelMin: intervalo, deslocamentoConsideradoMin: desloc.minutos, deslocamentoOrigem: desloc.origem }));
         resultado.sugestoes.push('Ajustar horário ou confirmar deslocamento com a equipe');
         aplicarSeveridadeLogistica(resultado, 'aviso', msg);
       } else if (desloc.origem === 'estimado' || desloc.origem === 'desconhecido') {
-        const msg = 'Deslocamento real não confirmado por Google Maps; validação mantida como estimativa operacional.';
+        const msg = 'Deslocamento real não confirmado pelo provedor de rotas; validação mantida como estimativa operacional.';
         resultado.detalhes.push(logisticaDetalhe('Deslocamento desconhecido', msg, 'aviso', { ...detalheBase, intervaloDisponivelMin: intervalo, deslocamentoConsideradoMin: desloc.minutos, deslocamentoOrigem: desloc.origem }));
         aplicarSeveridadeLogistica(resultado, 'aviso', msg);
       }
@@ -10369,6 +10380,7 @@ const operationalMapState = {
   hojeGroupBy: 'time',
   maps: {},
   markers: {},
+  locationPicker: null,
   geocodeCache: (() => {
     try { return JSON.parse(localStorage.getItem(OP_MAP_GEOCODE_CACHE_KEY) || '{}') || {}; }
     catch(e) { return {}; }
@@ -10399,9 +10411,17 @@ function opMapServiceInBounds(service, bounds) {
 }
 
 function opMapServiceLocation(service = {}) {
-  const lat = Number(service.latitude ?? service.lat ?? service.chegada_lat ?? service.customer_latitude);
-  const lng = Number(service.longitude ?? service.lng ?? service.chegada_lng ?? service.customer_longitude);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, source: service.chegada_lat ? 'campo' : 'cadastro' };
+  const candidates = [
+    { lat: service.address_latitude, lng: service.address_longitude, source: 'customer_address' },
+    { lat: service.customer_latitude, lng: service.customer_longitude, source: 'customer' },
+    { lat: service.latitude ?? service.lat, lng: service.longitude ?? service.lng, source: service.location_source || 'service' },
+    { lat: service.chegada_lat, lng: service.chegada_lng, source: 'technician_arrival' }
+  ];
+  for (const candidate of candidates) {
+    const lat = Number(candidate.lat);
+    const lng = Number(candidate.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, source: candidate.source };
+  }
   return null;
 }
 
@@ -10494,17 +10514,7 @@ async function opMapResolveLocations(items = []) {
       item.location = { lat: Number(cached.lat), lng: Number(cached.lng), source: 'cache' };
       return item;
     }
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/geocode?address=${encodeURIComponent(item.endereco)}`);
-      if (!response.ok) throw new Error(`geocode ${response.status}`);
-      const geo = await response.json();
-      if (Number.isFinite(Number(geo.latitude)) && Number.isFinite(Number(geo.longitude))) {
-        item.location = { lat: Number(geo.latitude), lng: Number(geo.longitude), source: 'geocode' };
-        operationalMapState.geocodeCache[key] = { lat: item.location.lat, lng: item.location.lng };
-      }
-    } catch(e) {
-      item.locationError = true;
-    }
+    item.locationError = true;
     return item;
   });
   await Promise.all(tasks);
@@ -10680,6 +10690,96 @@ function opMapFocus(canvasId, serviceId) {
   marker.openPopup();
 }
 
+function opMapFindService(serviceId) {
+  return (services || []).find(service => sameId(service.id, serviceId)) || null;
+}
+
+function opMapLinkedCustomer(service = {}) {
+  return service.customer_id || service.cliente_id || service.clienteId || service.client_id || '';
+}
+
+async function opMapSaveLocationForService(serviceId, lat, lng, options = {}) {
+  const service = opMapFindService(serviceId);
+  if (!service) throw new Error('Servico nao encontrado no cache local');
+  const customerId = opMapLinkedCustomer(service);
+  if (!customerId) throw new Error('Servico sem cliente vinculado. Vincule o cliente antes de salvar coordenada.');
+  const addressId = service.customer_address_id || '';
+  const path = addressId
+    ? `/api/customers/${encodeURIComponent(customerId)}/addresses/${encodeURIComponent(addressId)}/location`
+    : `/api/customers/${encodeURIComponent(customerId)}/location`;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ latitude: lat, longitude: lng, source: options.source || 'manual_map' })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+
+  service.latitude = lat;
+  service.longitude = lng;
+  service.customer_latitude = lat;
+  service.customer_longitude = lng;
+  service.location_source = addressId ? 'customer_address' : 'customer';
+  const customer = (clientesData || []).find(c => String(c.id) === String(customerId));
+  if (customer) {
+    customer.latitude = lat;
+    customer.longitude = lng;
+  }
+  saveSvcs();
+  return payload;
+}
+
+function opMapStartLocationPicker(serviceId, canvasId = 'op-map-hoje-canvas') {
+  const map = operationalMapState.maps[canvasId];
+  const service = opMapFindService(serviceId);
+  if (!map) { toast('Mapa ainda nao carregado', 'warn'); return; }
+  if (!service) { toast('Servico nao encontrado', 'err'); return; }
+  if (!opMapLinkedCustomer(service)) { toast('Vincule o cliente antes de salvar coordenada', 'warn'); return; }
+  operationalMapState.locationPicker = { serviceId, canvasId };
+  toast('Clique no ponto correto dentro do mapa para salvar a coordenada', 'ok');
+  map.getContainer().style.cursor = 'crosshair';
+  map.once('click', async ev => {
+    map.getContainer().style.cursor = '';
+    const lat = Number(ev.latlng.lat.toFixed(7));
+    const lng = Number(ev.latlng.lng.toFixed(7));
+    if (!confirmAction(`Salvar coordenada ${lat}, ${lng} para este atendimento?`)) return;
+    try {
+      await opMapSaveLocationForService(serviceId, lat, lng, { source: 'manual_map' });
+      toast('Coordenada salva no cadastro', 'ok');
+      if (currentPage === 'hoje') renderHoje();
+      if (currentPage === 'roteiro') renderMapaRoteiros();
+    } catch(e) {
+      toast(`Erro ao salvar coordenada: ${e.message || e}`, 'err');
+    } finally {
+      operationalMapState.locationPicker = null;
+    }
+  });
+}
+
+async function opMapPromoteArrivalLocation(serviceId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/services/${encodeURIComponent(serviceId)}/promote-arrival-location`, { method: 'POST' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+    const service = opMapFindService(serviceId);
+    const lat = Number(payload.location?.latitude ?? service?.chegada_lat);
+    const lng = Number(payload.location?.longitude ?? service?.chegada_lng);
+    if (service && Number.isFinite(lat) && Number.isFinite(lng)) {
+      service.latitude = lat;
+      service.longitude = lng;
+      service.customer_latitude = lat;
+      service.customer_longitude = lng;
+      service.location_source = payload.target || 'technician_arrival';
+      saveSvcs();
+    }
+    toast('GPS de chegada salvo no cadastro', 'ok');
+    if (currentPage === 'hoje') renderHoje();
+    if (currentPage === 'roteiro') renderMapaRoteiros();
+  } catch(e) {
+    toast(`Erro ao usar GPS da chegada: ${e.message || e}`, 'err');
+  }
+}
+
 function opMapOptionsHtml(values, placeholder, selected = '') {
   const unique = [...new Set((values || []).map(v => String(v || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   return `<option value="">${placeholder}</option>` + unique.map(value => `<option value="${escapeHtmlAttr(value)}" ${value === selected ? 'selected' : ''}>${sanitize(value)}</option>`).join('');
@@ -10813,6 +10913,8 @@ function opMapQuickRouteItemHtml(item, index, canvasId = '') {
     </div>
     <div class="op-map-quick-actions" onclick="event.stopPropagation()">
       <button class="op-map-mini-btn primary" onclick="openEditSvc(${id})">Abrir</button>
+      ${!item.location ? `<button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${id}, '${canvasId}')">Definir ponto</button>` : ''}
+      ${!item.location && item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${id})">Usar chegada</button>` : ''}
       <a class="op-map-mini-btn" href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Rota</a>
     </div>
   </div>`;
@@ -10844,6 +10946,7 @@ function opMapListHtml(items = [], canvasId = '', options = {}) {
         <span>${sanitize(item.endereco || 'Sem endereço')}</span>
         ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : ''}
       </div>
+      ${!item.location ? `<div class="op-map-quick-actions" onclick="event.stopPropagation()"><button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${jsArg(item.id)}, '${canvasId}')">Definir ponto</button>${item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${jsArg(item.id)})">Usar chegada</button>` : ''}</div>` : ''}
     </div>`;
   }).join('')}</div>`;
 }
@@ -11378,7 +11481,7 @@ async function hojeExecTodos(ids) {
 // ════════════════════════════════════════════════
 // ROTAS & KM — Análise de Eficiência de Deslocamento
 // Responsabilidade ÚNICA: KM rodados, custo logístico,
-// eficiência por veículo, link Google Maps multi-ponto.
+// eficiencia por veiculo, link externo multi-ponto.
 // NÃO lista serviços do dia (→ use Painel Hoje).
 // NÃO gera roteiro WhatsApp (→ use Roteiro do Dia).
 // ════════════════════════════════════════════════
@@ -11420,12 +11523,12 @@ function renderRotas() {
   async function validarRotas() {
     const indicadores = [];
 
-    // 1. Status da API do Google Maps
+    // 1. Status da API de rotas
     try {
       const response = await fetch(`${API_BASE_URL}/api/maps/distance-matrix?origins=São Paulo, SP&destinations=São Paulo, SP`);
       if (response.ok) {
         indicadores.push({
-          titulo: 'API Google Maps',
+          titulo: 'API de Rotas',
           status: 'ok',
           icone: '✓',
           descricao: 'API operacional',
@@ -11433,7 +11536,7 @@ function renderRotas() {
         });
       } else {
         indicadores.push({
-          titulo: 'API Google Maps',
+          titulo: 'API de Rotas',
           status: 'error',
           icone: '✗',
           descricao: `Erro ${response.status}`,
@@ -11442,7 +11545,7 @@ function renderRotas() {
       }
     } catch (e) {
       indicadores.push({
-        titulo: 'API Google Maps',
+        titulo: 'API de Rotas',
         status: 'error',
         icone: '⚠',
         descricao: 'Indisponível',
@@ -11531,7 +11634,7 @@ function renderRotas() {
     </div>`;
   }).join('') || '<div class="text-muted">Registre check lists para ver análise de KM.</div>';
 
-  // ── Google Maps link para data ──────────────────────────
+  // Link externo de navegacao para data.
   const daySvcs   = services.filter(s => getServiceDateValue(s) === rotaDate);
   const allClients= daySvcs.map(s => encodeURIComponent((s.cliente||s.cl||'') + ', São Paulo')).join('/');
   const dm = rotaDate.split('-');
@@ -13831,6 +13934,13 @@ async function saveClientContracts(customerId) {
 }
 
 function clientAddressDraftFromForm() {
+  let geo = {};
+  try {
+    const raw = document.getElementById('cli-form-end')?.dataset.geocodeData || '';
+    geo = raw ? JSON.parse(raw) : {};
+  } catch(e) {
+    geo = {};
+  }
   return {
     label: 'Principal',
     endereco: document.getElementById('cli-form-end')?.value.trim() || '',
@@ -13843,6 +13953,8 @@ function clientAddressDraftFromForm() {
     uf: document.getElementById('cli-form-uf')?.value.trim().toUpperCase() || '',
     complemento: document.getElementById('cli-form-complemento')?.value.trim() || '',
     referencia: document.getElementById('cli-form-referencia')?.value.trim() || '',
+    latitude: Number.isFinite(Number(geo.latitude)) ? Number(geo.latitude) : null,
+    longitude: Number.isFinite(Number(geo.longitude)) ? Number(geo.longitude) : null,
     is_primary: true,
     ativo: true,
     origem: 'cadastro'
@@ -13912,6 +14024,8 @@ async function loadClientAddresses(customerId) {
       uf: item.uf || '',
       complemento: item.complemento || '',
       referencia: item.referencia || '',
+      latitude: item.latitude ?? null,
+      longitude: item.longitude ?? null,
       is_primary: item.is_primary === true,
       ativo: item.ativo !== false,
       origem: item.origem || 'cadastro'
@@ -14202,10 +14316,15 @@ async function buscarCepCliente() {
     }
     
     // Preencher campos automaticamente
-    document.getElementById('cli-form-rua').value = data.logradouro || '';
-    document.getElementById('cli-form-bairro').value = data.bairro || '';
-    document.getElementById('cli-form-cidade').value = data.localidade || '';
-    document.getElementById('cli-form-uf').value = (data.uf || '').toUpperCase();
+    const rua = data.rua || data.logradouro || '';
+    const bairro = data.bairro || '';
+    const cidade = data.cidade || data.localidade || '';
+    const uf = (data.uf || '').toUpperCase();
+
+    document.getElementById('cli-form-rua').value = rua;
+    document.getElementById('cli-form-bairro').value = bairro;
+    document.getElementById('cli-form-cidade').value = cidade;
+    document.getElementById('cli-form-uf').value = uf;
     document.getElementById('cli-form-complemento').value = data.complemento || '';
     
     // Formatar CEP
@@ -14213,16 +14332,24 @@ async function buscarCepCliente() {
     
     // Construir endereço completo
     const enderecoCompleto = buildClientAddress({
-      rua: data.logradouro,
+      rua,
       numero: document.getElementById('cli-form-numero').value,
-      bairro: data.bairro,
-      cidade: data.localidade,
-      uf: data.uf,
+      bairro,
+      cidade,
+      uf,
       complemento: data.complemento,
       referencia: document.getElementById('cli-form-referencia').value
     });
     
     document.getElementById('cli-form-end').value = enderecoCompleto;
+    if (Number.isFinite(Number(data.latitude)) && Number.isFinite(Number(data.longitude))) {
+      document.getElementById('cli-form-end').dataset.geocodeData = JSON.stringify({
+        endereco_completo: enderecoCompleto,
+        latitude: Number(data.latitude),
+        longitude: Number(data.longitude),
+        source: data.provider || 'cep'
+      });
+    }
     
     toast('✅ Endereço preenchido automaticamente', 'ok');
     
@@ -14410,6 +14537,18 @@ async function saveClient() {
       markClientFieldInvalid('cli-form-periodicidade', 'cli-error-periodicidade');
       return;
     }
+    if (cep.replace(/\D/g, '').length !== 8 || !numero || !rua || !bairro || !cidade || uf.length !== 2) {
+      errorEl.textContent = 'CEP, número, rua, bairro, cidade e UF são obrigatórios para salvar o cliente';
+      errorEl.style.display = 'block';
+      switchClientTab('endereco');
+      if (cep.replace(/\D/g, '').length !== 8) markClientFieldInvalid('cli-form-cep');
+      if (!numero) markClientFieldInvalid('cli-form-numero');
+      if (!rua) markClientFieldInvalid('cli-form-rua');
+      if (!bairro) markClientFieldInvalid('cli-form-bairro');
+      if (!cidade) markClientFieldInvalid('cli-form-cidade');
+      if (uf.length !== 2) markClientFieldInvalid('cli-form-uf');
+      return;
+    }
     
     // Verificar duplicatas antes de salvar (apenas para novos clientes)
     if (!clienteEditando) {
@@ -14561,6 +14700,89 @@ function buildServiceAddressFromClient(cliente = {}) {
   return `${enderecoBase} - CEP: ${cep}`;
 }
 
+function setServicoCepLookupLoading(prefix = 'ns', loading = false) {
+  const btn = document.getElementById(`${prefix}-cep-btn`);
+  if (!btn) return;
+  btn.disabled = !!loading;
+  btn.textContent = loading ? '...' : 'Buscar';
+}
+
+function setServicoAddressFields(prefix = 'ns', data = {}) {
+  const set = (suffix, value) => {
+    const el = document.getElementById(`${prefix}-${suffix}`);
+    if (el) el.value = value || '';
+  };
+  set('cep', data.cep || '');
+  set('rua', data.rua || data.logradouro || '');
+  set('bairro', data.bairro || '');
+  set('cidade', data.cidade || data.localidade || '');
+  set('uf', String(data.uf || '').toUpperCase());
+  set('numero', data.numero || '');
+  set('complemento', data.complemento || '');
+  const end = document.getElementById(`${prefix}-end`);
+  if (end && (data.latitude || data.longitude)) {
+    end.dataset.geocodeData = JSON.stringify({
+      latitude: data.latitude,
+      longitude: data.longitude,
+      source: data.provider || 'cep'
+    });
+  }
+}
+
+function syncServicoEndereco(prefix = 'ns') {
+  const rua = document.getElementById(`${prefix}-rua`)?.value.trim() || '';
+  const numero = document.getElementById(`${prefix}-numero`)?.value.trim() || '';
+  const bairro = document.getElementById(`${prefix}-bairro`)?.value.trim() || '';
+  const cidade = document.getElementById(`${prefix}-cidade`)?.value.trim() || '';
+  const uf = document.getElementById(`${prefix}-uf`)?.value.trim().toUpperCase() || '';
+  const complemento = document.getElementById(`${prefix}-complemento`)?.value.trim() || '';
+  const end = document.getElementById(`${prefix}-end`);
+  if (!end) return;
+  end.value = buildClientAddress({ rua, numero, bairro, cidade, uf, complemento, referencia: '' });
+  updateNewSvcGuideSummary();
+}
+
+async function buscarCepServico(prefix = 'ns') {
+  const cepInput = document.getElementById(`${prefix}-cep`);
+  const cep = cepInput?.value.replace(/\D/g, '') || '';
+  if (cep.length !== 8) {
+    toast('CEP deve ter 8 dígitos', 'warn');
+    return;
+  }
+  try {
+    setServicoCepLookupLoading(prefix, true);
+    const response = await fetch(`${API_BASE_URL}/api/cep/${cep}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Erro ${response.status}`);
+    const numero = document.getElementById(`${prefix}-numero`)?.value.trim() || '';
+    setServicoAddressFields(prefix, { ...data, numero });
+    if (cepInput) cepInput.value = cep.replace(/(\d{5})(\d{3})/, '$1-$2');
+    syncServicoEndereco(prefix);
+    toast('Endereço do serviço preenchido pelo CEP', 'ok');
+  } catch(e) {
+    toast(`Erro ao buscar CEP: ${e.message || e}`, 'err');
+  } finally {
+    setServicoCepLookupLoading(prefix, false);
+  }
+}
+
+function servicoAddressPayloadFromForm(prefix = 'ns') {
+  const end = document.getElementById(`${prefix}-end`);
+  let geo = {};
+  try { geo = JSON.parse(end?.dataset.geocodeData || '{}') || {}; } catch(e) { geo = {}; }
+  return {
+    cep: document.getElementById(`${prefix}-cep`)?.value.trim() || '',
+    rua: document.getElementById(`${prefix}-rua`)?.value.trim() || '',
+    numero: document.getElementById(`${prefix}-numero`)?.value.trim() || '',
+    bairro: document.getElementById(`${prefix}-bairro`)?.value.trim() || '',
+    cidade: document.getElementById(`${prefix}-cidade`)?.value.trim() || '',
+    uf: document.getElementById(`${prefix}-uf`)?.value.trim().toUpperCase() || '',
+    complemento: document.getElementById(`${prefix}-complemento`)?.value.trim() || '',
+    latitude: Number.isFinite(Number(geo.latitude)) ? Number(geo.latitude) : null,
+    longitude: Number.isFinite(Number(geo.longitude)) ? Number(geo.longitude) : null
+  };
+}
+
 function renderServicoClientesSelect(prefix = 'ns', selectedClientId = '') {
   const select = document.getElementById(`${prefix}-client-select`);
   if (!select) return;
@@ -14577,6 +14799,18 @@ function preencherServicoPorCliente(prefix = 'ns', cliente) {
   nomeInput.value = cliente.nome || '';
   nomeInput.dataset.clientId = String(cliente.id || '');
   enderecoInput.dataset.clientId = String(cliente.id || '');
+  setServicoAddressFields(prefix, {
+    cep: cliente.cep || '',
+    rua: cliente.rua || '',
+    numero: cliente.numero || '',
+    bairro: cliente.bairro || '',
+    cidade: cliente.cidade || '',
+    uf: cliente.uf || '',
+    complemento: cliente.complemento || '',
+    latitude: cliente.latitude ?? null,
+    longitude: cliente.longitude ?? null,
+    provider: 'cliente'
+  });
 
   if (endereco) {
     enderecoInput.value = endereco;
@@ -14718,6 +14952,7 @@ function selecionarEnderecoServico(prefix = 'ns') {
   const address = addresses.find(item => String(item.id) === String(selectedId));
   if (address && enderecoInput) {
     enderecoInput.value = address.endereco_completo || address.endereco || buildClientAddress(address) || '';
+    setServicoAddressFields(prefix, address);
     if (saveNew) saveNew.checked = false;
   } else if (saveNew) {
     saveNew.checked = true;
@@ -14767,59 +15002,17 @@ function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentN
 function onNovoServicoClienteManualInput() { onServicoClienteManualInput('ns'); }
 
 async function geocodeClientAddress() {
-  const enderecoInput = document.getElementById('cli-form-end');
-  const endereco = enderecoInput.value.trim();
+  const cep = document.getElementById('cli-form-cep')?.value.replace(/\D/g, '') || '';
   const suggestionsDiv = document.getElementById('cli-geocode-suggestions');
-  
-  if (!endereco) {
-    toast('Digite um endereço primeiro', 'warn');
+  if (cep.length !== 8) {
+    toast('Informe e busque o CEP antes de validar o endereço', 'warn');
+    switchClientTab('endereco');
     return;
   }
-  
-  try {
-    suggestionsDiv.innerHTML = '<div style="font-size:12px;color:var(--text3)">🔍 Buscando endereço...</div>';
+  await buscarCepCliente();
+  if (suggestionsDiv) {
+    suggestionsDiv.innerHTML = '<div style="font-size:12px;color:var(--text3)">Endereço validado por CEP. Se o mapa mostrar “Sem coord.” depois, defina o ponto no Mapa Operacional.</div>';
     suggestionsDiv.style.display = 'block';
-    
-    const response = await fetch(`${API_BASE_URL}/api/geocode?address=${encodeURIComponent(endereco)}`);
-    const responseText = await response.text();
-    let data = {};
-    try {
-      data = responseText ? JSON.parse(responseText) : {};
-    } catch (parseError) {
-      data = { error: responseText || `Resposta inválida da API (${response.status})` };
-    }
-    
-    if (!response.ok) {
-      if (data.suggestions && data.suggestions.length > 0) {
-        suggestionsDiv.innerHTML = `
-          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Endereço não encontrado. Sugestões:</div>
-          ${data.suggestions.map(sugg => `
-            <button class="btn btn-ghost btn-xs" onclick="selectGeocodeSuggestion('${sugg.replace(/'/g, "\\'")}')" style="width:100%;text-align:left;margin-bottom:4px;font-size:11px">
-              📍 ${sugg}
-            </button>
-          `).join('')}
-        `;
-      } else {
-        const message = response.status === 429
-          ? 'Muitas validações em pouco tempo. Aguarde alguns minutos e tente novamente.'
-          : (data.error || `Erro ${response.status} ao buscar endereço`);
-        suggestionsDiv.innerHTML = `<div style="font-size:12px;color:var(--red)">❌ ${sanitize(message)}</div>`;
-      }
-      return;
-    }
-    
-    // Endereço encontrado com sucesso
-    enderecoInput.value = data.endereco_completo;
-    enderecoInput.dataset.geocodeData = JSON.stringify(data);
-    suggestionsDiv.innerHTML = '<div style="font-size:12px;color:var(--green)">✅ Endereço encontrado e preenchido automaticamente</div>';
-    
-    setTimeout(() => {
-      suggestionsDiv.style.display = 'none';
-    }, 3000);
-    
-  } catch (error) {
-    console.error('Erro geocodeClientAddress:', error);
-    suggestionsDiv.innerHTML = '<div style="font-size:12px;color:var(--red)">❌ Erro ao buscar endereço</div>';
   }
 }
 
@@ -15572,7 +15765,7 @@ function updateNewSvcGuideSummary(){
 }
 
 function bindNewSvcGuideSummary(){
-  ['ns-dt','ns-hr','ns-client-search','ns-cl','ns-end','ns-address-select','ns-save-address-unit','ns-vei','ns-os','ns-obs'].forEach(id => {
+  ['ns-dt','ns-hr','ns-client-search','ns-cl','ns-cep','ns-numero','ns-end','ns-address-select','ns-save-address-unit','ns-vei','ns-os','ns-obs'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('input', updateNewSvcGuideSummary);
@@ -15653,6 +15846,22 @@ function openNewSvc(initialData = {}){
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Cliente / Condomínio</label>
                 <input type="text" id="ns-cl" value="${escapeHtmlAttr(defaults.cliente)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Nome do cliente" oninput="onNovoServicoClienteManualInput()">
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">CEP</label>
+                <div class="client-inline">
+                  <input type="text" id="ns-cep" class="finput" placeholder="00000-000" maxlength="9" onblur="buscarCepServico('ns')">
+                  <button type="button" class="client-btn secondary" id="ns-cep-btn" onclick="buscarCepServico('ns')" style="min-height:42px;padding:0 12px">Buscar</button>
+                </div>
+                <input type="hidden" id="ns-rua">
+                <input type="hidden" id="ns-bairro">
+                <input type="hidden" id="ns-cidade">
+                <input type="hidden" id="ns-uf">
+                <input type="hidden" id="ns-complemento">
+              </div>
+              <div class="svc-edit-field">
+                <label class="svc-edit-label">Número</label>
+                <input type="text" id="ns-numero" class="finput" placeholder="Ex: 135" oninput="syncServicoEndereco('ns')">
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Endereço completo</label>
@@ -15760,6 +15969,16 @@ async function confirmNewSvc(){
   const horario     = document.getElementById('ns-hr')?.value||'';
   const cliente_id = document.getElementById('ns-client-select')?.value || clienteInput?.dataset.clientId || enderecoEl?.dataset.clientId || '';
   const customer_address_id = document.getElementById('ns-address-select')?.value || '';
+  const salvarUnidadeCliente = document.getElementById('ns-save-address-unit')?.checked !== false;
+  const addressPayload = servicoAddressPayloadFromForm('ns');
+  if (!customer_address_id && salvarUnidadeCliente) {
+    const cepDigits = String(addressPayload.cep || '').replace(/\D/g, '');
+    if (cepDigits.length !== 8 || !addressPayload.numero || !addressPayload.rua || !addressPayload.bairro || !addressPayload.cidade || !addressPayload.uf) {
+      toast('Para endereço novo, busque o CEP e informe o número antes de salvar', 'err');
+      document.getElementById('ns-cep')?.focus();
+      return;
+    }
+  }
 
   // Gerar ID único (timestamp numérico compatível com BIGINT PK do Supabase)
   const newId = Date.now();
@@ -15767,8 +15986,9 @@ async function confirmNewSvc(){
   const newS={
     id: newId, dt, dw, ms,
     cliente: cl, cliente_id, customer_address_id,
-    salvar_unidade_cliente: document.getElementById('ns-save-address-unit')?.checked !== false,
+    salvar_unidade_cliente: salvarUnidadeCliente,
     endereco, horario,
+    ...addressPayload,
     tipoServico, tipos: tiposSel,
     tecnicos_ids, equipe, veiculo, os, observacoes,
     pre_agendamento: tecnicos_ids.length === 0,
@@ -16167,7 +16387,7 @@ function confirmAction(message){
 // ════════════════════════════════════════════════
 
 let rotDados = [];     // [{equipe, veiculo, svcs:[], sequencia, whatsappText}]
-const ROT_FALLBACK_MSG = 'Rota otimizada indisponível (configure Google Maps API)';
+const ROT_FALLBACK_MSG = 'Rota estimada localmente no modo econômico';
 const ROT_BASE_PLUS_CODE = 'R. Maria José Rangel, 135 - Vila Sao Paulo, São Paulo - SP';
 const rotDistanceCache = new Map();
 
@@ -16260,7 +16480,7 @@ function rotAgruparPorTecnico(servicos) {
 }
 
 function rotGoogleConfigured() {
-  return !!LETEC_BACKEND_CAPABILITIES.mapsProxy;
+  return false;
 }
 
 function rotNormalizarEnderecoMaps(endereco) {
@@ -16277,20 +16497,20 @@ function rotKmFmt(km) {
 async function rotGoogleDistanceBatch(origem, destinos) {
   const origemFmt = rotNormalizarEnderecoMaps(origem);
   const destinosFmt = (destinos || []).map(rotNormalizarEnderecoMaps);
-  const results = new Array(destinosFmt.length).fill(null).map(() => ({ km: 0, min: TEMPO_DESLOCAMENTO_MIN }));
+  const results = new Array(destinosFmt.length).fill(null).map(() => ({ km: 0, min: TEMPO_DESLOCAMENTO_MIN, origem: 'estimado' }));
 
   const uncached = [];
   const uncachedIdx = [];
 
   destinosFmt.forEach((dest, idx) => {
     if (isSameOperationalAddress(origemFmt, dest)) {
-      results[idx] = { km: 0, min: 0 };
+      results[idx] = { km: 0, min: 0, origem: 'mesmo_local' };
       return;
     }
     const cacheKey = `${origemFmt}|${dest}`;
     const cached = rotDistanceCache.get(cacheKey);
     if (cached) {
-      results[idx] = { km: cached.km, min: cached.min };
+      results[idx] = { km: cached.km, min: cached.min, origem: cached.origem || 'estimado' };
       return;
     }
     uncached.push(dest);
@@ -16331,7 +16551,7 @@ async function rotGoogleDistanceBatch(origem, destinos) {
       min = Math.max(TEMPO_DESLOCAMENTO_MIN, Number(calcularTempoDeslocamento(origemFmt, dest)) || TEMPO_DESLOCAMENTO_MIN);
     }
 
-    const normalized = { km: Number(km.toFixed(1)), min };
+    const normalized = { km: Number(km.toFixed(1)), min, origem: el?.origin || payload.provider || 'estimado' };
     results[idx] = normalized;
     rotDistanceCache.set(`${origemFmt}|${dest}`, normalized);
   });
@@ -18453,7 +18673,7 @@ const CHANGELOG = {
     impactoOperacional: 'Zero perda de dados. Todos os registros anteriores lidos corretamente via migrarServico(). Campos legados mantidos como fallback.',
     pendencias: [
       'Equipes: agrupar por técnico individual (hoje agrupa por string de equipe)',
-      'Rotas: integração real com Google Maps Distance Matrix para KM calculado',
+      'Rotas: KM calculado por estimativa local no modo economico',
       'Contratos: tela de gestão de contratos (modelo já preparado)',
       'Agenda: exportar somente período filtrado',
       'Histórico: filtro por data além de motorista/veículo',
@@ -19116,7 +19336,10 @@ async function fetchOperationalDiagnostics() {
     LETEC_BACKEND_CAPABILITIES.checked = true;
     LETEC_BACKEND_CAPABILITIES.available = true;
     if (operationalDiagnosticsLastResult?.features) {
-      LETEC_BACKEND_CAPABILITIES.mapsProxy = !!operationalDiagnosticsLastResult.features.mapsConfigured;
+      LETEC_BACKEND_CAPABILITIES.mapsProvider = operationalDiagnosticsLastResult.features.mapsProvider || LETEC_BACKEND_CAPABILITIES.mapsProvider || 'local_estimate';
+      LETEC_BACKEND_CAPABILITIES.routingConfigured = !!(operationalDiagnosticsLastResult.features.routingConfigured ?? operationalDiagnosticsLastResult.features.mapsConfigured);
+      LETEC_BACKEND_CAPABILITIES.geocodingConfigured = !!operationalDiagnosticsLastResult.features.geocodingConfigured;
+      LETEC_BACKEND_CAPABILITIES.mapsProxy = LETEC_BACKEND_CAPABILITIES.routingConfigured;
     }
     return operationalDiagnosticsLastResult;
   } catch(e) {

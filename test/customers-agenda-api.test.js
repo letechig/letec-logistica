@@ -155,6 +155,20 @@ async function withServer(fn) {
   }
 }
 
+function requiredAddress(overrides = {}) {
+  return {
+    endereco: 'Rua Teste, 10',
+    endereco_completo: 'Rua Teste, 10 - Centro - Sao Paulo / SP',
+    cep: '01001000',
+    rua: 'Rua Teste',
+    numero: '10',
+    bairro: 'Centro',
+    cidade: 'Sao Paulo',
+    uf: 'SP',
+    ...overrides
+  };
+}
+
 test('GET /api/customers suporta autocomplete limitado e paginação com total', async () => {
   await withServer(async (baseUrl) => {
     const auto = await fetch(`${baseUrl}/api/customers?search=Beta&limit=10`);
@@ -204,7 +218,8 @@ test('clientes normalizam prioridade e status operacionais legados', async () =>
         telefone: '555555555555',
         categoria: 'eventual',
         prioridade: 'Media',
-        status_operacional: 'Eventual antigo'
+        status_operacional: 'Eventual antigo',
+        ...requiredAddress()
       })
     });
     assert.equal(created.status, 201);
@@ -220,7 +235,8 @@ test('clientes normalizam prioridade e status operacionais legados', async () =>
         telefone: '551111111111',
         categoria: 'eventual',
         prioridade: 'media',
-        status_operacional: 'Cancelado'
+        status_operacional: 'Cancelado',
+        ...requiredAddress({ endereco: 'Rua A', rua: 'Rua A' })
       })
     });
     assert.equal(updated.status, 200);
@@ -332,9 +348,12 @@ test('POST /api/customers cria cliente basico mesmo sem colunas opcionais legada
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nome: 'Cliente Schema Legado',
-        endereco: 'Rua Schema, 10',
-        cep: '01001000',
-        origem: 'teste'
+        origem: 'teste',
+        ...requiredAddress({
+          endereco: 'Rua Schema, 10',
+          endereco_completo: 'Rua Schema, 10 - Centro - Sao Paulo / SP',
+          rua: 'Rua Schema'
+        })
       })
     });
 
@@ -541,6 +560,9 @@ test('PUT /api/customers/:id/addresses ignora colunas opcionais ausentes em sche
           cep: '01001000',
           rua: 'Rua Legado',
           numero: '10',
+          bairro: 'Centro',
+          cidade: 'Sao Paulo',
+          uf: 'SP',
           is_primary: true
         }]
       })
@@ -723,7 +745,7 @@ test('POST /api/services salva cliente_id no agendamento', async () => {
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 99, date: '2026-05-13', cliente_id: 1, cliente: 'Alpha Cliente' })
+      body: JSON.stringify({ id: 99, date: '2026-05-13', cliente_id: 1, cliente: 'Alpha Cliente', salvar_unidade_cliente: false })
     });
     assert.equal(response.status, 201);
     const payload = await response.json();
@@ -740,7 +762,12 @@ test('POST /api/services vincula cliente existente por nome sem duplicar cadastr
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 100, date: '2026-05-13', cliente: 'Alpha Cliente', endereco: 'Rua A' })
+      body: JSON.stringify({
+        id: 100,
+        date: '2026-05-13',
+        cliente: 'Alpha Cliente',
+        ...requiredAddress({ endereco: 'Rua A', endereco_completo: 'Rua A, 10 - Centro - Sao Paulo / SP', rua: 'Rua A' })
+      })
     });
     assert.equal(response.status, 201);
     const payload = await response.json();
@@ -775,7 +802,17 @@ test('POST /api/services cria cliente automaticamente quando agenda usa cliente 
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 101, date: '2026-05-13', cliente: 'Cliente Novo Agenda', endereco: 'Rua Nova, 123' })
+      body: JSON.stringify({
+        id: 101,
+        date: '2026-05-13',
+        cliente: 'Cliente Novo Agenda',
+        ...requiredAddress({
+          endereco: 'Rua Nova, 123',
+          endereco_completo: 'Rua Nova, 123 - Centro - Sao Paulo / SP',
+          rua: 'Rua Nova',
+          numero: '123'
+        })
+      })
     });
     assert.equal(response.status, 201);
     const payload = await response.json();

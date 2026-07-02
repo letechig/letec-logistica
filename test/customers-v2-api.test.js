@@ -102,12 +102,29 @@ async function withServer(fn) {
   }
 }
 
+function requiredAddress(overrides = {}) {
+  return {
+    endereco: 'Rua Teste, 10',
+    endereco_completo: 'Rua Teste, 10 - Centro - Sao Paulo / SP',
+    cep: '01001000',
+    rua: 'Rua Teste',
+    numero: '10',
+    bairro: 'Centro',
+    cidade: 'Sao Paulo',
+    uf: 'SP',
+    ...overrides
+  };
+}
+
 test('Clientes V2 bloqueia novo cadastro com mesmo nome canonico', async () => {
   await withServer(async (baseUrl, state) => {
     const response = await fetch(`${baseUrl}/api/customers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: ' rede   moriah ', endereco: 'Outro endereco' })
+      body: JSON.stringify({
+        nome: ' rede   moriah ',
+        ...requiredAddress({ endereco: 'Outro endereco', endereco_completo: 'Outro endereco, 10 - Centro - Sao Paulo / SP' })
+      })
     });
     assert.equal(response.status, 409);
     const payload = await response.json();
@@ -122,7 +139,19 @@ test('Clientes V2 cria unidade ao salvar servico com cliente existente e enderec
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 99, date: '2026-05-19', cliente_id: 1, cliente: 'Rede Moriah', endereco: 'Av. Moaci, 971' })
+      body: JSON.stringify({
+        id: 99,
+        date: '2026-05-19',
+        cliente_id: 1,
+        cliente: 'Rede Moriah',
+        ...requiredAddress({
+          endereco: 'Av. Moaci, 971',
+          endereco_completo: 'Av. Moaci, 971 - Moema - Sao Paulo / SP',
+          rua: 'Av. Moaci',
+          numero: '971',
+          bairro: 'Moema'
+        })
+      })
     });
     assert.equal(response.status, 201);
     const payload = await response.json();

@@ -6,7 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const readXlsxFile = require('read-excel-file/node');
 const { createClient } = require('@supabase/supabase-js');
-const { DistanceClient } = require('./src/logistics/distance');
+const { DistanceClient, parseMatrixLocations } = require('./src/logistics/distance');
 const { validateService, buildDayRoutes } = require('./src/logistics/engine');
 const { createClientService } = require('./src/services/clientService');
 const { createAppointmentService } = require('./src/services/appointmentService');
@@ -17,6 +17,7 @@ app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 const PORT = process.env.PORT || 8000;
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
 const EVOLUTION_SEND_DELAY_MS = Number(process.env.EVOLUTION_SEND_DELAY_MS || 1200);
+const CEP_CACHE_TTL_MS = Number(process.env.CEP_CACHE_TTL_MS || 24 * 60 * 60 * 1000);
 const CLIENT_IMPORT_WORKBOOK = process.env.CLIENT_IMPORT_WORKBOOK ||
   path.resolve(__dirname, '..', 'BASE_CLIENTES_TRATADA_LETEC (1).xlsx');
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
@@ -34,6 +35,8 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200
 };
+
+const cepLookupCache = new Map();
 
 function rateLimitJsonHandler(message, code) {
   return (req, res, next, options = {}) => {
@@ -72,26 +75,6 @@ const technicianLoginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
-
-function parseMatrixLocations(value) {
-  return String(value || '')
-    .split('|')
-    .map(item => item.trim())
-    .filter(Boolean);
-}
-
-function buildMatrixUrl(origins, destinations) {
-  const search = new URLSearchParams({
-    origins: origins.join('|'),
-    destinations: destinations.join('|'),
-    mode: 'driving',
-    language: 'pt-BR',
-    region: 'br',
-    key: process.env.GOOGLE_MAPS_API_KEY || ''
-  });
-
-  return `https://maps.googleapis.com/maps/api/distancematrix/json?${search.toString()}`;
-}
 
 function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '');
@@ -583,6 +566,134 @@ function cleanNumber(value) {
   if (value === null || value === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function normalizeCep(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function formatCep(value) {
+  const cep = normalizeCep(value);
+  return cep.length === 8 ? cep.replace(/(\d{5})(\d{3})/, '$1-$2') : cep;
+}
+
+function extractBrasilApiCoordinates(payload = {}) {
+  const coordinates = payload.location?.coordinates || payload.coordinates || {};
+  const latitude = cleanNumber(coordinates.latitude ?? coordinates.lat ?? payload.latitude);
+  const longitude = cleanNumber(coordinates.longitude ?? coordinates.lng ?? coordinates.lon ?? payload.longitude);
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? { latitude, longitude }
+    : { latitude: null, longitude: null };
+}
+
+function normalizeCepPayload(provider, payload = {}, cep) {
+  const isBrasilApi = provider === 'brasilapi';
+  const coords = isBrasilApi ? extractBrasilApiCoordinates(payload) : { latitude: null, longitude: null };
+  const rua = isBrasilApi ? (payload.street || '') : (payload.logradouro || '');
+  const bairro = isBrasilApi ? (payload.neighborhood || '') : (payload.bairro || '');
+  const cidade = isBrasilApi ? (payload.city || '') : (payload.localidade || '');
+  const uf = normalizeUf(isBrasilApi ? payload.state : payload.uf);
+  const complemento = isBrasilApi ? (payload.complement || '') : (payload.complemento || '');
+  const enderecoCompleto = buildCustomerAddress({
+    rua,
+    numero: '',
+    bairro,
+    cidade,
+    uf,
+    complemento,
+    referencia: ''
+  });
+  return {
+    cep: formatCep(payload.cep || cep),
+    cep_digits: normalizeCep(payload.cep || cep),
+    rua: rua || '',
+    logradouro: rua || '',
+    bairro: bairro || '',
+    cidade: cidade || '',
+    localidade: cidade || '',
+    uf: uf || '',
+    complemento: complemento || '',
+    endereco_completo: enderecoCompleto || '',
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+    provider,
+    valid: true
+  };
+}
+
+async function fetchJsonWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json', ...(options.headers || {}) }
+    });
+    const payload = await response.json().catch(() => ({}));
+    return { response, payload };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function lookupCep(cep) {
+  const normalizedCep = normalizeCep(cep);
+  if (normalizedCep.length !== 8) {
+    const error = new Error('CEP deve ter 8 digitos');
+    error.statusCode = 400;
+    error.code = 'cep_invalid';
+    throw error;
+  }
+
+  const cached = cepLookupCache.get(normalizedCep);
+  if (cached && Date.now() - cached.cachedAt < CEP_CACHE_TTL_MS) return cached.payload;
+
+  const attempts = [
+    {
+      provider: 'brasilapi',
+      url: `https://brasilapi.com.br/api/cep/v2/${normalizedCep}`,
+      notFound(payload, response) {
+        return response.status === 404 || payload?.name === 'CepPromiseError';
+      }
+    },
+    {
+      provider: 'viacep',
+      url: `https://viacep.com.br/ws/${normalizedCep}/json/`,
+      notFound(payload, response) {
+        return response.status === 404 || payload?.erro === true;
+      }
+    }
+  ];
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    try {
+      const { response, payload } = await fetchJsonWithTimeout(attempt.url);
+      if (attempt.notFound(payload, response)) {
+        lastError = new Error('CEP nao encontrado');
+        lastError.statusCode = 404;
+        lastError.code = 'cep_not_found';
+        continue;
+      }
+      if (!response.ok) {
+        lastError = new Error(payload?.message || payload?.error || `Falha ao consultar CEP em ${attempt.provider}`);
+        lastError.statusCode = response.status;
+        continue;
+      }
+      const normalized = normalizeCepPayload(attempt.provider, payload, normalizedCep);
+      cepLookupCache.set(normalizedCep, { cachedAt: Date.now(), payload: normalized });
+      return normalized;
+    } catch (error) {
+      lastError = error;
+      if (error.name === 'AbortError') lastError.statusCode = 504;
+    }
+  }
+
+  if (!lastError) {
+    lastError = new Error('Falha ao consultar CEP');
+    lastError.statusCode = 502;
+  }
+  throw lastError;
 }
 
 function cleanArray(value) {
@@ -1301,15 +1412,15 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "maps.googleapis.com", "cdn.jsdelivr.net", "'unsafe-inline'"],
-      scriptSrcElem: ["'self'", "maps.googleapis.com", "cdn.jsdelivr.net", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "cdn.jsdelivr.net", "'unsafe-inline'"],
+      scriptSrcElem: ["'self'", "cdn.jsdelivr.net", "'unsafe-inline'"],
       scriptSrcAttr: ["'unsafe-inline'", "'unsafe-hashes'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       styleSrcElem: ["'self'", "'unsafe-inline'", "https:", "fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "https:", "https://tile.openstreetmap.org"],
       fontSrc: ["'self'", "https:", "data:", "fonts.gstatic.com"],
-      connectSrc: ["'self'", "maps.googleapis.com", "maps.gstatic.com", "https://tile.openstreetmap.org", supabaseConnectSrc, "https://cdn.jsdelivr.net"],
-      frameSrc: ["maps.google.com"],
+      connectSrc: ["'self'", "https://tile.openstreetmap.org", supabaseConnectSrc, "https://cdn.jsdelivr.net"],
+      frameSrc: ["'self'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
       frameAncestors: ["'self'"],
@@ -2168,6 +2279,101 @@ async function fetchServiceById(db, id) {
   return maybeSingle(db.from('services').select('*').eq('id', id));
 }
 
+function validCoordinatePair(lat, lng) {
+  const latitude = cleanNumber(lat);
+  const longitude = cleanNumber(lng);
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? { latitude, longitude }
+    : null;
+}
+
+async function safeSelectByIds(db, table, column, ids = []) {
+  const wanted = [...new Set((ids || []).map(String).filter(Boolean))];
+  if (!wanted.length) return [];
+  try {
+    const { data, error } = await db
+      .from(table)
+      .select('*')
+      .in(column, wanted)
+      .limit(Math.max(wanted.length, 1000));
+    if (error) {
+      if (isMissingRelationError(error) || getMissingSchemaColumn(error)) return [];
+      throw error;
+    }
+    return data || [];
+  } catch (error) {
+    if (isMissingRelationError(error) || getMissingSchemaColumn(error)) return [];
+    throw error;
+  }
+}
+
+function choosePrimaryAddress(addresses = []) {
+  return [...addresses]
+    .filter(item => item && item.ativo !== false)
+    .sort((a, b) => {
+      if (a.is_primary === true && b.is_primary !== true) return -1;
+      if (b.is_primary === true && a.is_primary !== true) return 1;
+      return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+    })[0] || null;
+}
+
+async function enrichServicesWithCustomerLocations(db, rows = []) {
+  const services = Array.isArray(rows) ? rows : [];
+  if (!services.length) return services;
+
+  const customerIds = services.map(service => serviceCustomerId(service)).filter(Boolean);
+  const addressIds = services.map(service => service.customer_address_id).filter(Boolean);
+
+  const [customers, addressesByExplicitId, addressesByCustomer] = await Promise.all([
+    safeSelectByIds(db, 'customers', 'id', customerIds),
+    safeSelectByIds(db, 'customer_addresses', 'id', addressIds),
+    safeSelectByIds(db, 'customer_addresses', 'customer_id', customerIds)
+  ]);
+
+  const customerById = new Map(customers.map(customer => [String(customer.id), customer]));
+  const addressById = new Map(addressesByExplicitId.map(address => [String(address.id), address]));
+  const addressesByCustomerId = new Map();
+  addressesByCustomer.forEach(address => {
+    const key = String(address.customer_id || '');
+    if (!key) return;
+    if (!addressesByCustomerId.has(key)) addressesByCustomerId.set(key, []);
+    addressesByCustomerId.get(key).push(address);
+  });
+
+  return services.map(service => {
+    const customerId = serviceCustomerId(service);
+    const customer = customerById.get(String(customerId || '')) || null;
+    const explicitAddress = service.customer_address_id ? addressById.get(String(service.customer_address_id)) : null;
+    const primaryAddress = customerId ? choosePrimaryAddress(addressesByCustomerId.get(String(customerId)) || []) : null;
+    const address = explicitAddress || primaryAddress || null;
+    const addressCoords = validCoordinatePair(address?.latitude, address?.longitude);
+    const customerCoords = validCoordinatePair(customer?.latitude, customer?.longitude);
+    const serviceCoords = validCoordinatePair(service.latitude, service.longitude);
+    const arrivalCoords = validCoordinatePair(service.chegada_lat, service.chegada_lng);
+    const selected = addressCoords || customerCoords || serviceCoords || arrivalCoords;
+    return {
+      ...service,
+      cliente_id: service.cliente_id || customer?.id || null,
+      customer_id: service.customer_id || service.cliente_id || customer?.id || null,
+      customer_address_id: service.customer_address_id || address?.id || null,
+      latitude: selected?.latitude ?? service.latitude ?? null,
+      longitude: selected?.longitude ?? service.longitude ?? null,
+      customer_latitude: customerCoords?.latitude ?? addressCoords?.latitude ?? null,
+      customer_longitude: customerCoords?.longitude ?? addressCoords?.longitude ?? null,
+      address_latitude: addressCoords?.latitude ?? null,
+      address_longitude: addressCoords?.longitude ?? null,
+      location_source: addressCoords ? 'customer_address'
+        : customerCoords ? 'customer'
+          : serviceCoords ? 'service'
+            : arrivalCoords ? 'technician_arrival'
+              : null,
+      customer_cep: customer?.cep || address?.cep || null,
+      address_cep: address?.cep || null,
+      address_numero: address?.numero || customer?.numero || null
+    };
+  });
+}
+
 function normalizeCustomerAlias(value) {
   return normalizeCustomerName(value);
 }
@@ -2335,12 +2541,54 @@ async function ensureCustomerAddress(db, customerId, input = {}, options = {}) {
   }
 }
 
-async function ensureServiceCustomerAddress(db, servicePayload = {}, customer = null, origem = 'agenda') {
+function normalizeServiceAddressInput(servicePayload = {}, rawInput = {}) {
+  const ufNormalizada = normalizeUf(rawInput.uf || servicePayload.uf);
+  const structured = {
+    cep: normalizeCep(rawInput.cep || servicePayload.cep),
+    rua: cleanNullableText(rawInput.rua || servicePayload.rua, 200),
+    numero: cleanNullableText(rawInput.numero || servicePayload.numero, 60),
+    bairro: cleanNullableText(rawInput.bairro || servicePayload.bairro, 160),
+    cidade: cleanNullableText(rawInput.cidade || servicePayload.cidade, 160),
+    uf: ufNormalizada,
+    complemento: cleanNullableText(rawInput.complemento || servicePayload.complemento, 200),
+    referencia: cleanNullableText(rawInput.referencia || servicePayload.referencia, 300),
+    latitude: cleanNumber(rawInput.latitude ?? servicePayload.latitude),
+    longitude: cleanNumber(rawInput.longitude ?? servicePayload.longitude)
+  };
+  const enderecoEstruturado = buildCustomerAddress(structured);
+  return {
+    ...structured,
+    endereco: cleanNullableText(rawInput.endereco || servicePayload.endereco || enderecoEstruturado, 500),
+    endereco_completo: cleanNullableText(rawInput.endereco_completo || rawInput.endereco || servicePayload.endereco || enderecoEstruturado, 500)
+  };
+}
+
+function validateRequiredServiceAddress(input = {}) {
+  if (!input.cep || normalizeCep(input.cep).length !== 8) {
+    return { ok: false, status: 400, code: 'service_address_cep_required', error: 'CEP e obrigatorio para salvar endereco novo na agenda' };
+  }
+  if (!input.numero) {
+    return { ok: false, status: 400, code: 'service_address_number_required', error: 'Numero e obrigatorio para salvar endereco novo na agenda' };
+  }
+  if (!input.rua || !input.bairro || !input.cidade || !input.uf) {
+    return { ok: false, status: 400, code: 'service_address_structured_required', error: 'Rua, bairro, cidade e UF sao obrigatorios para endereco novo na agenda' };
+  }
+  return { ok: true };
+}
+
+async function ensureServiceCustomerAddress(db, servicePayload = {}, customer = null, origem = 'agenda', rawInput = {}) {
   const customerId = servicePayload.cliente_id || customer?.id;
   if (!customerId || servicePayload.customer_address_id) return null;
+  const addressInput = normalizeServiceAddressInput(servicePayload, rawInput);
+  const validation = validateRequiredServiceAddress(addressInput);
+  if (!validation.ok) {
+    const error = new Error(validation.error);
+    error.statusCode = validation.status;
+    error.code = validation.code;
+    throw error;
+  }
   const address = await ensureCustomerAddress(db, customerId, {
-    endereco: servicePayload.endereco,
-    endereco_completo: servicePayload.endereco,
+    ...addressInput,
     origem
   }, { origem, label: servicePayload.cliente || customer?.nome || null });
   if (address?.id) servicePayload.customer_address_id = address.id;
@@ -2393,13 +2641,15 @@ async function fetchCustomerForService(db, service = {}) {
 
 async function ensureCustomerForServicePayload(db, servicePayload = {}, options = {}) {
   const shouldSaveAddress = options.saveAddress !== false;
+  const rawInput = options.input || {};
   if (servicePayload.cliente_id) {
     const customer = await maybeSingle(db.from('customers').select('*').eq('id', servicePayload.cliente_id)).catch(() => null);
     let address = null;
     if (shouldSaveAddress) {
       try {
-        address = await ensureServiceCustomerAddress(db, servicePayload, customer, 'agenda');
+        address = await ensureServiceCustomerAddress(db, servicePayload, customer, 'agenda', rawInput);
       } catch (addressError) {
+        if (addressError.statusCode) throw addressError;
         console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
       }
     }
@@ -2429,8 +2679,9 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
     let addressRecord = null;
     if (shouldSaveAddress) {
       try {
-        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, exactMatches[0], 'agenda');
+        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, exactMatches[0], 'agenda', rawInput);
       } catch (addressError) {
+        if (addressError.statusCode) throw addressError;
         console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
       }
     }
@@ -2448,8 +2699,9 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
     let addressRecord = null;
     if (shouldSaveAddress) {
       try {
-        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, addressMatches[0], 'agenda');
+        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, addressMatches[0], 'agenda', rawInput);
       } catch (addressError) {
+        if (addressError.statusCode) throw addressError;
         console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
       }
     }
@@ -2472,8 +2724,9 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
     let addressRecord = null;
     if (shouldSaveAddress) {
       try {
-        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, duplicate, 'agenda');
+        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, duplicate, 'agenda', rawInput);
       } catch (addressError) {
+        if (addressError.statusCode) throw addressError;
         console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
       }
     }
@@ -2483,14 +2736,22 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
   const insertPayload = {
     nome: name,
     nome_normalizado: normalizeCustomerName(name),
-    endereco: address || null,
-    endereco_completo: address || null,
+    ...normalizeServiceAddressInput(servicePayload, rawInput),
+    endereco: normalizeServiceAddressInput(servicePayload, rawInput).endereco || address || null,
+    endereco_completo: normalizeServiceAddressInput(servicePayload, rawInput).endereco_completo || address || null,
     tipo: 'PF',
     tipo_cliente: 'Eventual',
     origem: 'agenda',
-    is_incomplete: true,
+    is_incomplete: false,
     ativo: true
   };
+  const insertValidation = validateRequiredServiceAddress(insertPayload);
+  if (!insertValidation.ok) {
+    const error = new Error(insertValidation.error);
+    error.statusCode = insertValidation.status;
+    error.code = insertValidation.code;
+    throw error;
+  }
 
   const { data, error } = await runCustomerWriteWithSchemaFallback(
     payload => db.from('customers').insert([payload]).select(),
@@ -2511,8 +2772,9 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
   let addressRecord = null;
   if (created?.id && shouldSaveAddress) {
     try {
-      addressRecord = await ensureServiceCustomerAddress(db, servicePayload, created, 'agenda');
+      addressRecord = await ensureServiceCustomerAddress(db, servicePayload, created, 'agenda', rawInput);
     } catch (addressError) {
+      if (addressError.statusCode) throw addressError;
       console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
     }
   }
@@ -2904,11 +3166,17 @@ async function sendAndRecordLogisticsMessage(db, payload, { force = false } = {}
   }
 }
 
+function getMapProviderConfig() {
+  return {
+    provider: 'local_estimate',
+    routingConfigured: false,
+    geocodingConfigured: false,
+    cepLookupConfigured: true
+  };
+}
+
 function createDistanceClient() {
-  return new DistanceClient({
-    apiKey: process.env.GOOGLE_MAPS_API_KEY || '',
-    timeoutMs: REQUEST_TIMEOUT_MS
-  });
+  return new DistanceClient();
 }
 
 async function fetchLogisticsCatalogs() {
@@ -2977,7 +3245,7 @@ function serviceLocationValue(service = {}) {
   const lat = cleanNumber(service.latitude ?? service.lat ?? service.chegada_lat ?? service.customer_latitude);
   const lng = cleanNumber(service.longitude ?? service.lng ?? service.chegada_lng ?? service.customer_longitude);
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
-    return { latitude: lat, longitude: lng, source: service.chegada_lat ? 'technician_arrival' : 'service' };
+    return { latitude: lat, longitude: lng, source: service.location_source || (service.chegada_lat ? 'technician_arrival' : 'service') };
   }
   return null;
 }
@@ -3015,10 +3283,15 @@ function normalizeOperationalService(service = {}, catalogs = {}) {
 
 // Routes
 app.get('/api/health', (req, res) => {
+  const maps = getMapProviderConfig();
   res.json({
     status: 'OK',
     message: 'Letec Logistics Backend is running',
-    mapsProxy: !!process.env.GOOGLE_MAPS_API_KEY
+    mapsProvider: maps.provider,
+    routingConfigured: maps.routingConfigured,
+    geocodingConfigured: maps.geocodingConfigured,
+    cepLookupConfigured: maps.cepLookupConfigured,
+    mapsProxy: maps.routingConfigured
   });
 });
 
@@ -3094,7 +3367,11 @@ app.get('/api/diagnostics/operational', async (req, res) => {
     checks,
     features: {
       supabaseConfigured: !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)),
-      mapsConfigured: !!process.env.GOOGLE_MAPS_API_KEY,
+      mapsProvider: getMapProviderConfig().provider,
+      routingConfigured: getMapProviderConfig().routingConfigured,
+      geocodingConfigured: getMapProviderConfig().geocodingConfigured,
+      cepLookupConfigured: getMapProviderConfig().cepLookupConfigured,
+      mapsConfigured: getMapProviderConfig().routingConfigured,
       evolutionConfigured: evolution.configured,
       evolutionInstanceConfigured: !!evolution.instance
     },
@@ -3187,6 +3464,8 @@ app.get('/api/operational-map', async (req, res) => {
     if (technicianAuth) {
       rows = rows.filter(service => technicianHasService(technicianAuth.technician.id, service));
     }
+
+    rows = await enrichServicesWithCustomerLocations(db, rows);
 
     let services = rows.map(service => normalizeOperationalService(service, catalogs));
 
@@ -3297,10 +3576,6 @@ app.get('/radar-gestor', (req, res) => {
 
 app.get('/api/maps/distance-matrix', async (req, res) => {
   try {
-    if (!process.env.GOOGLE_MAPS_API_KEY) {
-      return res.status(503).json({ error: 'GOOGLE_MAPS_API_KEY is not configured' });
-    }
-
     const origins = parseMatrixLocations(req.query.origins);
     const destinations = parseMatrixLocations(req.query.destinations);
 
@@ -3312,31 +3587,12 @@ app.get('/api/maps/distance-matrix', async (req, res) => {
       return res.status(400).json({ error: 'Too many origins or destinations for a single request' });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(buildMatrixUrl(origins, destinations), {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' }
-      });
-
-      const payload = await response.json();
-      if (!response.ok) {
-        return res.status(response.status).json({
-          error: payload.error_message || payload.status || 'Google Maps request failed',
-          details: payload
-        });
-      }
-
-      return res.json(payload);
-    } finally {
-      clearTimeout(timeout);
-    }
+    const payload = await createDistanceClient().buildDistanceMatrix(origins, destinations);
+    return res.json(payload);
   } catch (error) {
     const isAbort = error.name === 'AbortError';
     return res.status(isAbort ? 504 : 500).json({
-      error: isAbort ? 'Google Maps request timed out' : error.message
+      error: isAbort ? 'Routing provider request timed out' : error.message
     });
   }
 });
@@ -3838,7 +4094,7 @@ app.get('/api/services', async (req, res) => {
     const rows = technicianAuth
       ? (data || []).filter(service => technicianHasService(technicianAuth.technician.id, service))
       : (data || []);
-    res.json(rows);
+    res.json(await enrichServicesWithCustomerLocations(db, rows));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -3861,8 +4117,8 @@ app.post('/api/services', async (req, res) => {
       }
       if (result.customerLinkFailed) {
         return res.status(result.status || 500).json({
-          error: 'Falha ao criar/vincular cliente do serviço',
-          code: 'customer_link_failed',
+          error: result.error?.statusCode ? result.error.message : 'Falha ao criar/vincular cliente do serviço',
+          code: result.error?.code || 'customer_link_failed',
           details: publicDbErrorDetails(result.error)
         });
       }
@@ -3923,6 +4179,55 @@ app.delete('/api/services/:id', async (req, res) => {
   } catch (error) {
     console.error('[DELETE /api/services/:id] Error:', error.message);
     res.status(500).json({ error: 'Falha ao excluir serviço' });
+  }
+});
+
+app.post('/api/services/:id/promote-arrival-location', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const service = await fetchServiceById(db, req.params.id);
+    if (!service) return res.status(404).json({ error: 'Servico nao encontrado', code: 'service_not_found' });
+
+    const location = parseLocationBody({
+      latitude: service.chegada_lat,
+      longitude: service.chegada_lng
+    });
+    if (!location.ok) {
+      return res.status(400).json({ error: 'Servico sem GPS de chegada valido', code: 'arrival_location_missing' });
+    }
+
+    const customerId = serviceCustomerId(service);
+    if (!customerId) {
+      return res.status(400).json({ error: 'Servico sem cliente vinculado', code: 'service_customer_missing' });
+    }
+
+    if (service.customer_address_id) {
+      try {
+        const { data, error } = await runCustomerAddressWriteWithSchemaFallback(
+          payload => db.from('customer_addresses').update(payload).eq('customer_id', Number(customerId)).eq('id', service.customer_address_id).select(),
+          { latitude: location.latitude, longitude: location.longitude, updated_at: new Date().toISOString() },
+          'POST /api/services/:id/promote-arrival-location address'
+        );
+        if (error) throw error;
+        if ((data || []).length) {
+          return res.json({ ok: true, target: 'customer_address', location: { latitude: location.latitude, longitude: location.longitude }, address: compactCustomerAddress(data[0]) });
+        }
+      } catch (addressError) {
+        if (!isMissingRelationError(addressError) && !getMissingSchemaColumn(addressError)) throw addressError;
+      }
+    }
+
+    const { data, error } = await runCustomerWriteWithSchemaFallback(
+      payload => db.from('customers').update(payload).eq('id', Number(customerId)).select(),
+      { latitude: location.latitude, longitude: location.longitude, updated_at: new Date().toISOString() },
+      'POST /api/services/:id/promote-arrival-location customer'
+    );
+    if (error) throw error;
+    if (!(data || []).length) return res.status(404).json({ error: 'Cliente nao encontrado', code: 'customer_not_found' });
+    res.json({ ok: true, target: 'customer', location: { latitude: location.latitude, longitude: location.longitude }, customer: data[0] });
+  } catch (error) {
+    console.error('[POST /api/services/:id/promote-arrival-location] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao promover GPS da chegada', details: publicDbErrorDetails(error) });
   }
 });
 
@@ -4829,6 +5134,9 @@ app.delete('/api/service-types/:id', strictLimiter, async (req, res) => {
 
 app.get('/api/cep/:cep', async (req, res) => {
   try {
+    const payload = await lookupCep(req.params.cep);
+    return res.json(payload);
+
     const cep = String(req.params.cep || '').replace(/\D/g, '');
     if (cep.length !== 8) {
       return res.status(400).json({ error: 'CEP deve ter 8 dígitos' });
@@ -4861,8 +5169,9 @@ app.get('/api/cep/:cep', async (req, res) => {
     }
   } catch (error) {
     const isAbort = error.name === 'AbortError';
-    return res.status(isAbort ? 504 : 500).json({
-      error: isAbort ? 'Consulta de CEP expirou' : error.message
+    return res.status(error.statusCode || (isAbort ? 504 : 502)).json({
+      error: isAbort ? 'Consulta de CEP expirou' : error.message,
+      code: error.code || (isAbort ? 'cep_timeout' : 'cep_lookup_failed')
     });
   }
 });
@@ -5158,65 +5467,19 @@ app.post('/api/customers/:id/hard-delete', strictLimiter, async (req, res) => {
   }
 });
 
-// GEOCODING ENDPOINT
 app.get('/api/geocode', async (req, res) => {
   try {
-    const { address } = req.query;
-    
-    if (!address || typeof address !== 'string' || address.trim().length < 3) {
-      return res.status(400).json({ error: 'Endereço deve ter pelo menos 3 caracteres' });
-    }
-    
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Google Maps API key não configurada' });
-    }
-    
-    const encodedAddress = encodeURIComponent(address.trim());
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${apiKey}&region=br&language=pt-BR`;
-    
-    const response = await fetch(url);
-    const responseText = await response.text();
-    let data = {};
-    if (responseText) {
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        return res.status(502).json({
-          error: 'Resposta inválida do Google Maps',
-          details: responseText.slice(0, 120)
-        });
-      }
-    }
-    if (!response.ok) {
-      return res.status(502).json({
-        error: 'Falha ao consultar Google Maps',
-        details: data.error_message || data.status || `HTTP ${response.status}`
-      });
-    }
-    
-    if (data.status !== 'OK') {
-      return res.status(400).json({ 
-        error: 'Endereço não encontrado', 
-        details: data.status,
-        suggestions: data.results?.slice(0, 3).map(r => r.formatted_address) || []
-      });
-    }
-    
-    const result = data.results[0];
-    const location = result.geometry.location;
-    
-    res.json({
-      endereco_completo: result.formatted_address,
-      latitude: location.lat,
-      longitude: location.lng,
-      place_id: result.place_id,
-      tipos: result.types
+    return res.status(503).json({
+      error: 'Geocodificacao automatica desativada',
+      code: 'geocode_disabled',
+      details: 'Modo economico ativo: use CEP, ponto manual no mapa ou GPS de chegada do tecnico.'
     });
-    
   } catch (error) {
     console.error('[GET /api/geocode] Error:', error.message);
-    res.status(500).json({ error: 'Falha na geocodificação' });
+    return res.status(500).json({
+      error: 'Falha ao retornar status da geocodificacao',
+      details: error.message
+    });
   }
 });
 
@@ -5921,6 +6184,71 @@ app.put('/api/customers/:id/addresses', strictLimiter, async (req, res) => {
       error: 'Falha ao salvar unidades do cliente',
       details: publicDbErrorDetails(error)
     });
+  }
+});
+
+function parseLocationBody(body = {}) {
+  const latitude = cleanNumber(body.latitude ?? body.lat);
+  const longitude = cleanNumber(body.longitude ?? body.lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return { ok: false, error: 'Latitude e longitude validas sao obrigatorias', code: 'location_required' };
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return { ok: false, error: 'Coordenada fora do intervalo valido', code: 'location_out_of_range' };
+  }
+  return { ok: true, latitude, longitude };
+}
+
+app.patch('/api/customers/:id/location', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    if (!customerId) return res.status(400).json({ error: 'Cliente invalido', code: 'customer_invalid' });
+    const location = parseLocationBody(req.body || {});
+    if (!location.ok) return res.status(400).json(location);
+
+    const { data, error } = await runCustomerWriteWithSchemaFallback(
+      payload => db.from('customers').update(payload).eq('id', customerId).select(),
+      {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        updated_at: new Date().toISOString()
+      },
+      'PATCH /api/customers/:id/location'
+    );
+    if (error) throw error;
+    if (!(data || []).length) return res.status(404).json({ error: 'Cliente nao encontrado', code: 'customer_not_found' });
+    res.json(data[0]);
+  } catch (error) {
+    console.error('[PATCH /api/customers/:id/location] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao salvar coordenada do cliente', details: publicDbErrorDetails(error) });
+  }
+});
+
+app.patch('/api/customers/:id/addresses/:addressId/location', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    const addressId = String(req.params.addressId || '').trim();
+    if (!customerId || !addressId) return res.status(400).json({ error: 'Cliente ou unidade invalida', code: 'customer_address_invalid' });
+    const location = parseLocationBody(req.body || {});
+    if (!location.ok) return res.status(400).json(location);
+
+    const { data, error } = await runCustomerAddressWriteWithSchemaFallback(
+      payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', addressId).select(),
+      {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        updated_at: new Date().toISOString()
+      },
+      'PATCH /api/customers/:id/addresses/:addressId/location'
+    );
+    if (error) throw error;
+    if (!(data || []).length) return res.status(404).json({ error: 'Unidade nao encontrada', code: 'customer_address_not_found' });
+    res.json(compactCustomerAddress(data[0]));
+  } catch (error) {
+    console.error('[PATCH /api/customers/:id/addresses/:addressId/location] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao salvar coordenada da unidade', details: publicDbErrorDetails(error) });
   }
 });
 

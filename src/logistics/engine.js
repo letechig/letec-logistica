@@ -459,7 +459,7 @@ function compareSeverity(a, b) {
 
 function getDistanceReliability(distance) {
   const origem = String(distance?.origem || '');
-  return origem === 'google' || origem === 'mesmo_local' ? 'alta' : 'baixa';
+  return origem === 'mesmo_local' ? 'alta' : 'baixa';
 }
 
 function aplicarModoValidacao(result, config) {
@@ -568,7 +568,23 @@ async function validateService(service, options = {}) {
   };
 
   function apply(candidate) {
-    if (compareSeverity(result.status, candidate.status) > 0) result = { ...result, ...candidate };
+    const severityDiff = compareSeverity(result.status, candidate.status);
+    const currentRule = result.detalhes?.regraAplicada;
+    const nextRule = candidate.detalhes?.regraAplicada;
+    const replaceGenericEstimate = severityDiff === 0
+      && currentRule === 'deslocamento_estimado'
+      && nextRule
+      && nextRule !== currentRule;
+    if (severityDiff > 0 || replaceGenericEstimate) {
+      const previousMessages = replaceGenericEstimate ? result.mensagens : [];
+      const previousSugestoes = replaceGenericEstimate ? result.sugestoes : [];
+      result = {
+        ...result,
+        ...candidate,
+        mensagens: [...previousMessages, ...(candidate.mensagens || [])],
+        sugestoes: [...previousSugestoes, ...(candidate.sugestoes || [])],
+      };
+    }
     else {
       result.mensagens.push(...(candidate.mensagens || []));
       result.sugestoes.push(...(candidate.sugestoes || []));
@@ -630,12 +646,12 @@ async function validateService(service, options = {}) {
       const destino = serviceBefore ? (other.endereco || '') : (service.endereco || '');
       const desloc = await distanceClient.getDistance(origem, destino);
       const tempoNecessario = Number(desloc.minutos ?? 0) + config.margemMin;
-      if (desloc.origem !== 'google' && desloc.origem !== 'mesmo_local') {
+      if (desloc.origem !== 'mesmo_local') {
         apply({
           status: 'alerta',
           podeSalvar: true,
           exigeJustificativa: false,
-          motivo: 'Deslocamento real não confirmado por Google Maps.',
+          motivo: 'Deslocamento calculado por estimativa local.',
           detalhes: {
             ...result.detalhes,
             servicoRelacionadoId: other?.id ?? null,
@@ -645,7 +661,7 @@ async function validateService(service, options = {}) {
             diferencaMin: cmp.intervaloDisponivelMin - tempoNecessario,
             regraAplicada: 'deslocamento_estimado',
           },
-          mensagens: ['Google Maps indisponível; usando estimativa operacional.'],
+          mensagens: ['Rota calculada por estimativa local; confirme deslocamento real antes de operar.'],
           sugestoes: ['Validar deslocamento real antes de confirmar'],
         });
       }
