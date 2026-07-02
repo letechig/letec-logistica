@@ -3066,92 +3066,6 @@ gap: 6px;
 <script src="js/shared/service-type-helpers.js"></script>
 <script src="js/shared/light-renderers.js"></script>
 <script>
-  // ═════════════════════════════════════════════════════════════════════════════
-  // 🔒 XSS PROTECTION: Sanitization and Safe DOM methods
-  // ═════════════════════════════════════════════════════════════════════════════
-  
-  /**
-   * Escapes HTML special characters to prevent XSS attacks
-   * @param {string} unsafe - User input string
-   * @returns {string} Escaped HTML-safe string
-   */
-  window.sanitizeHtml = function(unsafe) {
-    if (!unsafe) return '';
-    return String(unsafe)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#x27;')
-      .replace(/\//g, '&#x2F;');
-  };
-
-  /**
-   * Safe method to set text content (prevents XSS)
-   * @param {Element} el - DOM element
-   * @param {string} text - Text content (will be automatically escaped)
-   */
-  window.setTextSafe = function(el, text) {
-    if (!el) return;
-    el.textContent = text;  // textContent automatically escapes
-  };
-
-  /**
-   * Safe method to set HTML with sanitized content
-   * @param {Element} el - DOM element
-   * @param {string} html - HTML string (will be sanitized)
-   */
-  window.setHtmlSafe = function(el, html) {
-    if (!el) return;
-    const temp = document.createElement('div');
-    temp.innerHTML = html;  // Parse HTML
-    // Remove any script tags and onclick handlers
-    const scripts = temp.querySelectorAll('script');
-    scripts.forEach(s => s.remove());
-    temp.querySelectorAll('[onclick]').forEach(el => el.removeAttribute('onclick'));
-    el.innerHTML = temp.innerHTML;
-  };
-
-  /**
-   * Safe method to set attribute with validation
-   * @param {Element} el - DOM element
-   * @param {string} attr - Attribute name
-   * @param {string} value - Attribute value
-   */
-  window.setAttrSafe = function(el, attr, value) {
-    if (!el) return;
-    // Block dangerous attributes
-    if (['onclick', 'onerror', 'onload', 'onmouseover'].includes(attr.toLowerCase())) {
-      console.warn(`[Security] Blocked dangerous attribute: ${attr}`);
-      return;
-    }
-    el.setAttribute(attr, String(value || ''));
-  };
-
-  /**
-   * Create safe text node (prevents XSS)
-   * @param {string} text - Text content
-   * @returns {Text} Text node
-   */
-  window.createTextNodeSafe = function(text) {
-    return document.createTextNode(text);
-  };
-
-  /**
-   * Validate URL to prevent javascript: and data: schemes
-   * @param {string} url - URL to validate
-   * @returns {string} Safe URL or empty string
-   */
-  window.getUrlSafe = function(url) {
-    if (!url) return '';
-    const str = String(url).trim();
-    if (str.startsWith('javascript:') || str.startsWith('data:')) {
-      console.warn(`[Security] Blocked dangerous URL: ${str.substring(0, 20)}...`);
-      return '';
-    }
-    return str;
-  };
-
   const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
   const LETEC_DEFAULT_API_BASE_URL = 'https://letec-api.onrender.com';
@@ -6177,14 +6091,6 @@ function enriquecerDiagnosticoRota(rotaBase, servicosOriginais) {
   };
 }
 
-function construirMensagemDiagnostico(result, prefixoBloqueio) {
-  const blocks = uniqueReasons(result?.blocks || []);
-  const warnings = uniqueReasons(result?.warnings || []);
-  if (blocks.length) return `${prefixoBloqueio}: ${blocks.join(' · ')}`;
-  if (warnings.length) return `Atenção: ${warnings.join(' · ')}`;
-  return '';
-}
-
 const LOGISTICA_MARGEM_SEGURANCA_MIN = 15;
 const LOGISTICA_JORNADA_RISCO_ALTO_MULT = 1.25;
 const LOGISTICA_DEBUG = ['localhost', '127.0.0.1'].includes(window.location.hostname) || window.location.protocol === 'file:';
@@ -6363,16 +6269,6 @@ async function calcularDeslocamentoLogistico(origem, destino) {
   }
   if (isSameOperationalAddress(origem, destino)) {
     return { minutos: 0, km: 0, origem: 'mesmo_local' };
-  }
-  if (rotGoogleConfigured()) {
-    try {
-      const [real] = await rotGoogleDistanceBatch(origem, [destino]);
-      if (real && Number.isFinite(Number(real.min))) {
-        return { minutos: Number(real.min), km: Number(real.km || 0), origem: real.origem || 'estimado' };
-      }
-    } catch (e) {
-      console.warn('Validação logística: provedor de rotas indisponível, usando estimativa.', e?.message || e);
-    }
   }
   return {
     minutos: calcularTempoDeslocamento(origem, destino),
@@ -6560,23 +6456,6 @@ async function calcularDeslocamentoOperacional(origem, destino, contexto = {}) {
   }
   if (isSameOperationalAddress(origem, destino)) {
     return { deslocamentoEstimadoMin: 0, km: 0, origem: 'mesmo_local', mensagem: '' };
-  }
-
-  const usarGoogleMaps = contexto.usarGoogleMaps !== false && rotGoogleConfigured();
-  if (usarGoogleMaps) {
-    try {
-      const [real] = await rotGoogleDistanceBatch(origem, [destino]);
-      if (real && Number.isFinite(Number(real.min))) {
-        return {
-          deslocamentoEstimadoMin: Number(real.min),
-          km: Number(real.km || 0),
-          origem: real.origem || 'estimado',
-          mensagem: ''
-        };
-      }
-    } catch (e) {
-      logisticaDebug('[Motor Tempo Operacional] Provedor de rotas indisponível', e?.message || e);
-    }
   }
 
   return {
@@ -7417,10 +7296,7 @@ async function simularAgendamentoOperacional(servico, options = {}) {
     sharedServiceKeys: [],
     sharedLabelByKey: {}
   };
-  const rota = await rotMontarRotaOtimizadaGoogle(grupo.svcs, {
-    sharedServiceKeys: grupo.sharedServiceKeys || [],
-    sharedLabelByKey: grupo.sharedLabelByKey || {}
-  });
+  const rota = await rotMontarRotaLocal(grupo.svcs);
   const item = (rota.sequencia || []).find(entry => sameId(entry.servico?.id, servico.id)) || null;
   const warnings = uniqueReasons([...(rota.warningReasons || []), ...(item?.warningReasons || [])]);
   const blocks = uniqueReasons([...(rota.blockReasons || []), ...(item?.blockReasons || [])]);
@@ -10870,20 +10746,6 @@ function opMapOperationalAlerts(items = []) {
   return alerts;
 }
 
-function opMapAlertsHtml(items = []) {
-  const alerts = opMapOperationalAlerts(items);
-  if (!alerts.length) return '';
-  const visible = alerts.slice(0, 8);
-  const hidden = alerts.length - visible.length;
-  return `<div class="op-map-alerts">
-    <div class="op-map-alerts-head"><span>Atenções do dia</span><span>${alerts.length}</span></div>
-    <div class="op-map-alerts-list">
-      ${visible.map(alert => `<div class="op-map-alert-row"><strong>${sanitize(alert.title)}:</strong> ${sanitize(alert.service)}${alert.detail ? ` · ${sanitize(alert.detail)}` : ''}</div>`).join('')}
-      ${hidden > 0 ? `<div class="op-map-alert-row"><strong>+${hidden}</strong> atenção(ões) adicionais nos filtros atuais.</div>` : ''}
-    </div>
-  </div>`;
-}
-
 function opMapQuickRouteItemHtml(item, index, canvasId = '') {
   const meta = opMapStatusMeta(item.statusKey);
   const colorClass = opMapPinClass(item);
@@ -12700,11 +12562,6 @@ function opsPerformance(tx) {
 
 function opsRate(exec, total) {
   return total ? Math.round((exec / total) * 100) : 0;
-}
-
-function opsAvgPerDay(total, svcs) {
-  const dias = new Set((svcs || []).map(getServiceDateValue).filter(Boolean));
-  return dias.size ? +(total / dias.size).toFixed(1) : 0;
 }
 
 function opsPercentBar(value, color = 'var(--blue)') {
@@ -15025,15 +14882,6 @@ function openClientAddressMap() {
   window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`, '_blank', 'noopener,noreferrer');
 }
 
-function selectGeocodeSuggestion(suggestion) {
-  const enderecoInput = document.getElementById('cli-form-end');
-  enderecoInput.value = suggestion;
-  document.getElementById('cli-geocode-suggestions').style.display = 'none';
-  
-  // Buscar coordenadas para a sugestão selecionada
-  geocodeClientAddress();
-}
-
 let _duplicatesModalState = { focusIds: [], sourceName: '', audit: null, groups: [] };
 
 async function openDuplicatesModal(options = {}) {
@@ -16389,7 +16237,6 @@ function confirmAction(message){
 let rotDados = [];     // [{equipe, veiculo, svcs:[], sequencia, whatsappText}]
 const ROT_FALLBACK_MSG = 'Rota estimada localmente no modo econômico';
 const ROT_BASE_PLUS_CODE = 'R. Maria José Rangel, 135 - Vila Sao Paulo, São Paulo - SP';
-const rotDistanceCache = new Map();
 
 // Compatibilidade: rotInit não faz mais nada (sem API Key necessária)
 function rotInit() {
@@ -16479,84 +16326,9 @@ function rotAgruparPorTecnico(servicos) {
     .sort((a, b) => a.equipe.localeCompare(b.equipe));
 }
 
-function rotGoogleConfigured() {
-  return false;
-}
-
-function rotNormalizarEnderecoMaps(endereco) {
-  const base = String(endereco || '').trim();
-  if (!base) return 'Sao Paulo, SP';
-  return /sao paulo|\bsp\b/i.test(base) ? base : `${base}, Sao Paulo, SP`;
-}
-
 function rotKmFmt(km) {
   const num = Number(km) || 0;
   return num.toFixed(1).replace('.', ',');
-}
-
-async function rotGoogleDistanceBatch(origem, destinos) {
-  const origemFmt = rotNormalizarEnderecoMaps(origem);
-  const destinosFmt = (destinos || []).map(rotNormalizarEnderecoMaps);
-  const results = new Array(destinosFmt.length).fill(null).map(() => ({ km: 0, min: TEMPO_DESLOCAMENTO_MIN, origem: 'estimado' }));
-
-  const uncached = [];
-  const uncachedIdx = [];
-
-  destinosFmt.forEach((dest, idx) => {
-    if (isSameOperationalAddress(origemFmt, dest)) {
-      results[idx] = { km: 0, min: 0, origem: 'mesmo_local' };
-      return;
-    }
-    const cacheKey = `${origemFmt}|${dest}`;
-    const cached = rotDistanceCache.get(cacheKey);
-    if (cached) {
-      results[idx] = { km: cached.km, min: cached.min, origem: cached.origem || 'estimado' };
-      return;
-    }
-    uncached.push(dest);
-    uncachedIdx.push(idx);
-  });
-
-  if (!uncached.length) return results;
-
-  const endpoint = `${API_BASE_URL}/api/maps/distance-matrix`;
-  const url = `${endpoint}?origins=${encodeURIComponent(origemFmt)}&destinations=${encodeURIComponent(uncached.join('|'))}`;
-
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const payload = await response.json();
-
-  if (payload.status !== 'OK') {
-    throw new Error(payload.error_message || payload.status || 'Distance Matrix indisponivel');
-  }
-
-  const row = payload.rows?.[0];
-  if (!row || !Array.isArray(row.elements)) {
-    throw new Error('Resposta invalida da Distance Matrix');
-  }
-
-  row.elements.forEach((el, i) => {
-    const idx = uncachedIdx[i];
-    if (idx === undefined) return;
-
-    const dest = uncached[i];
-    let km = 0;
-    let min = TEMPO_DESLOCAMENTO_MIN;
-
-    if (el?.status === 'OK') {
-      km = Math.max(0, (Number(el.distance?.value) || 0) / 1000);
-      min = Math.max(TEMPO_DESLOCAMENTO_MIN, Math.round((Number(el.duration?.value) || 0) / 60));
-    } else {
-      km = Math.max(0, Number(estimateDistance(origemFmt, dest)) || 0);
-      min = Math.max(TEMPO_DESLOCAMENTO_MIN, Number(calcularTempoDeslocamento(origemFmt, dest)) || TEMPO_DESLOCAMENTO_MIN);
-    }
-
-    const normalized = { km: Number(km.toFixed(1)), min, origem: el?.origin || payload.provider || 'estimado' };
-    results[idx] = normalized;
-    rotDistanceCache.set(`${origemFmt}|${dest}`, normalized);
-  });
-
-  return results;
 }
 
 function rotBuildFallbackRoute(servicos) {
@@ -16616,178 +16388,8 @@ function rotBuildFallbackRoute(servicos) {
   };
 }
 
-async function rotMontarRotaOtimizadaGoogle(servicos, meta = {}) {
-  if (!Array.isArray(servicos) || !servicos.length) return rotBuildFallbackRoute(servicos);
-  if (!rotGoogleConfigured()) return rotBuildFallbackRoute(servicos);
-
-  try {
-    if (servicos.length === 1) {
-      const unico = servicos[0];
-      const [ida] = await rotGoogleDistanceBatch(ROT_BASE_PLUS_CODE, [unico.endereco || '']);
-      const [volta] = await rotGoogleDistanceBatch(unico.endereco || '', [ROT_BASE_PLUS_CODE]);
-
-      const idaKm = Number((ida?.km || 0).toFixed(1));
-      const idaMin = Math.max(TEMPO_DESLOCAMENTO_MIN, Number(ida?.min || TEMPO_DESLOCAMENTO_MIN));
-      const voltaKm = Number((volta?.km || 0).toFixed(1));
-      const voltaMin = Math.max(TEMPO_DESLOCAMENTO_MIN, Number(volta?.min || TEMPO_DESLOCAMENTO_MIN));
-
-      const duracaoServicoMin = calcularTempoServico(unico);
-      const horarioAgendadoMin = getHorarioServicoMin(unico);
-      const inicioSugeridoMin = Math.max(INICIO_EXPEDIENTE_MIN + idaMin, horarioAgendadoMin ?? 0);
-      const fimSugeridoMin = inicioSugeridoMin + duracaoServicoMin;
-      const tempoDeslocamentoMin = idaMin + voltaMin;
-      const tempoTotalMin = duracaoServicoMin + tempoDeslocamentoMin;
-      const kmTotal = Number((idaKm + voltaKm).toFixed(1));
-      const serviceKey = rotServiceKey(unico);
-      const compartilhado = (meta.sharedServiceKeys || []).includes(serviceKey);
-
-      return enriquecerDiagnosticoRota({
-        sequencia: [{
-          servico: unico,
-          ordem: 1,
-          bairro: extrairBairroProxy(unico.endereco || ''),
-          deslocamentoMin: idaMin,
-          km: idaKm,
-          duracaoServicoMin,
-          horarioAgendadoMin,
-          horarioPlanejadoMin: horarioAgendadoMin,
-          inicioSugeridoMin,
-          fimSugeridoMin,
-          inicioEstimadoMin: inicioSugeridoMin,
-          fimEstimadoMin: fimSugeridoMin,
-          compartilhado,
-          compartilhadoLabel: meta.sharedLabelByKey?.[serviceKey] || ''
-        }],
-        tempoServicoMin: duracaoServicoMin,
-        tempoDeslocamentoMin,
-        tempoTotalMin,
-        kmTotal,
-        ocupacaoPct: JORNADA_MIN > 0 ? Math.round((tempoTotalMin / JORNADA_MIN) * 100) : 0,
-        tempoMedioServico: tempoTotalMin,
-        servicosExtras: 0,
-        livreMin: Math.max(0, JORNADA_MIN - tempoTotalMin),
-        idaVoltaAplicada: true,
-        idaVolta: { idaKm, idaMin, voltaKm, voltaMin },
-        rotaOtimizadaDisponivel: true,
-        rotaAviso: '',
-      }, servicos);
-    }
-
-    const restantes = [...servicos];
-    const sequencia = [];
-
-    let inicio = 0;
-    let melhorHorario = Number.POSITIVE_INFINITY;
-    restantes.forEach((s, idx) => {
-      const h = getHorarioServicoMin(s);
-      if (h !== null && h < melhorHorario) {
-        melhorHorario = h;
-        inicio = idx;
-      }
-    });
-
-    const primeiro = restantes.splice(inicio, 1)[0];
-    let cursor = getHorarioServicoMin(primeiro) ?? INICIO_EXPEDIENTE_MIN;
-    const duracaoPrimeiro = calcularTempoServico(primeiro);
-    const horarioAgendadoPrimeiro = getHorarioServicoMin(primeiro);
-
-    sequencia.push({
-      servico: primeiro,
-      ordem: 1,
-      bairro: extrairBairroProxy(primeiro.endereco || ''),
-      deslocamentoMin: 0,
-      km: 0,
-      duracaoServicoMin: duracaoPrimeiro,
-      horarioAgendadoMin: horarioAgendadoPrimeiro,
-      horarioPlanejadoMin: horarioAgendadoPrimeiro,
-      inicioSugeridoMin: cursor,
-      fimSugeridoMin: cursor + duracaoPrimeiro,
-      inicioEstimadoMin: cursor,
-      fimEstimadoMin: cursor + duracaoPrimeiro,
-      compartilhado: (meta.sharedServiceKeys || []).includes(rotServiceKey(primeiro)),
-      compartilhadoLabel: meta.sharedLabelByKey?.[rotServiceKey(primeiro)] || ''
-    });
-    cursor += duracaoPrimeiro;
-
-    while (restantes.length) {
-      const origem = sequencia[sequencia.length - 1].servico.endereco || '';
-      const distancias = await rotGoogleDistanceBatch(origem, restantes.map(s => s.endereco || ''));
-
-      let escolha = 0;
-      let melhorScore = Number.POSITIVE_INFINITY;
-
-      restantes.forEach((cand, idx) => {
-        const desloc = distancias[idx] || { km: 0, min: TEMPO_DESLOCAMENTO_MIN };
-        const h = getHorarioServicoMin(cand);
-        const chegada = cursor + desloc.min;
-        const espera = h !== null ? Math.max(0, h - chegada) : 0;
-        const atraso = h !== null ? Math.max(0, chegada - h) : 0;
-        const ultimoServico = sequencia[sequencia.length - 1]?.servico || null;
-        const mesmoLocal = isSameOperationalStop(ultimoServico, cand);
-        const score = mesmoLocal
-          ? (desloc.min * 0.1) + (atraso * 0.15) + (espera * 0.05) - 500
-          : desloc.min + (atraso * 2) + (espera * 0.3);
-        if (score < melhorScore) {
-          melhorScore = score;
-          escolha = idx;
-        }
-      });
-
-      const proximo = restantes.splice(escolha, 1)[0];
-      const trecho = distancias[escolha] || { km: 0, min: TEMPO_DESLOCAMENTO_MIN };
-      const horarioAgendadoMin = getHorarioServicoMin(proximo);
-      let inicioSugeridoMin = cursor + trecho.min;
-      if (horarioAgendadoMin !== null) inicioSugeridoMin = Math.max(inicioSugeridoMin, horarioAgendadoMin);
-      const duracaoServicoMin = calcularTempoServico(proximo);
-      const fimSugeridoMin = inicioSugeridoMin + duracaoServicoMin;
-
-      sequencia.push({
-        servico: proximo,
-        ordem: sequencia.length + 1,
-        bairro: extrairBairroProxy(proximo.endereco || ''),
-        deslocamentoMin: trecho.min,
-        km: Number((trecho.km || 0).toFixed(1)),
-        duracaoServicoMin,
-        horarioAgendadoMin,
-        horarioPlanejadoMin: horarioAgendadoMin,
-        inicioSugeridoMin,
-        fimSugeridoMin,
-        inicioEstimadoMin: inicioSugeridoMin,
-        fimEstimadoMin: fimSugeridoMin,
-        compartilhado: (meta.sharedServiceKeys || []).includes(rotServiceKey(proximo)),
-        compartilhadoLabel: meta.sharedLabelByKey?.[rotServiceKey(proximo)] || ''
-      });
-
-      cursor = fimSugeridoMin;
-    }
-
-    const tempoServicoMin = sequencia.reduce((acc, item) => acc + item.duracaoServicoMin, 0);
-    const tempoDeslocamentoMin = sequencia.reduce((acc, item) => acc + item.deslocamentoMin, 0);
-    const tempoTotalMin = tempoServicoMin + tempoDeslocamentoMin;
-    const kmTotal = Number(sequencia.reduce((acc, item) => acc + (item.km || 0), 0).toFixed(1));
-    const tempoMedioServico = sequencia.length ? Math.round(tempoTotalMin / sequencia.length) : TEMPO_MEDIO_SERVICO_PADRAO;
-    const livreMin = Math.max(0, JORNADA_MIN - tempoTotalMin);
-    const ocupacaoPct = JORNADA_MIN > 0 ? Math.round((tempoTotalMin / JORNADA_MIN) * 100) : 0;
-
-    return enriquecerDiagnosticoRota({
-      sequencia,
-      tempoServicoMin,
-      tempoDeslocamentoMin,
-      tempoTotalMin,
-      kmTotal,
-      ocupacaoPct,
-      tempoMedioServico,
-      servicosExtras: tempoMedioServico > 0 ? Math.max(0, Math.floor(livreMin / tempoMedioServico)) : 0,
-      livreMin,
-      idaVoltaAplicada: false,
-      idaVolta: null,
-      rotaOtimizadaDisponivel: true,
-      rotaAviso: '',
-    }, servicos);
-  } catch (e) {
-    console.warn('Roteiro Google fallback:', e?.message || e);
-    return rotBuildFallbackRoute(servicos);
-  }
+async function rotMontarRotaLocal(servicos) {
+  return rotBuildFallbackRoute(servicos);
 }
 
 function rotMontarTextoWhatsApp(eq, data) {
@@ -17347,16 +16949,6 @@ async function atualizarCustomerReminderStatus(index, status) {
   renderCustomerRemindersPanel(services, document.getElementById('rot-data')?.value || '');
 }
 
-async function abrirCustomerReminderWhatsApp(index) {
-  const item = window._customerReminderRenderItems?.[index];
-  if (!item) return;
-  if (!item.contato.numero) { toast('Cliente sem WhatsApp válido. Copie o texto manualmente.', 'warn'); return; }
-  window.open(`https://wa.me/${item.contato.numero}?text=${encodeURIComponent(item.mensagem)}`, '_blank');
-  await registrarCustomerReminderManualAberto(item);
-  toast('WhatsApp aberto. Confirme manualmente se a mensagem foi enviada.', 'warn');
-  renderCustomerRemindersPanel(services, document.getElementById('rot-data')?.value || '');
-}
-
 async function prepararCustomerReminderEvolution(item) {
   if (!item || !customerRemindersSchemaReady) return item?.lembrete || null;
   if (item.lembrete?.id) return item.lembrete;
@@ -17703,10 +17295,7 @@ async function rotGerarDoSistema() {
     } catch (backendError) {
       logisticaDebug('[Roteiro backend] indisponível, usando fallback local', backendError?.message || backendError);
       const grupos = rotAgruparPorTecnico(daySvcsRoteiraveis);
-      const rotas = await Promise.all(grupos.map(grupo => rotMontarRotaOtimizadaGoogle(grupo.svcs, {
-        sharedServiceKeys: grupo.sharedServiceKeys || [],
-        sharedLabelByKey: grupo.sharedLabelByKey || {}
-      })));
+      const rotas = await Promise.all(grupos.map(grupo => rotMontarRotaLocal(grupo.svcs)));
 
       rotDados = grupos.map((grupo, idx) => {
         const rota = rotas[idx];
@@ -20419,12 +20008,6 @@ async function carregarVeiculosConfig() {
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
-}
-function formNovoVeiculo() {
-  abrirCadastroVeiculoFrota(null, 'config');
-}
-async function salvarVeiculo() {
-  await salvarFormularioVeiculo(null, 'config');
 }
 async function toggleVeiculo(id, ativo) {
   const msg = ativo ? 'Ativar este veículo?' : 'Desativar este veículo? Ele sairá das novas seleções, mas o histórico será mantido.';

@@ -282,41 +282,6 @@ function hasRelatedCustomerNames(leftName, rightName) {
   return false;
 }
 
-function areDuplicateCustomers(left, right) {
-  const leftPhone = normalizePhone(left.telefone);
-  const rightPhone = normalizePhone(right.telefone);
-  if (leftPhone && rightPhone && leftPhone === rightPhone) return true;
-
-  const leftWhatsapp = normalizePhone(left.whatsapp);
-  const rightWhatsapp = normalizePhone(right.whatsapp);
-  if (leftWhatsapp && rightWhatsapp && leftWhatsapp === rightWhatsapp) return true;
-
-  const leftDocument = normalizeDocument(left.cpf_cnpj);
-  const rightDocument = normalizeDocument(right.cpf_cnpj);
-  if (leftDocument && rightDocument && leftDocument === rightDocument) return true;
-
-  const leftName = left.nome_normalizado || normalizeCustomerName(left.nome);
-  const rightName = right.nome_normalizado || normalizeCustomerName(right.nome);
-  if (leftName && rightName && leftName === rightName) return true;
-  const relatedNames = hasRelatedCustomerNames(left.nome, right.nome);
-
-  const leftAddress = buildCustomerAddressFingerprint(left);
-  const rightAddress = buildCustomerAddressFingerprint(right);
-  if (leftAddress && rightAddress && leftAddress === rightAddress && relatedNames) return true;
-
-  const leftCep = String(left.cep || '').replace(/\D/g, '');
-  const rightCep = String(right.cep || '').replace(/\D/g, '');
-  if (leftCep && rightCep && leftCep === rightCep && relatedNames) return true;
-
-  const leftStreet = normalizeAddress(left.rua || left.endereco_completo || left.endereco);
-  const rightStreet = normalizeAddress(right.rua || right.endereco_completo || right.endereco);
-  if (leftStreet && rightStreet && (leftStreet === rightStreet || leftStreet.includes(rightStreet) || rightStreet.includes(leftStreet))) {
-    return relatedNames;
-  }
-
-  return false;
-}
-
 class CustomerLinkError extends Error {
   constructor(message, statusCode = 409) {
     super(message);

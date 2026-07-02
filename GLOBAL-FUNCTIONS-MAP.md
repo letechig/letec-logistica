@@ -113,7 +113,6 @@ Essas sao as mais sensiveis e causam quebra ampla se sumirem:
 - `openDuplicatesModal` `6268`
 - `closeDuplicatesModal` `6273`
 - `loadDuplicates` `6277`
-- `selectGeocodeSuggestion` `6259`
 - `mergeDuplicates` `6346`
 - `deleteClientDirectly` `6415`
 
@@ -127,8 +126,6 @@ Essas sao as mais sensiveis e causam quebra ampla se sumirem:
 - `salvarTecnico` `8198`
 - `toggleTecnico` `8203`
 - `excluirTecnico` `8204`
-- `formNovoVeiculo` `8236`
-- `salvarVeiculo` `8237`
 - `toggleVeiculo` `8243`
 - `excluirVeiculo` `8244`
 

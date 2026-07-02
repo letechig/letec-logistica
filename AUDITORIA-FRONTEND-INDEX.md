@@ -10,8 +10,10 @@ Atualizacao de progresso:
 - duplicatas: deteccao e fluxo de revisao foram refinados
 - legado: `extrairTecnicos`, `calcularTempoServicoLegacy`, `getSvcs` e `getCLs` foram removidas do `frontend/index.html` por nao terem uso interno
 - roteiro: o fluxo atual usa copiar/WhatsApp direto por equipe e no lote; nao foram encontrados vestigios ativos do `rot-modal`
-- revisao pratica 2026-05-04: `frontend/js/app.js` e `frontend/js/api.js` foram arquivados em `archive/nao-usados/frontend-js-legado/`; a chave Google saiu do frontend ativo; `rotGoogleConfigured()` agora depende de `/api/health` (`mapsProxy`)
+- revisao pratica 2026-05-04: `frontend/js/app.js` e `frontend/js/api.js` foram arquivados em `archive/nao-usados/frontend-js-legado/`; a chave Google saiu do frontend ativo
 - revisao pratica 2026-05-04: criada a checagem repetivel `npm run audit:frontend`, que valida scripts inline, IDs reais duplicados, handlers inline e ausencia de chave Google no HTML oficial
+- revisao pratica 2026-07-02: funcoes sem chamada ativa foram removidas do frontend oficial, incluindo sobras de geocode, atalhos antigos de veiculo e o bloco `rotGoogle*`; o roteiro local fica por estimativa operacional
+- regra de limpeza 2026-07-02: funcao global so permanece se tiver handler/template ativo, chamada ativa no codigo ou uso de suporte/debug documentado
 
 ## Resumo executivo
 
