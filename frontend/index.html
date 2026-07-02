@@ -10286,6 +10286,21 @@ function opMapServiceInBounds(service, bounds) {
   return dt && dt >= bounds.start && dt <= bounds.end;
 }
 
+function opMapCoordinateValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function opMapValidCoordinatePair(latValue, lngValue) {
+  const lat = opMapCoordinateValue(latValue);
+  const lng = opMapCoordinateValue(lngValue);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return null;
+  return { lat, lng };
+}
+
 function opMapServiceLocation(service = {}) {
   const candidates = [
     { lat: service.address_latitude, lng: service.address_longitude, source: 'customer_address' },
@@ -10294,9 +10309,8 @@ function opMapServiceLocation(service = {}) {
     { lat: service.chegada_lat, lng: service.chegada_lng, source: 'technician_arrival' }
   ];
   for (const candidate of candidates) {
-    const lat = Number(candidate.lat);
-    const lng = Number(candidate.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, source: candidate.source };
+    const coords = opMapValidCoordinatePair(candidate.lat, candidate.lng);
+    if (coords) return { ...coords, source: candidate.source };
   }
   return null;
 }

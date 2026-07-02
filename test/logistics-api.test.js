@@ -11,24 +11,41 @@ const serviceTypes = [{ sigla: 'DS', nome: 'Desinsetizacao', duracao_minutos: 60
 const services = [
   { id: 1, date: '2026-05-07', horario: '08:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua A, 1' },
   { id: 2, date: '2026-05-07', horario: '10:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua B, 2' },
+  { id: 3, date: '2026-05-08', horario: '12:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua C, 3', latitude: 0, longitude: 0 },
 ];
 
 function makeMockSupabase() {
   return {
     from(table) {
-      const dataByTable = { service_types: serviceTypes, technicians, services };
+      const dataByTable = { service_types: serviceTypes, technicians, services, customers: [], customer_addresses: [] };
       const builder = {
+        _in: null,
+        _filters: [],
+        _or: null,
+        _limit: null,
         select() { return builder; },
-        order() { return Promise.resolve({ data: dataByTable[table] || [], error: null }); },
-        or() { return builder; },
-        limit() { return Promise.resolve({ data: dataByTable[table] || [], error: null }); },
+        order() { return builder; },
+        or(expr) { builder._or = String(expr || ''); return builder; },
+        limit(n) { builder._limit = n; return builder; },
         ilike() { return builder; },
-        eq() { return builder; },
+        eq(key, value) { builder._filters.push({ key, value }); return builder; },
+        in(key, values) { builder._in = { key, values: (values || []).map(String) }; return builder; },
         insert() { return builder; },
         upsert() { return builder; },
         update() { return builder; },
         delete() { return builder; },
-        then(resolve) { return resolve({ data: dataByTable[table] || [], error: null }); },
+        then(resolve) { return resolve({ data: builder._rows(), error: null }); },
+        _rows() {
+          let rows = dataByTable[table] || [];
+          for (const filter of builder._filters) rows = rows.filter(row => String(row[filter.key]) === String(filter.value));
+          if (builder._in) rows = rows.filter(row => builder._in.values.includes(String(row[builder._in.key])));
+          if (builder._or) {
+            const terms = builder._or.split(',').map(part => part.match(/^([^.]+)\.eq\.(.+)$/)).filter(Boolean);
+            rows = rows.filter(row => terms.some(([, key, value]) => String(row[key]) === String(value)));
+          }
+          if (builder._limit != null) rows = rows.slice(0, builder._limit);
+          return rows;
+        }
       };
       return builder;
     },
@@ -98,6 +115,18 @@ test('GET /api/health anuncia modo economico de mapas', async () => {
     assert.equal(payload.geocodingConfigured, false);
     assert.equal(payload.cepLookupConfigured, true);
     assert.equal(payload.mapsProxy, false);
+  });
+});
+
+test('GET /api/services ignora coordenada zero-zero invalida', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/services`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const service = payload.find(item => item.id === 3);
+    assert.ok(service);
+    assert.equal(service.latitude, null);
+    assert.equal(service.longitude, null);
   });
 });
 

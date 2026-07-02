@@ -529,6 +529,7 @@ function cleanDateText(value) {
 function cleanNumber(value) {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -2247,9 +2248,10 @@ async function fetchServiceById(db, id) {
 function validCoordinatePair(lat, lng) {
   const latitude = cleanNumber(lat);
   const longitude = cleanNumber(lng);
-  return Number.isFinite(latitude) && Number.isFinite(longitude)
-    ? { latitude, longitude }
-    : null;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  if (Math.abs(latitude) < 0.000001 && Math.abs(longitude) < 0.000001) return null;
+  return { latitude, longitude };
 }
 
 async function safeSelectByIds(db, table, column, ids = []) {
@@ -2321,8 +2323,8 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
       cliente_id: service.cliente_id || customer?.id || null,
       customer_id: service.customer_id || service.cliente_id || customer?.id || null,
       customer_address_id: service.customer_address_id || address?.id || null,
-      latitude: selected?.latitude ?? service.latitude ?? null,
-      longitude: selected?.longitude ?? service.longitude ?? null,
+      latitude: selected?.latitude ?? null,
+      longitude: selected?.longitude ?? null,
       customer_latitude: customerCoords?.latitude ?? addressCoords?.latitude ?? null,
       customer_longitude: customerCoords?.longitude ?? addressCoords?.longitude ?? null,
       address_latitude: addressCoords?.latitude ?? null,
@@ -3207,10 +3209,15 @@ function serviceTypeValue(service = {}) {
 }
 
 function serviceLocationValue(service = {}) {
-  const lat = cleanNumber(service.latitude ?? service.lat ?? service.chegada_lat ?? service.customer_latitude);
-  const lng = cleanNumber(service.longitude ?? service.lng ?? service.chegada_lng ?? service.customer_longitude);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) {
-    return { latitude: lat, longitude: lng, source: service.location_source || (service.chegada_lat ? 'technician_arrival' : 'service') };
+  const candidates = [
+    { lat: service.address_latitude, lng: service.address_longitude, source: 'customer_address' },
+    { lat: service.customer_latitude, lng: service.customer_longitude, source: 'customer' },
+    { lat: service.latitude ?? service.lat, lng: service.longitude ?? service.lng, source: service.location_source || 'service' },
+    { lat: service.chegada_lat, lng: service.chegada_lng, source: 'technician_arrival' }
+  ];
+  for (const candidate of candidates) {
+    const coords = validCoordinatePair(candidate.lat, candidate.lng);
+    if (coords) return { ...coords, source: candidate.source };
   }
   return null;
 }
