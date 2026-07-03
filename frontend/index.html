@@ -14280,7 +14280,7 @@ function suggestClientContractNextDate() {
   const periodicidade = document.getElementById('cli-contract-periodicidade')?.value || '';
   const next = suggestNextDateByPeriodicity(last, periodicidade);
   const target = document.getElementById('cli-contract-proximo');
-  if (target && next && !target.value) target.value = next;
+  if (target) target.value = next || '';
 }
 
 function addClientContractDraft() {

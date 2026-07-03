@@ -1740,10 +1740,6 @@ function eventMatchesTechnician(technician = {}, item = {}) {
   return textMatchesTechnician(technician, `${item.tecnico || ''} ${item.equipe || ''}`);
 }
 
-async function fetchTechnicianById(db, id) {
-  return maybeSingle(db.from('technicians').select('*').eq('id', id));
-}
-
 async function findTechnicianForLogin(db, input = {}) {
   const id = cleanNullableText(input.technician_id || input.tecnico_id || input.id, 120);
   const phone = normalizePhone(input.telefone || input.whatsapp || input.phone || '');
@@ -2296,26 +2292,6 @@ function ymdToBr(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || 'data prevista';
   const [year, month, day] = value.split('-');
   return `${day}/${month}/${year}`;
-}
-
-function serviceDateValue(service = {}) {
-  return String(service.date || service.data || service.dt || '').slice(0, 10);
-}
-
-function serviceTimeValue(service = {}) {
-  return String(service.horario || service.hr || '').trim() || 'sem horario';
-}
-
-function serviceTypeValue(service = {}) {
-  if (Array.isArray(service.tipos) && service.tipos.length) return service.tipos.join(' + ');
-  if (typeof service.tipos === 'string' && service.tipos.trim()) {
-    try {
-      const parsed = JSON.parse(service.tipos);
-      if (Array.isArray(parsed) && parsed.length) return parsed.join(' + ');
-    } catch(e) {}
-    return service.tipos;
-  }
-  return service.tiposervico || service.tipoServico || service.sc || 'Atendimento';
 }
 
 function serviceTechnicianIds(service = {}) {
