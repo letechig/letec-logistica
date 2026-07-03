@@ -59,6 +59,24 @@ function createClientService(deps) {
       longitude: input.longitude ? parseFloat(input.longitude) : null,
       tipo_local: input.tipo_local ? String(input.tipo_local).trim() : null,
       restricoes_operacionais: input.restricoes_operacionais ? String(input.restricoes_operacionais).trim() : null,
+      nome_fantasia: input.nome_fantasia ? String(input.nome_fantasia).trim() : null,
+      tags: Array.isArray(input.tags) ? input.tags.filter(Boolean).map(String) : (input.tags ? String(input.tags).trim() : null),
+      categoria_principal: input.categoria_principal ? String(input.categoria_principal).trim() : null,
+      vendedor_responsavel: input.vendedor_responsavel ? String(input.vendedor_responsavel).trim() : null,
+      observacao_comercial: input.observacao_comercial ? String(input.observacao_comercial).trim() : null,
+      cadastro_quality_score: Number.isFinite(Number(input.cadastro_quality_score)) ? Number(input.cadastro_quality_score) : null,
+      cadastro_quality_flags: Array.isArray(input.cadastro_quality_flags) ? input.cadastro_quality_flags.filter(Boolean).map(String) : null,
+      possui_animais: hasOwn(input, 'possui_animais') ? (input.possui_animais === true || String(input.possui_animais) === 'true') : null,
+      animais_quais: Array.isArray(input.animais_quais) ? input.animais_quais.filter(Boolean).map(String) : (input.animais_quais ? String(input.animais_quais).trim() : null),
+      restricao_horario: input.restricao_horario ? String(input.restricao_horario).trim() : null,
+      acesso_local: input.acesso_local ? String(input.acesso_local).trim() : null,
+      precisa_agendar_portaria: hasOwn(input, 'precisa_agendar_portaria') ? (input.precisa_agendar_portaria === true || String(input.precisa_agendar_portaria) === 'true') : null,
+      precisa_autorizacao_previa: hasOwn(input, 'precisa_autorizacao_previa') ? (input.precisa_autorizacao_previa === true || String(input.precisa_autorizacao_previa) === 'true') : null,
+      tem_chave_portaria: hasOwn(input, 'tem_chave_portaria') ? (input.tem_chave_portaria === true || String(input.tem_chave_portaria) === 'true') : null,
+      risco_especial: hasOwn(input, 'risco_especial') ? (input.risco_especial === true || String(input.risco_especial) === 'true') : null,
+      epis_obrigatorios: input.epis_obrigatorios ? String(input.epis_obrigatorios).trim() : null,
+      melhor_periodo_atendimento: input.melhor_periodo_atendimento ? String(input.melhor_periodo_atendimento).trim() : null,
+      tempo_medio_local: input.tempo_medio_local ? String(input.tempo_medio_local).trim() : null,
       nivel_urgencia_padrao: input.nivel_urgencia_padrao || 'normal',
       observacoes_operacionais: input.observacoes_operacionais ? String(input.observacoes_operacionais).trim() : null,
       cliente_recorrente: clienteRecorrente,
@@ -155,7 +173,7 @@ function createClientService(deps) {
     if (!validation.ok) return { status: validation.status, error: validation };
 
     const duplicates = await findDuplicateClients(db, normalized);
-    if (duplicates.length) {
+    if (duplicates.length && input.allow_duplicate !== true) {
       return {
         status: 409,
         error: {
@@ -188,7 +206,7 @@ function createClientService(deps) {
     if (!validation.ok) return { status: validation.status, error: validation };
 
     const duplicates = await findDuplicateClients(db, normalized, id);
-    if (duplicates.length) {
+    if (duplicates.length && input.allow_duplicate !== true) {
       return {
         status: 409,
         error: {
@@ -210,14 +228,55 @@ function createClientService(deps) {
   }
 
   async function createQuickClient(db, input = {}) {
-    const payload = {
+    const normalized = normalizeClientPayload({
       ...input,
+      nome: input.nome || input.apelido || input.nome_fantasia,
       tipo: input.tipo || 'PF',
       tipo_cliente: input.tipo_cliente || 'Eventual',
       origem: input.origem || 'agenda',
       is_incomplete: input.is_incomplete !== false
-    };
-    return createClient(db, payload);
+    });
+    if (!normalized.nome) {
+      return { status: 400, error: { code: 'client_name_required', error: 'Nome ou apelido e obrigatorio' } };
+    }
+
+    const missingImportantData = [
+      normalized.whatsapp || normalized.telefone,
+      normalized.cep && normalized.numero && normalized.rua && normalized.bairro && normalized.cidade && normalized.uf,
+      normalized.categoria || normalized.tipo_cliente,
+      normalized.vendedor_responsavel
+    ].filter(Boolean).length < 4;
+    normalized.is_incomplete = input.is_incomplete !== false || missingImportantData;
+    normalized.ativo = normalized.status_operacional === 'Inativo' ? false : true;
+
+    const duplicates = await findDuplicateClients(db, normalized);
+    if (duplicates.length && input.allow_duplicate !== true) {
+      return {
+        status: 409,
+        error: {
+          code: 'possible_duplicate',
+          error: `Cliente potencialmente duplicado: ${duplicates[0].nome}`,
+          duplicateId: duplicates[0].id,
+          duplicate: duplicates[0]
+        }
+      };
+    }
+
+    const { data, error } = await runCustomerWriteWithSchemaFallback(
+      payload => db.from('customers').insert([payload]).select(),
+      dbPayload(normalized),
+      'clientService.createQuickClient'
+    );
+    if (error) return { status: error.code === '23505' ? 409 : 500, error };
+
+    const created = data?.[0] || null;
+    if (created?.id) {
+      try { await ensureCustomerAlias(db, created.id, created.nome || normalized.nome, input.origem || 'cliente_rapido'); } catch (e) {}
+      if (normalized.cep || normalized.endereco || normalized.rua || normalized.numero) {
+        try { await ensureCustomerAddress(db, created.id, { ...dbPayload(normalized), origem: input.origem || 'cliente_rapido' }, { origem: input.origem || 'cliente_rapido', is_primary: true, label: 'Principal' }); } catch (e) {}
+      }
+    }
+    return { status: 201, data: created };
   }
 
   async function listClientLocations(db, customerId, options = {}) {

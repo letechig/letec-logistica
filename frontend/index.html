@@ -1664,7 +1664,7 @@ td.bold { color: var(--text); font-weight: 600; }
 /* ─── CLIENT MODAL ───────────────────────────── */
 #client-modal { background:rgba(15,23,42,.48); backdrop-filter:blur(4px); padding:22px; align-items:center; }
 #client-modal .client-modal-shell {
-  width:min(960px,96vw);
+  width:min(1180px,96vw);
   max-height:min(92vh,860px);
   padding:0;
   overflow:hidden;
@@ -1698,6 +1698,43 @@ td.bold { color: var(--text); font-weight: 600; }
 }
 .client-modal-title { font-family:var(--display); font-size:20px; font-weight:850; color:#0f172a; line-height:1.15; }
 .client-modal-subtitle { margin-top:4px; font-size:13px; color:#64748b; line-height:1.4; }
+.client-central-hero {
+  padding:14px 26px;
+  border-bottom:1px solid #e2e8f0;
+  background:#fff;
+  display:grid;
+  grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);
+  gap:14px;
+  align-items:center;
+}
+.client-central-main { min-width:0; display:flex; flex-direction:column; gap:8px; }
+.client-central-name { font-size:18px; font-weight:850; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.client-central-meta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.client-central-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.client-quick-action {
+  min-height:36px;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  background:#fff;
+  color:#334155;
+  font-size:12px;
+  font-weight:800;
+  cursor:pointer;
+}
+.client-quick-action.primary { background:#2563eb; border-color:#2563eb; color:#fff; }
+.client-quick-action:disabled { opacity:.55; cursor:not-allowed; }
+.client-quality-wrap { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.client-quality-bar { width:170px; height:8px; border-radius:999px; background:#e2e8f0; overflow:hidden; }
+.client-quality-fill { height:100%; width:0%; background:#22c55e; transition:width .2s ease; }
+.client-summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; }
+.client-summary-card { border:1px solid #e2e8f0; background:#fff; border-radius:10px; padding:12px; min-height:84px; }
+.client-summary-label { font-size:11px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:.06em; }
+.client-summary-value { margin-top:8px; font-size:18px; font-weight:850; color:#0f172a; line-height:1.15; }
+.client-summary-sub { margin-top:4px; font-size:12px; color:#64748b; line-height:1.35; }
+.client-alert-list { display:flex; flex-direction:column; gap:8px; }
+.client-alert-item { border:1px solid #fed7aa; background:#fff7ed; color:#9a3412; border-radius:10px; padding:10px 12px; font-size:12px; font-weight:700; }
+.client-contact-card { border:1px solid var(--border); border-radius:var(--r2); padding:9px; background:var(--bg2); display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.client-history-filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
 .client-modal-body {
   flex:1;
   overflow-y:auto;
@@ -1866,6 +1903,9 @@ td.bold { color: var(--text); font-weight: 600; }
   #client-modal { align-items:flex-end; padding:0; }
   #client-modal .client-modal-shell { width:100%; max-height:94vh; border-radius:14px 14px 0 0; }
   .client-modal-header,.client-modal-body,.client-modal-footer { padding-left:16px; padding-right:16px; }
+  .client-central-hero { grid-template-columns:1fr; padding-left:16px; padding-right:16px; }
+  .client-central-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .client-central-name { white-space:normal; }
   .client-grid,.client-grid-3 { grid-template-columns:1fr; }
   .client-system-info { grid-template-columns:1fr; }
   .client-field.small { max-width:none; }
@@ -4326,7 +4366,8 @@ async function carregarVeiculos(){
           <div class="section-sub">Cadastro, contratos, deduplicação e histórico operacional</div>
         </div>
         <div class="ui-page-actions">
-          <button class="btn btn-primary btn-sm" onclick="openClientModal()">➕ Novo Cliente</button>
+          <button class="btn btn-primary btn-sm" onclick="openQuickClientModal()">+ Cliente Rápido</button>
+          <button class="btn btn-ghost btn-sm" onclick="openClientModal()">Cadastro Completo</button>
           <button class="btn btn-ghost btn-sm" onclick="abrirAuditoriaVinculosAgenda()">Auditar vínculos da agenda</button>
           <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Saneamento de Clientes</button>
         </div>
@@ -4654,16 +4695,55 @@ async function carregarVeiculos(){
       </div>
     </div>
 
+    <div class="client-central-hero">
+      <div class="client-central-main">
+        <div class="client-central-name" id="client-central-name">Cliente sem nome</div>
+        <div class="client-central-meta" id="client-central-meta"></div>
+        <div class="client-quality-wrap">
+          <div class="client-quality-bar"><div class="client-quality-fill" id="client-quality-fill"></div></div>
+          <span class="chip chip-green" id="client-quality-label">Cadastro 0% completo</span>
+        </div>
+      </div>
+      <div class="client-central-actions">
+        <button class="client-quick-action" onclick="centralWhatsAppCliente()">WhatsApp</button>
+        <button class="client-quick-action primary" onclick="centralAgendarCliente()">Nova OS</button>
+        <button class="client-quick-action" onclick="centralAgendarCliente()">Agendar Serviço</button>
+        <button class="client-quick-action" onclick="toast('Módulo de propostas ainda não está disponível.', 'warn')">Criar Proposta</button>
+        <button class="client-quick-action" onclick="switchClientTab('contratos')">Ver Contrato</button>
+        <button class="client-quick-action" onclick="loadClientHistory();switchClientTab('historico')">Histórico</button>
+      </div>
+    </div>
+
     <div class="client-modal-body">
       <div class="client-modal-content">
         <div class="client-tabs" role="tablist" aria-label="Cadastro do cliente">
-          <button class="client-tab-btn active" id="client-tab-identificacao" onclick="switchClientTab('identificacao')" role="tab" aria-selected="true" aria-controls="client-panel-identificacao">Identificação</button>
-          <button class="client-tab-btn" id="client-tab-endereco" onclick="switchClientTab('endereco')" role="tab" aria-selected="false" aria-controls="client-panel-endereco">Endereço</button>
+          <button class="client-tab-btn active" id="client-tab-resumo" onclick="switchClientTab('resumo')" role="tab" aria-selected="true" aria-controls="client-panel-resumo">Resumo</button>
+          <button class="client-tab-btn" id="client-tab-dados" onclick="switchClientTab('dados')" role="tab" aria-selected="false" aria-controls="client-panel-dados">Dados do Cliente</button>
+          <button class="client-tab-btn" id="client-tab-enderecos" onclick="switchClientTab('enderecos')" role="tab" aria-selected="false" aria-controls="client-panel-enderecos">Locais / Endereços</button>
+          <button class="client-tab-btn" id="client-tab-contatos" onclick="switchClientTab('contatos')" role="tab" aria-selected="false" aria-controls="client-panel-contatos">Contatos</button>
           <button class="client-tab-btn" id="client-tab-operacional" onclick="switchClientTab('operacional')" role="tab" aria-selected="false" aria-controls="client-panel-operacional">Operacional</button>
-          <button class="client-tab-btn" id="client-tab-historico" onclick="switchClientTab('historico')" role="tab" aria-selected="false" aria-controls="client-panel-historico">Histórico</button>
+          <button class="client-tab-btn" id="client-tab-contratos" onclick="switchClientTab('contratos')" role="tab" aria-selected="false" aria-controls="client-panel-contratos">Serviços / Contratos</button>
+          <button class="client-tab-btn" id="client-tab-historico" onclick="switchClientTab('historico')" role="tab" aria-selected="false" aria-controls="client-panel-historico">Histórico / OS</button>
         </div>
 
-        <div class="client-tab-panel active" id="client-panel-identificacao" role="tabpanel" aria-labelledby="client-tab-identificacao">
+        <div class="client-tab-panel active" id="client-panel-resumo" role="tabpanel" aria-labelledby="client-tab-resumo">
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Visão 360</div>
+              <div class="client-section-desc">Situação cadastral, operação, serviços e últimas movimentações.</div>
+            </div>
+            <div class="client-summary-grid" id="client-summary-grid"></div>
+          </section>
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Alertas operacionais</div>
+              <div class="client-section-desc">Pontos que precisam aparecer antes do atendimento.</div>
+            </div>
+            <div class="client-alert-list" id="client-alert-list"></div>
+          </section>
+        </div>
+
+        <div class="client-tab-panel" id="client-panel-dados" role="tabpanel" aria-labelledby="client-tab-dados">
           <section class="client-section">
             <div class="client-section-head">
               <div class="client-section-title">Identificação</div>
@@ -4685,6 +4765,14 @@ async function carregarVeiculos(){
                 <label class="client-label">Nome / Razão social <span class="req">*</span></label>
                 <input id="cli-form-nome" type="text" class="finput" placeholder="Nome completo ou razão social do cliente" required>
                 <div class="client-field-error" id="cli-error-nome">Nome é obrigatório.</div>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Nome fantasia / Apelido</label>
+                <input id="cli-form-fantasia" type="text" class="finput" placeholder="Como o cliente é conhecido">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Nome normalizado</label>
+                <input id="cli-form-nome-normalizado" type="text" class="finput" readonly placeholder="Gerado automaticamente">
               </div>
               <div class="client-field">
                 <label class="client-label">Telefone</label>
@@ -4711,6 +4799,22 @@ async function carregarVeiculos(){
                 </select>
               </div>
               <div class="client-field">
+                <label class="client-label">Categoria principal</label>
+                <select id="cli-form-categoria-principal" class="fsel">
+                  <option value="">Selecione...</option>
+                  <option>Residencial</option>
+                  <option>Comercial</option>
+                  <option>Condomínio</option>
+                  <option>Industrial</option>
+                  <option>Escola</option>
+                  <option>Mercado</option>
+                  <option>Restaurante</option>
+                  <option>Clínica</option>
+                  <option>Rural</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+              <div class="client-field">
                 <label class="client-label">Status operacional</label>
                 <select id="cli-form-status-operacional" class="fsel">
                   <option value="">Sem status</option>
@@ -4730,11 +4834,23 @@ async function carregarVeiculos(){
                   <option value="Baixa">Baixa</option>
                 </select>
               </div>
+              <div class="client-field">
+                <label class="client-label">Tags do cliente</label>
+                <input id="cli-form-tags" type="text" class="finput" placeholder="VIP, recorrente, condomínio...">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Vendedor responsável</label>
+                <input id="cli-form-vendedor" type="text" class="finput" placeholder="Nome do vendedor">
+              </div>
+              <div class="client-field full">
+                <label class="client-label">Observação comercial</label>
+                <textarea id="cli-form-obs-comercial" class="finput" placeholder="Negociação, origem comercial, preferências e contexto"></textarea>
+              </div>
             </div>
           </section>
         </div>
 
-        <div class="client-tab-panel" id="client-panel-endereco" role="tabpanel" aria-labelledby="client-tab-endereco">
+        <div class="client-tab-panel" id="client-panel-enderecos" role="tabpanel" aria-labelledby="client-tab-enderecos">
           <section class="client-section">
             <div class="client-section-head">
               <div class="client-section-title">Endereço</div>
@@ -4803,6 +4919,67 @@ async function carregarVeiculos(){
           </section>
         </div>
 
+        <div class="client-tab-panel" id="client-panel-contatos" role="tabpanel" aria-labelledby="client-tab-contatos">
+          <section class="client-section">
+            <div class="client-section-head">
+              <div class="client-section-title">Contatos</div>
+              <div class="client-section-desc">Responsáveis por atendimento, financeiro, relatórios e comunicação por WhatsApp.</div>
+            </div>
+            <div class="client-grid-3">
+              <div class="client-field">
+                <label class="client-label">Nome do contato</label>
+                <input id="cli-contact-nome" class="finput" placeholder="Nome">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Função</label>
+                <select id="cli-contact-funcao" class="fsel">
+                  <option value="">Selecione...</option>
+                  <option>Síndico</option>
+                  <option>Zelador</option>
+                  <option>Porteiro</option>
+                  <option>Gerente</option>
+                  <option>Proprietário</option>
+                  <option>Financeiro</option>
+                  <option>Administradora</option>
+                  <option>Compras</option>
+                  <option>Responsável Técnico</option>
+                  <option>Morador</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">WhatsApp</label>
+                <input id="cli-contact-whatsapp" class="finput" placeholder="(11) 99999-9999">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Telefone</label>
+                <input id="cli-contact-telefone" class="finput" placeholder="(11) 99999-9999">
+              </div>
+              <div class="client-field">
+                <label class="client-label">E-mail</label>
+                <input id="cli-contact-email" class="finput" type="email" placeholder="contato@email.com">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Preferências</label>
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-contact-primary"><span>Contato principal</span></label>
+              </div>
+              <div class="client-field">
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-contact-lembrete"><span>Recebe lembrete</span></label>
+              </div>
+              <div class="client-field">
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-contact-cobranca"><span>Recebe cobrança</span></label>
+              </div>
+              <div class="client-field">
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-contact-relatorio"><span>Recebe relatório técnico</span></label>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="addClientContactDraft()">Adicionar contato</button>
+            </div>
+            <div id="cli-contacts-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          </section>
+        </div>
+
         <div class="client-tab-panel" id="client-panel-operacional" role="tabpanel" aria-labelledby="client-tab-operacional">
           <section class="client-section">
             <div class="client-section-head">
@@ -4821,6 +4998,55 @@ async function carregarVeiculos(){
                   <option value="industrial">Industrial</option>
                   <option value="outro">Outro</option>
                 </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Possui animais?</label>
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-form-possui-animais"><span>Sim</span></label>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Quais animais</label>
+                <input id="cli-form-animais-quais" class="finput" placeholder="cão, gato, aves...">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Acesso ao local</label>
+                <select id="cli-form-acesso-local" class="fsel">
+                  <option value="">Selecione...</option>
+                  <option>Livre</option>
+                  <option>Portaria</option>
+                  <option>Agendamento prévio</option>
+                  <option>Responsável precisa acompanhar</option>
+                  <option>Chave na portaria</option>
+                  <option>Somente horário comercial</option>
+                  <option>Somente fora do expediente</option>
+                </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Restrição de horário</label>
+                <input id="cli-form-restricao-horario" class="finput" placeholder="Ex: após 18h">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Melhor período</label>
+                <input id="cli-form-melhor-periodo" class="finput" placeholder="Manhã, tarde, noite...">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Tempo médio no local</label>
+                <input id="cli-form-tempo-medio" class="finput" placeholder="Ex: 90min">
+              </div>
+              <div class="client-field">
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-form-agendar-portaria"><span>Agendar com portaria</span></label>
+              </div>
+              <div class="client-field">
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-form-autorizacao-previa"><span>Autorização prévia</span></label>
+              </div>
+              <div class="client-field">
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-form-chave-portaria"><span>Chave na portaria</span></label>
+              </div>
+              <div class="client-field">
+                <label class="client-checkbox-row"><input type="checkbox" id="cli-form-risco-especial"><span>Risco especial</span></label>
+              </div>
+              <div class="client-field full">
+                <label class="client-label">EPIs obrigatórios</label>
+                <input id="cli-form-epis" class="finput" placeholder="Respirador, luvas, óculos...">
               </div>
               <div class="client-field">
                 <label class="client-label">Nível de urgência</label>
@@ -4865,6 +5091,9 @@ async function carregarVeiculos(){
               </div>
             </div>
           </section>
+        </div>
+
+        <div class="client-tab-panel" id="client-panel-contratos" role="tabpanel" aria-labelledby="client-tab-contratos">
           <section class="client-section">
             <div class="client-section-head">
               <div class="client-section-title">Serviços contratados</div>
@@ -4877,7 +5106,7 @@ async function carregarVeiculos(){
               </div>
               <div class="client-field">
                 <label class="client-label">Periodicidade</label>
-                <select id="cli-contract-periodicidade" class="fsel">
+                <select id="cli-contract-periodicidade" class="fsel" onchange="suggestClientContractNextDate()">
                   <option value="">Sem periodicidade</option>
                   <option value="semanal">Semanal</option>
                   <option value="quinzenal">Quinzenal</option>
@@ -4896,6 +5125,30 @@ async function carregarVeiculos(){
                   <option value="Vencido">Vencido</option>
                   <option value="Cancelado">Cancelado</option>
                 </select>
+              </div>
+              <div class="client-field">
+                <label class="client-label">Último atendimento</label>
+                <input id="cli-contract-ultimo" type="date" class="finput" onchange="suggestClientContractNextDate()">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Próximo atendimento</label>
+                <input id="cli-contract-proximo" type="date" class="finput">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Valor contratado</label>
+                <input id="cli-contract-valor" class="finput" placeholder="0,00">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Proposta / Contrato</label>
+                <input id="cli-contract-numero" class="finput" placeholder="Número">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Técnico preferencial</label>
+                <input id="cli-contract-tecnico" class="finput" placeholder="Técnico">
+              </div>
+              <div class="client-field">
+                <label class="client-label">Tempo estimado</label>
+                <input id="cli-contract-tempo" class="finput" placeholder="Ex: 90min">
               </div>
               <div class="client-field full">
                 <label class="client-label">Observações do contrato</label>
@@ -4927,6 +5180,20 @@ async function carregarVeiculos(){
             <div class="client-history-head">
               <span class="client-history-title">Histórico operacional</span>
               <button class="client-btn secondary" onclick="loadClientHistory()" title="Atualizar histórico" style="min-height:32px;padding:0 10px;font-size:12px">Atualizar</button>
+            </div>
+            <div class="client-history-filters">
+              <select id="cli-history-status-filter" class="fsel" onchange="renderClientHistoryTimeline()">
+                <option value="">Todos</option>
+                <option value="executado">Executados</option>
+                <option value="pendente">Pendentes</option>
+                <option value="cancelado">Cancelados</option>
+                <option value="reagendado">Reagendados</option>
+                <option value="problema">Problemas</option>
+              </select>
+              <input id="cli-history-service-filter" class="finput" placeholder="Serviço" oninput="renderClientHistoryTimeline()">
+              <input id="cli-history-tech-filter" class="finput" placeholder="Técnico" oninput="renderClientHistoryTimeline()">
+              <input id="cli-history-from-filter" type="date" class="finput" onchange="renderClientHistoryTimeline()">
+              <input id="cli-history-to-filter" type="date" class="finput" onchange="renderClientHistoryTimeline()">
             </div>
             <div class="client-history-box" id="cli-historico-content">
               <div style="text-align:center;color:#64748b;font-size:12px">Carregando histórico...</div>
@@ -4960,6 +5227,70 @@ async function carregarVeiculos(){
       <button class="client-btn danger-outline" id="cli-form-del" style="display:none" onclick="deleteClient()">Inativar</button>
       <div class="client-footer-spacer"></div>
       <button class="client-btn primary" id="cli-form-save" onclick="saveClient()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CLIENTE RAPIDO -->
+<div class="modal-bg" id="quick-client-modal" onclick="if(event.target===event.currentTarget)closeQuickClientModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:620px">
+    <div class="modal-title">Cliente Rápido</div>
+    <div class="section-sub" style="margin:4px 0 14px">Cadastro mínimo para não travar atendimento, prospecção ou agendamento.</div>
+    <div class="client-grid">
+      <div class="client-field full">
+        <label class="client-label">Nome / Apelido <span class="req">*</span></label>
+        <input id="quick-cli-nome" class="finput" placeholder="Nome do cliente">
+      </div>
+      <div class="client-field">
+        <label class="client-label">WhatsApp</label>
+        <input id="quick-cli-whatsapp" class="finput" placeholder="(11) 99999-9999">
+      </div>
+      <div class="client-field">
+        <label class="client-label">Categoria</label>
+        <select id="quick-cli-categoria" class="fsel">
+          <option value="">Selecione...</option>
+          <option>Residencial</option>
+          <option>Comercial</option>
+          <option>Condomínio</option>
+          <option>Industrial</option>
+          <option>Restaurante</option>
+          <option>Outro</option>
+        </select>
+      </div>
+      <div class="client-field">
+        <label class="client-label">CEP</label>
+        <input id="quick-cli-cep" class="finput" maxlength="9" placeholder="00000-000">
+      </div>
+      <div class="client-field">
+        <label class="client-label">Número</label>
+        <input id="quick-cli-numero" class="finput" placeholder="Ex: 42">
+      </div>
+      <div class="client-field">
+        <label class="client-label">Vendedor</label>
+        <input id="quick-cli-vendedor" class="finput" placeholder="Responsável">
+      </div>
+      <div class="client-field">
+        <label class="client-label">Origem</label>
+        <select id="quick-cli-origem" class="fsel">
+          <option value="">Selecione...</option>
+          <option value="Google">Google</option>
+          <option value="Indicação">Indicação</option>
+          <option value="Cliente antigo">Cliente antigo</option>
+          <option value="Contrato">Contrato</option>
+          <option value="Agenda">Agenda</option>
+          <option value="Prospecção">Prospecção</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="client-field full">
+        <label class="client-label">Observação rápida</label>
+        <textarea id="quick-cli-obs" class="finput" placeholder="Contexto inicial"></textarea>
+      </div>
+    </div>
+    <div id="quick-cli-error" class="client-form-error" style="margin-top:12px"></div>
+    <div class="flex gap2" style="padding:16px 0 0;border-top:1px solid var(--border);margin-top:16px">
+      <button class="btn btn-ghost btn-sm" onclick="closeQuickClientModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="quick-cli-save" onclick="saveQuickClient()" style="margin-left:auto">Salvar Cliente Rápido</button>
     </div>
   </div>
 </div>
@@ -12933,7 +13264,10 @@ let clientesPageSize = 50;
 let clientesTotal = 0;
 let clienteContratosDraft = [];
 let clienteEnderecosDraft = [];
+let clienteContatosDraft = [];
+let clienteHistoricoDraft = [];
 let clientModalInitialSnapshot = '';
+let clientAllowDuplicateOnce = false;
 const servicoEnderecosCache = {};
 let customerLinkAuditData = null;
 
@@ -13364,7 +13698,20 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     fecharMenusClientes();
     if (document.getElementById('client-modal')?.classList.contains('open')) requestCloseClientModal();
+    if (document.getElementById('quick-client-modal')?.classList.contains('open')) closeQuickClientModal();
   }
+});
+document.addEventListener('input', event => {
+  if (!event.target || !event.target.closest?.('#client-modal')) return;
+  if (event.target.id === 'cli-form-nome') {
+    const normalized = document.getElementById('cli-form-nome-normalizado');
+    if (normalized) normalized.value = normalizeClientNamePreview(event.target.value);
+  }
+  updateClientCentralSummary();
+});
+document.addEventListener('change', event => {
+  if (!event.target || !event.target.closest?.('#client-modal')) return;
+  updateClientCentralSummary();
 });
 
 function toggleSelecionarTudoClientes(marcado) {
@@ -13734,6 +14081,155 @@ async function atualizarRevisaoDados(id, status) {
   }
 }
 
+function parseClientTags(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  return String(value || '').split(',').map(item => item.trim()).filter(Boolean);
+}
+
+function normalizeClientNamePreview(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function currentClientDraft() {
+  return {
+    ...(clienteEditando || {}),
+    nome: document.getElementById('cli-form-nome')?.value.trim() || clienteEditando?.nome || '',
+    nome_fantasia: document.getElementById('cli-form-fantasia')?.value.trim() || '',
+    telefone: document.getElementById('cli-form-tel')?.value.trim() || '',
+    whatsapp: document.getElementById('cli-form-whatsapp')?.value.trim() || '',
+    email: document.getElementById('cli-form-email')?.value.trim() || '',
+    contato: document.getElementById('cli-form-contato')?.value.trim() || '',
+    tipo: document.getElementById('cli-form-tipo')?.value || 'PF',
+    categoria: document.getElementById('cli-form-categoria')?.value || '',
+    categoria_principal: document.getElementById('cli-form-categoria-principal')?.value || '',
+    status_operacional: document.getElementById('cli-form-status-operacional')?.value || '',
+    vendedor_responsavel: document.getElementById('cli-form-vendedor')?.value.trim() || '',
+    endereco: document.getElementById('cli-form-end')?.value.trim() || '',
+    cep: document.getElementById('cli-form-cep')?.value.trim() || '',
+    rua: document.getElementById('cli-form-rua')?.value.trim() || '',
+    numero: document.getElementById('cli-form-numero')?.value.trim() || '',
+    bairro: document.getElementById('cli-form-bairro')?.value.trim() || '',
+    cidade: document.getElementById('cli-form-cidade')?.value.trim() || '',
+    uf: document.getElementById('cli-form-uf')?.value.trim() || '',
+    restricoes_operacionais: document.getElementById('cli-form-restricoes')?.value.trim() || '',
+    observacoes_operacionais: document.getElementById('cli-form-obs-operacionais')?.value.trim() || '',
+    restricao_horario: document.getElementById('cli-form-restricao-horario')?.value.trim() || '',
+    acesso_local: document.getElementById('cli-form-acesso-local')?.value || '',
+    possui_animais: document.getElementById('cli-form-possui-animais')?.checked || false,
+    animais_quais: document.getElementById('cli-form-animais-quais')?.value.trim() || '',
+    precisa_agendar_portaria: document.getElementById('cli-form-agendar-portaria')?.checked || false,
+    precisa_autorizacao_previa: document.getElementById('cli-form-autorizacao-previa')?.checked || false,
+    tem_chave_portaria: document.getElementById('cli-form-chave-portaria')?.checked || false,
+    risco_especial: document.getElementById('cli-form-risco-especial')?.checked || false
+  };
+}
+
+function getClientOperationalAlerts(cliente = currentClientDraft()) {
+  const alerts = [];
+  if (cliente.possui_animais || cliente.animais_quais) alerts.push(`Animais no local${cliente.animais_quais ? `: ${cliente.animais_quais}` : ''}`);
+  if (cliente.restricao_horario) alerts.push(`Restrição de horário: ${cliente.restricao_horario}`);
+  if (cliente.acesso_local && !/^livre$/i.test(cliente.acesso_local)) alerts.push(`Acesso: ${cliente.acesso_local}`);
+  if (cliente.precisa_agendar_portaria) alerts.push('Precisa agendar com portaria');
+  if (cliente.precisa_autorizacao_previa) alerts.push('Precisa de autorização prévia');
+  if (cliente.tem_chave_portaria) alerts.push('Chave na portaria');
+  if (cliente.risco_especial) alerts.push('Local com risco especial');
+  if (cliente.restricoes_operacionais) alerts.push(cliente.restricoes_operacionais);
+  return alerts;
+}
+
+function calculateClientQuality(cliente = currentClientDraft()) {
+  const checks = [
+    { ok: !!cliente.nome, label: 'nome preenchido' },
+    { ok: !!(cliente.whatsapp || cliente.telefone), label: 'WhatsApp/telefone preenchido' },
+    { ok: !!(cliente.endereco || (cliente.cep && cliente.numero && cliente.rua)), label: 'endereço principal preenchido' },
+    { ok: !!(cliente.categoria_principal || cliente.categoria), label: 'categoria preenchida' },
+    { ok: clienteContratosDraft.length > 0, label: 'serviço vinculado' },
+    { ok: !!cliente.vendedor_responsavel, label: 'vendedor definido' },
+    { ok: clienteContatosDraft.some(item => item.is_primary) || !!cliente.contato, label: 'contato principal definido' },
+    { ok: !cliente.duplicata, label: 'sem duplicidade crítica' }
+  ];
+  const done = checks.filter(item => item.ok).length;
+  return { score: Math.round((done / checks.length) * 100), missing: checks.filter(item => !item.ok).map(item => item.label) };
+}
+
+function formatDateBr(value) {
+  if (!value) return '';
+  const raw = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return new Date(`${raw}T12:00:00`).toLocaleDateString('pt-BR');
+}
+
+function updateClientCentralSummary() {
+  const cliente = currentClientDraft();
+  const quality = calculateClientQuality(cliente);
+  const nameEl = document.getElementById('client-central-name');
+  if (nameEl) nameEl.textContent = cliente.nome || 'Cliente sem nome';
+  const meta = document.getElementById('client-central-meta');
+  if (meta) {
+    meta.innerHTML = [
+      normalizeClienteStatus(cliente.status_operacional) || (cliente.ativo === false ? 'Inativo' : 'Prospect'),
+      cliente.categoria_principal || cliente.categoria || 'Sem categoria',
+      cliente.tipo || 'PF',
+      cliente.vendedor_responsavel ? `Vend.: ${cliente.vendedor_responsavel}` : '',
+      cliente.is_incomplete ? 'Cadastro incompleto' : ''
+    ].filter(Boolean).map(item => `<span class="chip chip-gray">${sanitize(item)}</span>`).join('');
+  }
+  const fill = document.getElementById('client-quality-fill');
+  if (fill) fill.style.width = `${quality.score}%`;
+  const label = document.getElementById('client-quality-label');
+  if (label) {
+    label.textContent = `Cadastro ${quality.score}% completo`;
+    label.className = `chip ${quality.score >= 80 ? 'chip-green' : quality.score >= 50 ? 'chip-orange' : 'chip-red'}`;
+  }
+  const summary = document.getElementById('client-summary-grid');
+  if (summary) {
+    const lastService = clienteHistoricoDraft[0] || null;
+    const nextContract = clienteContratosDraft.find(item => item.data_proximo_atendimento || item.proxima_execucao_sugerida) || null;
+    const cards = [
+      ['Status', normalizeClienteStatus(cliente.status_operacional) || 'Prospect', cliente.is_incomplete ? 'Cadastro incompleto' : 'Cadastro completo'],
+      ['Próximo atendimento', formatDateBr(nextContract?.data_proximo_atendimento || nextContract?.proxima_execucao_sugerida) || 'Sem previsão', nextContract?.tipo_servico || 'Sem contrato vinculado'],
+      ['Último atendimento', formatDateBr(lastService?.date || lastService?.data || lastService?.data_atendimento) || 'Sem histórico', lastService?.tipo_servico || lastService?.servico || ''],
+      ['Serviços ativos', String(clienteContratosDraft.filter(item => String(item.status_contrato || 'Ativo').toLowerCase() === 'ativo').length), `${clienteContratosDraft.length} contrato(s) cadastrados`],
+      ['Pendências cadastrais', String(quality.missing.length), quality.missing.slice(0, 2).join(', ') || 'Sem pendências críticas'],
+      ['Contatos', String(clienteContatosDraft.length), clienteContatosDraft.find(item => item.is_primary)?.nome || 'Sem contato principal']
+    ];
+    summary.innerHTML = cards.map(([cardLabel, value, sub]) => `<div class="client-summary-card"><div class="client-summary-label">${sanitize(cardLabel)}</div><div class="client-summary-value">${sanitize(value)}</div><div class="client-summary-sub">${sanitize(sub || '')}</div></div>`).join('');
+  }
+  const alertBox = document.getElementById('client-alert-list');
+  if (alertBox) {
+    const alerts = getClientOperationalAlerts(cliente);
+    alertBox.innerHTML = alerts.length
+      ? alerts.map(item => `<div class="client-alert-item">${sanitize(item)}</div>`).join('')
+      : '<div class="text-muted" style="font-size:12px">Nenhum alerta operacional importante.</div>';
+  }
+}
+
+function centralWhatsAppCliente() {
+  const contact = clienteContatosDraft.find(item => item.is_primary && (item.whatsapp || item.telefone)) || clienteContatosDraft.find(item => item.whatsapp || item.telefone);
+  const numero = normalizarTelefoneWhatsApp(contact?.whatsapp || contact?.telefone || clienteEditando?.whatsapp || clienteEditando?.telefone || document.getElementById('cli-form-whatsapp')?.value || document.getElementById('cli-form-tel')?.value || '');
+  if (!numero) return toast('Cliente sem WhatsApp válido', 'warn');
+  window.open(`https://wa.me/${numero}`, '_blank', 'noopener,noreferrer');
+}
+
+function centralAgendarCliente() {
+  if (!clienteEditando?.id) return toast('Salve o cliente antes de criar OS/agendamento.', 'warn');
+  openServiceFromClient(clienteEditando.id);
+}
+
 function renderClientContractsDraft() {
   const list = document.getElementById('cli-contracts-list');
   if (!list) return;
@@ -13745,24 +14241,67 @@ function renderClientContractsDraft() {
     <div style="border:1px solid var(--border);border-radius:var(--r2);padding:9px;background:var(--bg2);display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
       <div>
         <div class="bold">${sanitize(item.tipo_servico)}</div>
-        <div style="font-size:11px;color:var(--text3)">${sanitize(item.periodicidade || 'sem periodicidade')} · ${sanitize(item.status_contrato || 'Ativo')}</div>
+        <div style="font-size:11px;color:var(--text3)">${sanitize(item.periodicidade || 'sem periodicidade')} · ${sanitize(item.status_contrato || 'Ativo')}${item.data_proximo_atendimento ? ` · próximo ${sanitize(formatDateBr(item.data_proximo_atendimento))}` : ''}</div>
         ${item.observacoes ? `<div style="font-size:11px;color:var(--text2);margin-top:3px">${sanitize(item.observacoes)}</div>` : ''}
       </div>
       <button class="btn btn-ghost btn-xs" onclick="removeClientContractDraft(${index})">Remover</button>
     </div>
   `).join('');
+  updateClientCentralSummary();
+}
+
+function addMonthsSafe(date, months) {
+  const next = new Date(date.getTime());
+  const day = next.getDate();
+  next.setMonth(next.getMonth() + months);
+  if (next.getDate() !== day) next.setDate(0);
+  return next;
+}
+
+function suggestNextDateByPeriodicity(lastDate, periodicidade) {
+  if (!lastDate) return '';
+  const base = new Date(`${lastDate}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return '';
+  const key = String(periodicidade || '').toLowerCase();
+  let next = new Date(base.getTime());
+  if (key === 'semanal') next.setDate(next.getDate() + 7);
+  else if (key === 'quinzenal') next.setDate(next.getDate() + 15);
+  else if (key === 'mensal') next = addMonthsSafe(next, 1);
+  else if (key === 'bimestral') next = addMonthsSafe(next, 2);
+  else if (key === 'trimestral') next = addMonthsSafe(next, 3);
+  else if (key === 'semestral') next = addMonthsSafe(next, 6);
+  else if (key === 'anual') next = addMonthsSafe(next, 12);
+  else return '';
+  return next.toISOString().slice(0, 10);
+}
+
+function suggestClientContractNextDate() {
+  const last = document.getElementById('cli-contract-ultimo')?.value || '';
+  const periodicidade = document.getElementById('cli-contract-periodicidade')?.value || '';
+  const next = suggestNextDateByPeriodicity(last, periodicidade);
+  const target = document.getElementById('cli-contract-proximo');
+  if (target && next && !target.value) target.value = next;
 }
 
 function addClientContractDraft() {
   const service = document.getElementById('cli-contract-service')?.value.trim();
   if (!service) { toast('Informe o serviço contratado', 'warn'); return; }
+  suggestClientContractNextDate();
   clienteContratosDraft.push({
     tipo_servico: service,
     periodicidade: document.getElementById('cli-contract-periodicidade')?.value || '',
     status_contrato: document.getElementById('cli-contract-status')?.value || 'Ativo',
+    data_ultimo_atendimento: document.getElementById('cli-contract-ultimo')?.value || null,
+    data_proximo_atendimento: document.getElementById('cli-contract-proximo')?.value || null,
+    valor: document.getElementById('cli-contract-valor')?.value.trim() || null,
+    numero_contrato: document.getElementById('cli-contract-numero')?.value.trim() || '',
+    numero_proposta: document.getElementById('cli-contract-numero')?.value.trim() || '',
+    tecnico_preferencial: document.getElementById('cli-contract-tecnico')?.value.trim() || '',
+    tempo_estimado: document.getElementById('cli-contract-tempo')?.value.trim() || '',
+    observacao_servico: document.getElementById('cli-contract-obs')?.value.trim() || '',
     observacoes: document.getElementById('cli-contract-obs')?.value.trim() || ''
   });
-  ['cli-contract-service','cli-contract-obs'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['cli-contract-service','cli-contract-obs','cli-contract-ultimo','cli-contract-proximo','cli-contract-valor','cli-contract-numero','cli-contract-tecnico','cli-contract-tempo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   renderClientContractsDraft();
 }
 
@@ -13782,6 +14321,14 @@ async function loadClientContracts(customerId) {
       tipo_servico: item.tipo_servico || '',
       periodicidade: item.periodicidade || '',
       status_contrato: item.status_contrato || 'Ativo',
+      data_ultimo_atendimento: item.data_ultimo_atendimento || item.data_ultimo_servico || '',
+      data_proximo_atendimento: item.data_proximo_atendimento || item.proxima_execucao_sugerida || '',
+      valor: item.valor || '',
+      numero_contrato: item.numero_contrato || item.numero_proposta || '',
+      numero_proposta: item.numero_proposta || item.numero_contrato || '',
+      tecnico_preferencial: item.tecnico_preferencial || '',
+      tempo_estimado: item.tempo_estimado || '',
+      observacao_servico: item.observacao_servico || '',
       observacoes: item.observacoes || ''
     })).filter(item => item.tipo_servico);
   } catch(e) {
@@ -13800,6 +14347,102 @@ async function saveClientContracts(customerId) {
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || `Erro ${response.status}`);
+  }
+}
+
+function renderClientContactsDraft() {
+  const list = document.getElementById('cli-contacts-list');
+  if (!list) return;
+  if (!clienteContatosDraft.length) {
+    list.innerHTML = '<div class="text-muted" style="font-size:12px">Nenhum contato cadastrado.</div>';
+    updateClientCentralSummary();
+    return;
+  }
+  list.innerHTML = clienteContatosDraft.map((item, index) => `
+    <div class="client-contact-card">
+      <div>
+        <div class="bold">${sanitize(item.nome || item.funcao || 'Contato')}</div>
+        <div style="font-size:11px;color:var(--text3)">${sanitize(item.funcao || 'sem função')} · ${sanitize(item.whatsapp || item.telefone || item.email || 'sem contato')}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">
+          ${item.is_primary ? '<span class="chip chip-blue">principal</span>' : ''}
+          ${item.recebe_lembrete ? '<span class="chip chip-green">lembrete</span>' : ''}
+          ${item.recebe_cobranca ? '<span class="chip chip-orange">financeiro</span>' : ''}
+          ${item.recebe_relatorio ? '<span class="chip chip-gray">relatório</span>' : ''}
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-xs" onclick="removeClientContactDraft(${index})">Remover</button>
+    </div>
+  `).join('');
+  updateClientCentralSummary();
+}
+
+function addClientContactDraft() {
+  const nome = document.getElementById('cli-contact-nome')?.value.trim() || '';
+  const whatsapp = document.getElementById('cli-contact-whatsapp')?.value.trim() || '';
+  const telefone = document.getElementById('cli-contact-telefone')?.value.trim() || '';
+  const email = document.getElementById('cli-contact-email')?.value.trim() || '';
+  if (!nome && !whatsapp && !telefone && !email) return toast('Informe ao menos nome, telefone, WhatsApp ou e-mail do contato.', 'warn');
+  const primary = document.getElementById('cli-contact-primary')?.checked || !clienteContatosDraft.some(item => item.is_primary);
+  if (primary) clienteContatosDraft = clienteContatosDraft.map(item => ({ ...item, is_primary: false }));
+  clienteContatosDraft.push({
+    nome,
+    funcao: document.getElementById('cli-contact-funcao')?.value || '',
+    telefone,
+    whatsapp,
+    email,
+    recebe_lembrete: document.getElementById('cli-contact-lembrete')?.checked || false,
+    recebe_cobranca: document.getElementById('cli-contact-cobranca')?.checked || false,
+    recebe_relatorio: document.getElementById('cli-contact-relatorio')?.checked || false,
+    is_primary: primary
+  });
+  ['cli-contact-nome','cli-contact-whatsapp','cli-contact-telefone','cli-contact-email'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['cli-contact-funcao'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['cli-contact-primary','cli-contact-lembrete','cli-contact-cobranca','cli-contact-relatorio'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+  renderClientContactsDraft();
+}
+
+function removeClientContactDraft(index) {
+  clienteContatosDraft.splice(index, 1);
+  if (clienteContatosDraft.length && !clienteContatosDraft.some(item => item.is_primary)) clienteContatosDraft[0].is_primary = true;
+  renderClientContactsDraft();
+}
+
+async function loadClientContacts(customerId) {
+  clienteContatosDraft = [];
+  if (!customerId) { renderClientContactsDraft(); return; }
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(customerId)}/contacts`);
+    if (!response.ok) throw new Error(`Erro ${response.status}`);
+    const payload = await response.json();
+    clienteContatosDraft = (Array.isArray(payload) ? payload : []).map(item => ({
+      nome: item.nome || '',
+      funcao: item.funcao || '',
+      telefone: item.telefone || '',
+      whatsapp: item.whatsapp || '',
+      email: item.email || '',
+      recebe_lembrete: item.recebe_lembrete === true,
+      recebe_cobranca: item.recebe_cobranca === true,
+      recebe_relatorio: item.recebe_relatorio === true,
+      is_primary: item.is_primary === true
+    }));
+  } catch(e) {
+    console.warn('Contatos do cliente indisponíveis:', e.message || e);
+    clienteContatosDraft = [];
+  }
+  renderClientContactsDraft();
+}
+
+async function saveClientContacts(customerId) {
+  if (!customerId) return;
+  const response = await fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(customerId)}/contacts`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contacts: clienteContatosDraft })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (payload.migration_required) return toast('Cliente salvo. Para salvar contatos, rode migration-customer-central.sql no Supabase.', 'warn');
     throw new Error(payload.error || `Erro ${response.status}`);
   }
 }
@@ -13824,6 +14467,7 @@ function clientAddressDraftFromForm() {
     uf: document.getElementById('cli-form-uf')?.value.trim().toUpperCase() || '',
     complemento: document.getElementById('cli-form-complemento')?.value.trim() || '',
     referencia: document.getElementById('cli-form-referencia')?.value.trim() || '',
+    zona_regiao: document.getElementById('cli-form-zona')?.value.trim() || '',
     latitude: Number.isFinite(Number(geo.latitude)) ? Number(geo.latitude) : null,
     longitude: Number.isFinite(Number(geo.longitude)) ? Number(geo.longitude) : null,
     is_primary: true,
@@ -13895,6 +14539,10 @@ async function loadClientAddresses(customerId) {
       uf: item.uf || '',
       complemento: item.complemento || '',
       referencia: item.referencia || '',
+      zona_regiao: item.zona_regiao || item.zona || '',
+      tipo_imovel: item.tipo_imovel || '',
+      bloco_torre_andar: item.bloco_torre_andar || '',
+      google_maps_url: item.google_maps_url || '',
       latitude: item.latitude ?? null,
       longitude: item.longitude ?? null,
       is_primary: item.is_primary === true,
@@ -13936,6 +14584,7 @@ async function saveClientAddresses(customerId) {
 
 function openClientModal(clientId = null) {
   let modalDraftLoadPromise = null;
+  clientAllowDuplicateOnce = false;
   if (clientId) {
     // Editar cliente existente
     clienteEditando = clientesData.find(c => c.id === clientId);
@@ -13944,6 +14593,8 @@ function openClientModal(clientId = null) {
     document.getElementById('client-modal-title').textContent = 'Editar Cliente';
     document.getElementById('client-modal-subtitle').textContent = 'Atualize os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = clienteEditando.nome || '';
+    document.getElementById('cli-form-fantasia').value = clienteEditando.nome_fantasia || '';
+    document.getElementById('cli-form-nome-normalizado').value = clienteEditando.nome_normalizado || normalizeClientNamePreview(clienteEditando.nome);
     document.getElementById('cli-form-tel').value = clienteEditando.telefone || '';
     document.getElementById('cli-form-whatsapp').value = clienteEditando.whatsapp || '';
     document.getElementById('cli-form-email').value = clienteEditando.email || '';
@@ -13966,7 +14617,22 @@ function openClientModal(clientId = null) {
       referencia: clienteEditando.referencia
     }) || '';
     document.getElementById('cli-form-categoria').value = clienteEditando.categoria || 'eventual';
+    document.getElementById('cli-form-categoria-principal').value = clienteEditando.categoria_principal || '';
+    document.getElementById('cli-form-tags').value = Array.isArray(clienteEditando.tags) ? clienteEditando.tags.join(', ') : (clienteEditando.tags || '');
+    document.getElementById('cli-form-vendedor').value = clienteEditando.vendedor_responsavel || '';
+    document.getElementById('cli-form-obs-comercial').value = clienteEditando.observacao_comercial || '';
     document.getElementById('cli-form-tipo-local').value = clienteEditando.tipo_local || '';
+    document.getElementById('cli-form-possui-animais').checked = clienteEditando.possui_animais === true;
+    document.getElementById('cli-form-animais-quais').value = Array.isArray(clienteEditando.animais_quais) ? clienteEditando.animais_quais.join(', ') : (clienteEditando.animais_quais || '');
+    document.getElementById('cli-form-acesso-local').value = clienteEditando.acesso_local || '';
+    document.getElementById('cli-form-restricao-horario').value = clienteEditando.restricao_horario || '';
+    document.getElementById('cli-form-melhor-periodo').value = clienteEditando.melhor_periodo_atendimento || '';
+    document.getElementById('cli-form-tempo-medio').value = clienteEditando.tempo_medio_local || '';
+    document.getElementById('cli-form-agendar-portaria').checked = clienteEditando.precisa_agendar_portaria === true;
+    document.getElementById('cli-form-autorizacao-previa').checked = clienteEditando.precisa_autorizacao_previa === true;
+    document.getElementById('cli-form-chave-portaria').checked = clienteEditando.tem_chave_portaria === true;
+    document.getElementById('cli-form-risco-especial').checked = clienteEditando.risco_especial === true;
+    document.getElementById('cli-form-epis').value = clienteEditando.epis_obrigatorios || '';
     document.getElementById('cli-form-urgencia').value = clienteEditando.nivel_urgencia_padrao || 'normal';
     document.getElementById('cli-form-recorrente').checked = !!clienteEditando.cliente_recorrente;
     document.getElementById('cli-form-periodicidade').value = clienteEditando.periodicidade || '';
@@ -13997,7 +14663,8 @@ function openClientModal(clientId = null) {
     loadClientHistory();
     modalDraftLoadPromise = Promise.allSettled([
       loadClientContracts(clienteEditando.id),
-      loadClientAddresses(clienteEditando.id)
+      loadClientAddresses(clienteEditando.id),
+      loadClientContacts(clienteEditando.id)
     ]);
   } else {
     // Novo cliente
@@ -14005,6 +14672,8 @@ function openClientModal(clientId = null) {
     document.getElementById('client-modal-title').textContent = 'Novo Cliente';
     document.getElementById('client-modal-subtitle').textContent = 'Cadastre os dados cadastrais e operacionais do cliente.';
     document.getElementById('cli-form-nome').value = '';
+    document.getElementById('cli-form-fantasia').value = '';
+    document.getElementById('cli-form-nome-normalizado').value = '';
     document.getElementById('cli-form-tel').value = '';
     document.getElementById('cli-form-whatsapp').value = '';
     document.getElementById('cli-form-email').value = '';
@@ -14019,7 +14688,22 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-form-referencia').value = '';
     document.getElementById('cli-form-end').value = '';
     document.getElementById('cli-form-categoria').value = 'eventual';
+    document.getElementById('cli-form-categoria-principal').value = '';
+    document.getElementById('cli-form-tags').value = '';
+    document.getElementById('cli-form-vendedor').value = '';
+    document.getElementById('cli-form-obs-comercial').value = '';
     document.getElementById('cli-form-tipo-local').value = '';
+    document.getElementById('cli-form-possui-animais').checked = false;
+    document.getElementById('cli-form-animais-quais').value = '';
+    document.getElementById('cli-form-acesso-local').value = '';
+    document.getElementById('cli-form-restricao-horario').value = '';
+    document.getElementById('cli-form-melhor-periodo').value = '';
+    document.getElementById('cli-form-tempo-medio').value = '';
+    document.getElementById('cli-form-agendar-portaria').checked = false;
+    document.getElementById('cli-form-autorizacao-previa').checked = false;
+    document.getElementById('cli-form-chave-portaria').checked = false;
+    document.getElementById('cli-form-risco-especial').checked = false;
+    document.getElementById('cli-form-epis').value = '';
     document.getElementById('cli-form-urgencia').value = 'normal';
     document.getElementById('cli-form-recorrente').checked = false;
     document.getElementById('cli-form-periodicidade').value = '';
@@ -14043,8 +14727,11 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-historico-section').style.display = 'none';
     clienteContratosDraft = [];
     clienteEnderecosDraft = [];
+    clienteContatosDraft = [];
+    clienteHistoricoDraft = [];
     renderClientContractsDraft();
     renderClientAddressesDraft();
+    renderClientContactsDraft();
   }
   
   document.getElementById('cli-form-error').style.display = 'none';
@@ -14052,7 +14739,8 @@ function openClientModal(clientId = null) {
   setCepLookupLoading(false);
   clearClientFormErrors();
   document.getElementById('cli-geocode-suggestions').style.display = 'none';
-  switchClientTab('identificacao');
+  updateClientCentralSummary();
+  switchClientTab('resumo');
   document.getElementById('client-modal').classList.add('open');
   setClientModalSnapshot();
   if (modalDraftLoadPromise) {
@@ -14101,7 +14789,8 @@ function getClientModalSnapshot() {
   return JSON.stringify({
     fields,
     contratos: clienteContratosDraft || [],
-    enderecos: clienteEnderecosDraft || []
+    enderecos: clienteEnderecosDraft || [],
+    contatos: clienteContatosDraft || []
   });
 }
 
@@ -14124,9 +14813,86 @@ function closeClientModal(options = {}) {
   document.getElementById('client-modal').classList.remove('open');
   clienteEditando = null;
   clientModalInitialSnapshot = '';
+  clientAllowDuplicateOnce = false;
   document.getElementById('cli-form-error').style.display = 'none';
   document.getElementById('cli-historico-section').style.display = 'none';
   clearClientFormErrors();
+}
+
+function openQuickClientModal() {
+  ['quick-cli-nome','quick-cli-whatsapp','quick-cli-cep','quick-cli-numero','quick-cli-vendedor','quick-cli-obs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['quick-cli-categoria','quick-cli-origem'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const error = document.getElementById('quick-cli-error');
+  if (error) error.style.display = 'none';
+  document.getElementById('quick-client-modal')?.classList.add('open');
+}
+
+function closeQuickClientModal() {
+  document.getElementById('quick-client-modal')?.classList.remove('open');
+}
+
+function setQuickClientLoading(loading) {
+  const btn = document.getElementById('quick-cli-save');
+  if (!btn) return;
+  btn.disabled = !!loading;
+  btn.textContent = loading ? 'Salvando...' : 'Salvar Cliente Rápido';
+}
+
+async function saveQuickClient() {
+  const error = document.getElementById('quick-cli-error');
+  if (error) error.style.display = 'none';
+  const nome = document.getElementById('quick-cli-nome')?.value.trim() || '';
+  if (!nome) {
+    if (error) {
+      error.textContent = 'Nome ou apelido é obrigatório.';
+      error.style.display = 'block';
+    }
+    return;
+  }
+  const payload = {
+    nome,
+    whatsapp: document.getElementById('quick-cli-whatsapp')?.value.trim() || '',
+    categoria_principal: document.getElementById('quick-cli-categoria')?.value || '',
+    cep: document.getElementById('quick-cli-cep')?.value.trim() || '',
+    numero: document.getElementById('quick-cli-numero')?.value.trim() || '',
+    vendedor_responsavel: document.getElementById('quick-cli-vendedor')?.value.trim() || '',
+    origem: document.getElementById('quick-cli-origem')?.value || 'cliente_rapido',
+    observacoes: document.getElementById('quick-cli-obs')?.value.trim() || '',
+    is_incomplete: true
+  };
+  try {
+    setQuickClientLoading(true);
+    const response = await fetch(`${API_BASE_URL}/api/customers/quick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const saved = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (saved.code === 'possible_duplicate') {
+        const msg = `Possível cliente já cadastrado: ${saved.duplicate?.nome || saved.duplicateId || 'verifique a base'}`;
+        if (confirmAction(`${msg}. Deseja abrir o saneamento de clientes?`)) openDuplicatesModal({ focusIds: saved.duplicateId ? [saved.duplicateId] : [], sourceName: nome });
+      }
+      throw new Error(saved.error || `Erro ${response.status}`);
+    }
+    closeQuickClientModal();
+    await renderClientes();
+    toast('Cliente rápido salvo como cadastro incompleto.', 'ok');
+    if (saved?.id) openClientModal(saved.id);
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || 'Erro ao salvar cliente rápido';
+      error.style.display = 'block';
+    }
+  } finally {
+    setQuickClientLoading(false);
+  }
 }
 
 function clearClientFormErrors() {
@@ -14273,6 +15039,7 @@ async function verificarDuplicatasCliente() {
         openDuplicatesModal({ focusIds: duplicates.map(d => d.id), sourceName: nome });
         return false;
       }
+      clientAllowDuplicateOnce = true;
     }
     return true;
   } catch (error) {
@@ -14282,6 +15049,64 @@ async function verificarDuplicatasCliente() {
 }
 
 // Carregar histórico operacional do cliente
+function renderClientHistoryTimeline() {
+  const contentEl = document.getElementById('cli-historico-content');
+  if (!contentEl) return;
+  const statusFilter = normalizeText(document.getElementById('cli-history-status-filter')?.value || '');
+  const serviceFilter = normalizeText(document.getElementById('cli-history-service-filter')?.value || '');
+  const techFilter = normalizeText(document.getElementById('cli-history-tech-filter')?.value || '');
+  const from = document.getElementById('cli-history-from-filter')?.value || '';
+  const to = document.getElementById('cli-history-to-filter')?.value || '';
+  const rows = (clienteHistoricoDraft || []).filter(service => {
+    const serviceDate = String(service.date || service.data || service.dt || service.data_atendimento || '').slice(0, 10);
+    const status = normalizeText(service.exec_status || service.status || service.st || '');
+    const serviceName = normalizeText(service.tiposervico || service.tipo_servico || service.tipoServico || service.sc || service.servico || '');
+    const tech = normalizeText(service.tecnico || service.equipe || service.motorista || '');
+    if (from && serviceDate && serviceDate < from) return false;
+    if (to && serviceDate && serviceDate > to) return false;
+    if (statusFilter) {
+      if (statusFilter === 'pendente' && ['executado','finalizado','cancelado'].includes(status)) return false;
+      else if (statusFilter !== 'pendente' && !status.includes(statusFilter)) return false;
+    }
+    if (serviceFilter && !serviceName.includes(serviceFilter)) return false;
+    if (techFilter && !tech.includes(techFilter)) return false;
+    return true;
+  });
+  if (!rows.length) {
+    contentEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px">Nenhum histórico encontrado para os filtros.</div>';
+    return;
+  }
+  contentEl.innerHTML = rows.map(service => {
+    const serviceDate = service.date || service.data || service.dt || service.data_atendimento;
+    const status = service.exec_status || service.status || service.st || 'agendado';
+    const statusMeta = {
+      agendado: { label: 'Agendado', color: 'var(--blue)' },
+      executado: { label: 'Executado', color: 'var(--green)' },
+      finalizado: { label: 'Executado', color: 'var(--green)' },
+      reagendado: { label: 'Reagendado', color: 'var(--orange)' },
+      cancelado: { label: 'Cancelado', color: 'var(--red)' },
+      problema: { label: 'Problema', color: 'var(--red)' }
+    }[normalizeText(status)] || { label: status, color: 'var(--text3)' };
+    const tipoServico = service.tiposervico || service.tipo_servico || service.tipoServico || service.sc || service.servico || 'Serviço';
+    const os = service.os || service.OS || service.numero_os || '';
+    const tecnico = service.tecnico || service.equipe || service.motorista || '';
+    const produtos = service.produtos_usados || service.produtos || '';
+    const valor = service.valor ? ` · R$ ${sanitize(String(service.valor))}` : '';
+    return `
+      <div style="padding:8px;border-bottom:1px solid var(--border2);font-size:11px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <span>${sanitize(formatDateBr(serviceDate) || 'Sem data')} ${os ? `· OS ${sanitize(os)}` : ''}</span>
+          <span style="color:${statusMeta.color};font-weight:800">${sanitize(statusMeta.label)}</span>
+        </div>
+        <div style="color:var(--text2);margin-top:3px">${sanitize(tipoServico)}${tecnico ? ` · ${sanitize(tecnico)}` : ''}${valor}</div>
+        ${service.observacao_tecnica || service.observacoes ? `<div style="color:var(--text3);margin-top:3px">${sanitize(service.observacao_tecnica || service.observacoes)}</div>` : ''}
+        ${produtos ? `<div style="color:var(--blue2);margin-top:3px;font-family:var(--mono)">Produtos: ${sanitize(produtos)}</div>` : ''}
+        ${service.endereco ? `<div style="color:var(--text3);margin-top:3px">${sanitize(String(service.endereco).substring(0,70))}${String(service.endereco).length > 70 ? '...' : ''}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
 async function loadClientHistory() {
   if (!clienteEditando) return;
   
@@ -14313,43 +15138,15 @@ async function loadClientHistory() {
     });
     
     if (services.length === 0) {
+      clienteHistoricoDraft = [];
+      updateClientCentralSummary();
       contentEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px">Nenhum serviço encontrado</div>';
       return;
     }
     
-    const historyHtml = services.map(service => {
-      const serviceDate = service.date || service.data || service.dt;
-      const data = serviceDate ? new Date(`${serviceDate}T12:00:00`).toLocaleDateString('pt-BR') : '—';
-      const status = service.status || service.st || 'agendado';
-      const statusMeta = {
-        agendado: { icon: '📋', label: 'Agendado', color: 'var(--blue)' },
-        executado: { icon: '✅', label: 'Executado', color: 'var(--green)' },
-        reagendado: { icon: '↻', label: 'Reagendado', color: 'var(--orange)' },
-        cancelado: { icon: '❌', label: 'Cancelado', color: 'var(--red)' }
-      }[status] || { icon: '⏳', label: status, color: 'var(--text3)' };
-      const tipoServico = service.tiposervico || service.tipo_servico || service.tipoServico || service.sc || 'Serviço';
-      const os = service.os || service.OS || '';
-      const espera = Number(service.tempo_espera);
-      const execucao = Number(service.tempo_execucao) || getTempoServicoRealMin(service);
-      const tempos = [
-        Number.isFinite(espera) && espera > 0 ? `espera ${espera}min` : '',
-        Number.isFinite(execucao) && execucao > 0 ? `execução ${execucao}min` : ''
-      ].filter(Boolean).join(' · ');
-      
-      return `
-        <div style="padding:6px 8px;border-bottom:1px solid var(--border2);font-size:11px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span>${statusMeta.icon} ${data}</span>
-            <span style="color:${statusMeta.color}">${statusMeta.label}</span>
-          </div>
-          <div style="color:var(--text2);margin-top:2px">${sanitize(tipoServico)}${os ? ` · OS ${sanitize(os)}` : ''}</div>
-          ${tempos ? `<div style="color:var(--blue2);margin-top:2px;font-family:var(--mono)">${sanitize(tempos)}</div>` : ''}
-          ${service.endereco ? `<div style="color:var(--text3);margin-top:2px">${sanitize(service.endereco.substring(0,40))}${service.endereco.length > 40 ? '...' : ''}</div>` : ''}
-        </div>
-      `;
-    }).join('');
-    
-    contentEl.innerHTML = historyHtml;
+    clienteHistoricoDraft = services;
+    renderClientHistoryTimeline();
+    updateClientCentralSummary();
     
   } catch (error) {
     console.error('Erro carregar histórico:', error);
@@ -14366,6 +15163,11 @@ async function saveClient() {
     const whatsapp = document.getElementById('cli-form-whatsapp').value.trim();
     const email = document.getElementById('cli-form-email').value.trim();
     const contato = document.getElementById('cli-form-contato').value.trim();
+    const nome_fantasia = document.getElementById('cli-form-fantasia').value.trim();
+    const categoria_principal = document.getElementById('cli-form-categoria-principal').value;
+    const tags = parseClientTags(document.getElementById('cli-form-tags').value);
+    const vendedor_responsavel = document.getElementById('cli-form-vendedor').value.trim();
+    const observacao_comercial = document.getElementById('cli-form-obs-comercial').value.trim();
     const cep = document.getElementById('cli-form-cep').value.trim();
     const enderecoCompleto = document.getElementById('cli-form-end').value.trim();
     const categoria = document.getElementById('cli-form-categoria').value;
@@ -14373,6 +15175,17 @@ async function saveClient() {
     const periodicidade = (categoria === 'contrato' || recorrente) ? document.getElementById('cli-form-periodicidade').value : null;
     const tipo = document.getElementById('cli-form-tipo')?.value || 'PF';
     const tipo_local = document.getElementById('cli-form-tipo-local').value;
+    const possui_animais = document.getElementById('cli-form-possui-animais').checked;
+    const animais_quais = parseClientTags(document.getElementById('cli-form-animais-quais').value);
+    const acesso_local = document.getElementById('cli-form-acesso-local').value;
+    const restricao_horario = document.getElementById('cli-form-restricao-horario').value.trim();
+    const melhor_periodo_atendimento = document.getElementById('cli-form-melhor-periodo').value.trim();
+    const tempo_medio_local = document.getElementById('cli-form-tempo-medio').value.trim();
+    const precisa_agendar_portaria = document.getElementById('cli-form-agendar-portaria').checked;
+    const precisa_autorizacao_previa = document.getElementById('cli-form-autorizacao-previa').checked;
+    const tem_chave_portaria = document.getElementById('cli-form-chave-portaria').checked;
+    const risco_especial = document.getElementById('cli-form-risco-especial').checked;
+    const epis_obrigatorios = document.getElementById('cli-form-epis').value.trim();
     const rua = document.getElementById('cli-form-rua').value.trim();
     const numero = document.getElementById('cli-form-numero').value.trim();
     const bairro = document.getElementById('cli-form-bairro').value.trim();
@@ -14397,7 +15210,7 @@ async function saveClient() {
     if (!nome) {
       errorEl.textContent = 'Nome é obrigatório';
       errorEl.style.display = 'block';
-      switchClientTab('identificacao');
+      switchClientTab('dados');
       markClientFieldInvalid('cli-form-nome', 'cli-error-nome');
       return;
     }
@@ -14411,7 +15224,7 @@ async function saveClient() {
     if (cep.replace(/\D/g, '').length !== 8 || !numero || !rua || !bairro || !cidade || uf.length !== 2) {
       errorEl.textContent = 'CEP, número, rua, bairro, cidade e UF são obrigatórios para salvar o cliente';
       errorEl.style.display = 'block';
-      switchClientTab('endereco');
+      switchClientTab('enderecos');
       if (cep.replace(/\D/g, '').length !== 8) markClientFieldInvalid('cli-form-cep');
       if (!numero) markClientFieldInvalid('cli-form-numero');
       if (!rua) markClientFieldInvalid('cli-form-rua');
@@ -14427,12 +15240,21 @@ async function saveClient() {
       if (!canContinue) return;
     }
     
+    const quality = calculateClientQuality({ ...currentClientDraft(), nome, whatsapp, telefone, endereco: enderecoCompleto, categoria_principal, vendedor_responsavel });
     const payload = {
       nome,
+      nome_fantasia,
       telefone,
       whatsapp,
       email,
       contato,
+      categoria_principal,
+      tags,
+      vendedor_responsavel,
+      observacao_comercial,
+      cadastro_quality_score: quality.score,
+      cadastro_quality_flags: quality.missing,
+      is_incomplete: quality.score < 100,
       cep,
       endereco: enderecoCompleto,
       categoria,
@@ -14444,6 +15266,17 @@ async function saveClient() {
       periodicidade,
       tipo,
       tipo_local,
+      possui_animais,
+      animais_quais,
+      acesso_local,
+      restricao_horario,
+      melhor_periodo_atendimento,
+      tempo_medio_local,
+      precisa_agendar_portaria,
+      precisa_autorizacao_previa,
+      tem_chave_portaria,
+      risco_especial,
+      epis_obrigatorios,
       rua,
       numero,
       bairro,
@@ -14458,7 +15291,8 @@ async function saveClient() {
       restricoes_operacionais,
       observacoes_operacionais,
       cpf_cnpj,
-      observacoes
+      observacoes,
+      allow_duplicate: clientAllowDuplicateOnce === true
     };
     
     const geocodeData = document.getElementById('cli-form-end').dataset.geocodeData;
@@ -14494,8 +15328,10 @@ async function saveClient() {
     if (savedCustomer?.id) {
       await saveClientContracts(savedCustomer.id);
       await saveClientAddresses(savedCustomer.id);
+      await saveClientContacts(savedCustomer.id);
     }
     setClientModalSnapshot();
+    clientAllowDuplicateOnce = false;
     closeClientModal({ force: true });
     await renderClientes();
 
@@ -14877,7 +15713,7 @@ async function geocodeClientAddress() {
   const suggestionsDiv = document.getElementById('cli-geocode-suggestions');
   if (cep.length !== 8) {
     toast('Informe e busque o CEP antes de validar o endereço', 'warn');
-    switchClientTab('endereco');
+    switchClientTab('enderecos');
     return;
   }
   await buscarCepCliente();

@@ -35,6 +35,7 @@ function makeState() {
     data_reviews: [{ id: 40, customer_id: 2, tipo_problema: 'possivel_duplicidade' }],
     customer_reminders: [{ id: 'rem-1', customer_id: 2, mensagem: 'x' }],
     customer_addresses: [],
+    customer_contacts: [],
     customer_aliases: [],
     checklists: [
       { id: 50, date: '2026-05-14', motorista: 'Joao', origem: 'admin' },
@@ -363,6 +364,123 @@ test('POST /api/customers cria cliente basico mesmo sem colunas opcionais legada
     assert.equal(payload.cep, undefined);
     assert.equal(payload.origem, undefined);
     assert.ok(state.customers.some(customer => customer.nome === 'Cliente Schema Legado'));
+  });
+});
+
+test('POST /api/customers/quick cria cliente incompleto sem endereco obrigatorio', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/customers/quick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Cliente Rapido',
+        whatsapp: '(11) 98888-7777',
+        categoria_principal: 'Comercial',
+        vendedor_responsavel: 'Ana',
+        origem: 'prospeccao'
+      })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(payload.nome, 'Cliente Rapido');
+    assert.equal(payload.is_incomplete, true);
+    assert.equal(state.customers.some(customer => customer.nome === 'Cliente Rapido'), true);
+    assert.equal(state.customer_addresses.some(address => address.customer_id === payload.id), false);
+  });
+});
+
+test('GET e PUT /api/customers/:id/contacts salvam multiplos contatos', async () => {
+  await withServer(async (baseUrl, state) => {
+    const saved = await fetch(`${baseUrl}/api/customers/1/contacts`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contacts: [
+          { nome: 'Maria Sindica', funcao: 'Síndico', whatsapp: '(11) 99999-0000', recebe_lembrete: true, is_primary: true },
+          { nome: 'Joao Financeiro', funcao: 'Financeiro', email: 'financeiro@example.com', recebe_cobranca: true }
+        ]
+      })
+    });
+    const savedPayload = await saved.json();
+    assert.equal(saved.status, 200);
+    assert.equal(savedPayload.length, 2);
+    assert.equal(savedPayload[0].is_primary, true);
+    assert.equal(state.customer_contacts.filter(contact => contact.customer_id === 1 && contact.ativo !== false).length, 2);
+
+    const listed = await fetch(`${baseUrl}/api/customers/1/contacts`);
+    const listPayload = await listed.json();
+    assert.equal(listed.status, 200);
+    assert.equal(listPayload.length, 2);
+    assert.equal(listPayload.some(contact => contact.recebe_cobranca === true), true);
+  });
+});
+
+test('POST /api/customers bloqueia duplicidade por WhatsApp e CPF/CNPJ', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers[0].whatsapp = '11988887777';
+    state.customers[0].cpf_cnpj = '12345678000199';
+
+    const byWhatsapp = await fetch(`${baseUrl}/api/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Outro Cliente Whatsapp',
+        telefone: '551177776666',
+        whatsapp: '(11) 98888-7777',
+        ...requiredAddress()
+      })
+    });
+    assert.equal(byWhatsapp.status, 409);
+    const byWhatsappPayload = await byWhatsapp.json();
+    assert.equal(byWhatsappPayload.code, 'possible_duplicate');
+
+    const byCpf = await fetch(`${baseUrl}/api/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Outro Cliente Documento',
+        telefone: '551166665555',
+        cpf_cnpj: '12.345.678/0001-99',
+        ...requiredAddress({ numero: '11' })
+      })
+    });
+    assert.equal(byCpf.status, 409);
+    const byCpfPayload = await byCpf.json();
+    assert.equal(byCpfPayload.code, 'possible_duplicate');
+  });
+});
+
+test('PUT /api/customers/:id/contracts aceita campos novos com fallback de schema', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.__missingColumns = {
+      contracts: new Set(['local_atendido', 'data_ultimo_atendimento', 'data_proximo_atendimento', 'numero_proposta', 'vigencia_inicial', 'vigencia_final', 'tecnico_preferencial', 'tempo_estimado', 'observacao_servico'])
+    };
+    const response = await fetch(`${baseUrl}/api/customers/1/contracts`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contracts: [{
+          tipo_servico: 'DS',
+          periodicidade: 'mensal',
+          status_contrato: 'Ativo',
+          local_atendido: 'Principal',
+          data_ultimo_atendimento: '2026-07-01',
+          data_proximo_atendimento: '2026-08-01',
+          numero_proposta: 'PROP-1',
+          vigencia_inicial: '2026-01-01',
+          vigencia_final: '2026-12-31',
+          tecnico_preferencial: 'Joao',
+          tempo_estimado: '90min',
+          observacao_servico: 'Usar gel'
+        }]
+      })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.length, 1);
+    assert.equal(payload[0].tipo_servico, 'DS');
+    assert.equal(payload[0].local_atendido, undefined);
+    assert.equal(state.contracts.filter(contract => contract.customer_id === 1).length, 1);
   });
 });
 

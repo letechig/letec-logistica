@@ -325,6 +325,24 @@ const CUSTOMER_OPTIONAL_WRITE_COLUMNS = new Set([
   'restricoes_operacionais',
   'nivel_urgencia_padrao',
   'observacoes_operacionais',
+  'nome_fantasia',
+  'tags',
+  'categoria_principal',
+  'vendedor_responsavel',
+  'observacao_comercial',
+  'cadastro_quality_score',
+  'cadastro_quality_flags',
+  'possui_animais',
+  'animais_quais',
+  'restricao_horario',
+  'acesso_local',
+  'precisa_agendar_portaria',
+  'precisa_autorizacao_previa',
+  'tem_chave_portaria',
+  'risco_especial',
+  'epis_obrigatorios',
+  'melhor_periodo_atendimento',
+  'tempo_medio_local',
   'cliente_recorrente',
   'periodicidade',
   'data_ultimo_servico',
@@ -456,6 +474,10 @@ const CUSTOMER_ADDRESS_OPTIONAL_WRITE_COLUMNS = new Set([
   'referencia',
   'latitude',
   'longitude',
+  'zona_regiao',
+  'tipo_imovel',
+  'bloco_torre_andar',
+  'google_maps_url',
   'is_primary',
   'ativo',
   'origem',
@@ -478,6 +500,98 @@ async function runCustomerAddressWriteWithSchemaFallback(buildQuery, payload, co
 
     const missingColumn = getMissingSchemaColumn(result.error);
     if (!missingColumn || !CUSTOMER_ADDRESS_OPTIONAL_WRITE_COLUMNS.has(missingColumn) || !(missingColumn in workingPayload)) {
+      return result;
+    }
+
+    removedColumns.push(missingColumn);
+    delete workingPayload[missingColumn];
+  }
+
+  return buildQuery(workingPayload);
+}
+
+const CUSTOMER_CONTACT_OPTIONAL_WRITE_COLUMNS = new Set([
+  'customer_id',
+  'nome',
+  'funcao',
+  'telefone',
+  'whatsapp',
+  'email',
+  'recebe_lembrete',
+  'recebe_cobranca',
+  'recebe_relatorio',
+  'is_primary',
+  'ativo',
+  'created_at',
+  'updated_at'
+]);
+
+async function runCustomerContactWriteWithSchemaFallback(buildQuery, payload, context) {
+  const workingPayload = { ...payload };
+  const removedColumns = [];
+
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const result = await buildQuery(workingPayload);
+    if (!result.error) {
+      if (removedColumns.length) {
+        console.warn(`[${context}] Ignored customer contact column(s) missing from PostgREST schema cache: ${removedColumns.join(', ')}`);
+      }
+      return result;
+    }
+
+    const missingColumn = getMissingSchemaColumn(result.error);
+    if (!missingColumn || !CUSTOMER_CONTACT_OPTIONAL_WRITE_COLUMNS.has(missingColumn) || !(missingColumn in workingPayload)) {
+      return result;
+    }
+
+    removedColumns.push(missingColumn);
+    delete workingPayload[missingColumn];
+  }
+
+  return buildQuery(workingPayload);
+}
+
+const CONTRACT_OPTIONAL_WRITE_COLUMNS = new Set([
+  'customer_id',
+  'numero_contrato',
+  'numero_proposta',
+  'data_inicio',
+  'data_vencimento',
+  'vigencia_inicial',
+  'vigencia_final',
+  'periodicidade',
+  'tipo_servico',
+  'local_atendido',
+  'customer_address_id',
+  'valor',
+  'status_contrato',
+  'data_ultimo_atendimento',
+  'data_proximo_atendimento',
+  'proxima_execucao_sugerida',
+  'tecnico_preferencial',
+  'tempo_estimado',
+  'observacao_servico',
+  'observacoes',
+  'origem',
+  'created_at',
+  'updated_at'
+]);
+
+async function runContractWriteWithSchemaFallback(buildQuery, payload, context) {
+  const workingPayload = { ...payload };
+  const removedColumns = [];
+
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const result = await buildQuery(workingPayload);
+    if (!result.error) {
+      if (removedColumns.length) {
+        console.warn(`[${context}] Ignored contract column(s) missing from PostgREST schema cache: ${removedColumns.join(', ')}`);
+      }
+      return result;
+    }
+
+    const missingColumn = getMissingSchemaColumn(result.error);
+    if (!missingColumn || !CONTRACT_OPTIONAL_WRITE_COLUMNS.has(missingColumn) || !(missingColumn in workingPayload)) {
       return result;
     }
 
@@ -2360,6 +2474,10 @@ function compactCustomerAddress(address = {}) {
     uf: address.uf || null,
     complemento: address.complemento || null,
     referencia: address.referencia || null,
+    zona_regiao: address.zona_regiao || null,
+    tipo_imovel: address.tipo_imovel || null,
+    bloco_torre_andar: address.bloco_torre_andar || null,
+    google_maps_url: address.google_maps_url || null,
     latitude: address.latitude || null,
     longitude: address.longitude || null,
     is_primary: address.is_primary === true,
@@ -2395,6 +2513,10 @@ function customerAddressPayload(customerId, input = {}, options = {}) {
     uf: ufNormalizada,
     complemento: cleanNullableText(input.complemento, 200),
     referencia: cleanNullableText(input.referencia, 300),
+    zona_regiao: cleanNullableText(input.zona_regiao || input.zona, 120),
+    tipo_imovel: cleanNullableText(input.tipo_imovel, 120),
+    bloco_torre_andar: cleanNullableText(input.bloco_torre_andar, 160),
+    google_maps_url: cleanNullableText(input.google_maps_url, 500),
     latitude: cleanNumber(input.latitude),
     longitude: cleanNumber(input.longitude),
     is_primary: input.is_primary === true || String(input.is_primary) === 'true' || options.is_primary === true,
@@ -5253,6 +5375,29 @@ app.post('/api/customers', strictLimiter, async (req, res) => {
   }
 });
 
+app.post('/api/customers/quick', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const result = await getClientDomainService().createQuickClient(db, req.body || {});
+    if (result.error) {
+      if (result.error.code === 'possible_duplicate') return res.status(result.status || 409).json(result.error);
+      return res.status(result.status || 500).json({
+        code: result.error.code || 'customer_quick_create_failed',
+        error: result.error.error || 'Falha ao criar cliente rapido',
+        details: publicDbErrorDetails(result.error)
+      });
+    }
+    return res.status(result.status || 201).json(result.data);
+  } catch (error) {
+    console.error('[POST /api/customers/quick] Error:', error.message);
+    res.status(500).json({
+      code: 'customer_quick_create_failed',
+      error: 'Falha ao criar cliente rapido',
+      details: publicDbErrorDetails(error)
+    });
+  }
+});
+
 app.put('/api/customers/:id', strictLimiter, async (req, res) => {
   try {
     const db = getSupabaseClient();
@@ -6140,6 +6285,103 @@ app.get('/api/customers/:id/addresses', async (req, res) => {
   }
 });
 
+function compactCustomerContact(row = {}) {
+  return {
+    id: row.id,
+    customer_id: row.customer_id,
+    nome: row.nome || '',
+    funcao: row.funcao || '',
+    telefone: row.telefone || '',
+    whatsapp: row.whatsapp || '',
+    email: row.email || '',
+    recebe_lembrete: row.recebe_lembrete === true,
+    recebe_cobranca: row.recebe_cobranca === true,
+    recebe_relatorio: row.recebe_relatorio === true,
+    is_primary: row.is_primary === true,
+    ativo: row.ativo !== false,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function normalizeCustomerContactPayload(customerId, item = {}, forcePrimary = false) {
+  return {
+    customer_id: customerId,
+    nome: String(item.nome || item.name || '').trim(),
+    funcao: String(item.funcao || item.role || '').trim() || null,
+    telefone: normalizePhone(item.telefone || item.phone || ''),
+    whatsapp: normalizePhone(item.whatsapp || ''),
+    email: normalizeEmail(item.email || ''),
+    recebe_lembrete: item.recebe_lembrete === true || String(item.recebe_lembrete) === 'true',
+    recebe_cobranca: item.recebe_cobranca === true || String(item.recebe_cobranca) === 'true',
+    recebe_relatorio: item.recebe_relatorio === true || String(item.recebe_relatorio) === 'true',
+    is_primary: forcePrimary || item.is_primary === true || String(item.is_primary) === 'true' || item.contato_principal === true,
+    ativo: item.ativo !== false,
+    updated_at: new Date().toISOString()
+  };
+}
+
+app.get('/api/customers/:id/contacts', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    if (!customerId) return res.status(400).json({ error: 'Cliente invalido', code: 'customer_invalid' });
+    const { data, error } = await db
+      .from('customer_contacts')
+      .select('*')
+      .eq('customer_id', customerId)
+      .eq('ativo', true)
+      .order('is_primary', { ascending: false });
+    if (error) {
+      if (isMissingRelationError(error)) return res.json([]);
+      throw error;
+    }
+    res.json((data || []).map(compactCustomerContact));
+  } catch (error) {
+    console.error('[GET /api/customers/:id/contacts] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar contatos do cliente', details: publicDbErrorDetails(error) });
+  }
+});
+
+app.put('/api/customers/:id/contacts', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    if (!customerId) return res.status(400).json({ error: 'Cliente invalido', code: 'customer_invalid' });
+    const items = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
+    const cleaned = items
+      .map((item, index) => normalizeCustomerContactPayload(customerId, item, index === 0 && !items.some(candidate => candidate?.is_primary === true || candidate?.contato_principal === true)))
+      .filter(item => item.nome || item.telefone || item.whatsapp || item.email);
+
+    const deactivated = await runCustomerContactWriteWithSchemaFallback(
+      payload => db.from('customer_contacts').update(payload).eq('customer_id', customerId),
+      { ativo: false, updated_at: new Date().toISOString() },
+      'PUT /api/customers/:id/contacts deactivate'
+    );
+    if (deactivated.error) {
+      if (isMissingRelationError(deactivated.error)) {
+        return res.status(503).json({ error: 'Tabela customer_contacts ainda nao existe. Rode a migration da Central do Cliente.', migration_required: true });
+      }
+      throw deactivated.error;
+    }
+
+    const saved = [];
+    for (const item of cleaned) {
+      const { data, error } = await runCustomerContactWriteWithSchemaFallback(
+        payload => db.from('customer_contacts').insert([{ ...payload, created_at: new Date().toISOString() }]).select(),
+        item,
+        'PUT /api/customers/:id/contacts insert'
+      );
+      if (error) throw error;
+      saved.push(...(data || []));
+    }
+    res.json(saved.map(compactCustomerContact));
+  } catch (error) {
+    console.error('[PUT /api/customers/:id/contacts] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao salvar contatos do cliente', details: publicDbErrorDetails(error) });
+  }
+});
+
 app.put('/api/customers/:id/addresses', strictLimiter, async (req, res) => {
   try {
     const db = getSupabaseClient();
@@ -6256,8 +6498,23 @@ app.put('/api/customers/:id/contracts', strictLimiter, async (req, res) => {
       .map(item => ({
         customer_id: customerId,
         tipo_servico: String(item.tipo_servico || '').trim(),
+        local_atendido: String(item.local_atendido || item.local || '').trim() || null,
+        customer_address_id: item.customer_address_id || null,
         periodicidade: String(item.periodicidade || '').trim() || null,
         status_contrato: String(item.status_contrato || 'Ativo').trim(),
+        data_ultimo_atendimento: item.data_ultimo_atendimento || item.data_ultimo_servico || null,
+        data_proximo_atendimento: item.data_proximo_atendimento || item.proxima_execucao_sugerida || null,
+        valor: item.valor === '' || item.valor === undefined || item.valor === null ? null : Number(item.valor),
+        numero_contrato: String(item.numero_contrato || item.numero_proposta || '').trim() || null,
+        numero_proposta: String(item.numero_proposta || '').trim() || null,
+        data_inicio: item.data_inicio || item.vigencia_inicial || null,
+        data_vencimento: item.data_vencimento || item.vigencia_final || null,
+        vigencia_inicial: item.vigencia_inicial || item.data_inicio || null,
+        vigencia_final: item.vigencia_final || item.data_vencimento || null,
+        tecnico_preferencial: String(item.tecnico_preferencial || '').trim() || null,
+        tempo_estimado: String(item.tempo_estimado || '').trim() || null,
+        observacao_servico: String(item.observacao_servico || '').trim() || null,
+        proxima_execucao_sugerida: item.proxima_execucao_sugerida || item.data_proximo_atendimento || null,
         observacoes: String(item.observacoes || '').trim() || null,
         updated_at: new Date().toISOString()
       }))
@@ -6268,9 +6525,17 @@ app.put('/api/customers/:id/contracts', strictLimiter, async (req, res) => {
 
     if (!cleaned.length) return res.json([]);
 
-    const { data, error } = await db.from('contracts').insert(cleaned).select();
-    if (error) throw error;
-    res.json(data || []);
+    const saved = [];
+    for (const item of cleaned) {
+      const { data, error } = await runContractWriteWithSchemaFallback(
+        payload => db.from('contracts').insert([{ ...payload, created_at: new Date().toISOString() }]).select(),
+        item,
+        'PUT /api/customers/:id/contracts insert'
+      );
+      if (error) throw error;
+      saved.push(...(data || []));
+    }
+    res.json(saved);
   } catch (error) {
     console.error('[PUT /api/customers/:id/contracts] Error:', error.message);
     res.status(500).json({ error: 'Falha ao salvar serviços contratados' });
