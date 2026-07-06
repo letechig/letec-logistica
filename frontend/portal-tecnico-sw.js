@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portal-tecnico-v2';
+const CACHE_NAME = 'portal-tecnico-v3';
 const APP_SHELL = [
   '/portal-tecnico',
   '/portal-tecnico.html',

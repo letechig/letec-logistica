@@ -897,9 +897,11 @@
         <div class="section-sub">Recados, historico, equipe e diagnostico.</div>
       </div>
       <div id="team-info" class="portal-panel"></div>
+      <div id="sync-queue-panel" class="portal-panel"></div>
       <div class="help-grid">
         <button class="secondary" type="button" onclick="showSection('recados')">Recados do dia</button>
         <button class="secondary" type="button" onclick="showSection('historico')">Historico do dia</button>
+        <button class="secondary" type="button" onclick="syncPortalQueueNow()">Sincronizar agora</button>
         <button class="secondary" type="button" onclick="openChangePinModal()">Trocar meu PIN</button>
         <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
         <button class="secondary" type="button" onclick="logoutTechnician()">Sair do portal</button>
@@ -1167,9 +1169,12 @@
       const pill = document.getElementById('sync-pill');
       const text = document.getElementById('sync-text');
       const offline = !navigator.onLine;
-      const pending = loadQueue().length;
-      pill.classList.toggle('offline', offline);
-      text.textContent = `${offline ? 'Offline' : 'Online'}${pending ? ` - ${pending} pendente(s)` : ''}`;
+      const queue = loadQueue();
+      const pending = queue.length;
+      const blocked = queue.filter(item => item?.blocked).length;
+      pill.classList.toggle('offline', offline || blocked > 0);
+      text.textContent = `${offline ? 'Offline' : blocked ? 'Atenção' : 'Online'}${pending ? ` - ${pending} pendente(s)` : ''}${blocked ? `, ${blocked} travada(s)` : ''}`;
+      renderPortalQueuePanel();
     }
 
     function formatDateLabel(dateStr) {
@@ -1194,9 +1199,44 @@
       localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
     }
 
+    function queueItemTitle(item = {}) {
+      if (item.type === 'service-update') return `Servico #${item.id || '?'}`;
+      if (item.type === 'checklist-insert') return 'Checklist';
+      if (item.type === 'event-insert') return 'Evento';
+      if (item.type === 'message-read') return `Recado #${item.id || '?'}`;
+      return item.type || 'Pendencia';
+    }
+
+    function queueErrorMessage(error) {
+      if (!error) return '';
+      return error.payload?.error || error.message || String(error);
+    }
+
+    function isPermanentQueueError(error) {
+      return [400, 401, 403, 404, 409, 422].includes(Number(error?.status || 0));
+    }
+
     function addQueue(item) {
       const queue = loadQueue();
-      queue.push({ ...item, queued_at: nowIso() });
+      if (item?.type === 'service-update') {
+        const existing = queue.find(q => q?.type === 'service-update' && String(q.id) === String(item.id));
+        if (existing) {
+          existing.payload = { ...(existing.payload || {}), ...(item.payload || {}) };
+          existing.queued_at = existing.queued_at || nowIso();
+          existing.updated_at = nowIso();
+          existing.attempts = 0;
+          existing.blocked = !!item.blocked;
+          delete existing.last_error;
+          delete existing.failed_at;
+          if (item.last_error) existing.last_error = item.last_error;
+          if (item.failed_at) existing.failed_at = item.failed_at;
+          saveQueue(queue);
+          setSyncState();
+          addHistory('Acao do servico atualizada na fila local para sincronizar.');
+          return;
+        }
+      }
+      queue.push({ ...item, queued_at: nowIso(), attempts: item.attempts || 0, blocked: !!item.blocked });
       saveQueue(queue);
       setSyncState();
       addHistory(item.type === 'checklist-insert' ? 'Checklist salvo localmente para sincronizar.' : 'Acao do servico salva localmente para sincronizar.');
@@ -1278,7 +1318,7 @@
         `Recados carregados: ${state.messages.length}`,
         '',
         'Fila:',
-        ...(queue.length ? queue.map((item, idx) => `- #${idx + 1} ${item.type || 'acao'} ${item.queued_at || ''}`) : ['- vazia'])
+        ...(queue.length ? queue.map((item, idx) => `- #${idx + 1} ${queueItemTitle(item)} ${item.blocked ? 'travada' : 'pendente'} ${item.queued_at || ''}${item.last_error ? ` - ${item.last_error}` : ''}`) : ['- vazia'])
       ];
       return lines.join('\n');
     }
@@ -1534,6 +1574,10 @@
       if (!queue.length) return;
       const remaining = [];
       for (const item of queue) {
+        if (item?.blocked) {
+          remaining.push(item);
+          continue;
+        }
         try {
           if (item.type === 'service-update') {
             await updateServiceViaBackend(item.id, item.payload);
@@ -1545,7 +1589,17 @@
             await markMessageReadViaBackend(item.id, item.payload);
           }
         } catch(e) {
-          remaining.push(item);
+          const nextItem = {
+            ...item,
+            attempts: Number(item.attempts || 0) + 1,
+            last_error: queueErrorMessage(e) || 'Falha ao sincronizar',
+            failed_at: nowIso(),
+            blocked: isPermanentQueueError(e) || Number(item.attempts || 0) + 1 >= 5
+          };
+          remaining.push(nextItem);
+          if (e.status === 401 || e.status === 403) {
+            toast('Sessao do portal expirada. Entre novamente para sincronizar pendencias.', 'err');
+          }
         }
       }
       saveQueue(remaining);
@@ -1554,6 +1608,48 @@
         toast('Pendencias sincronizadas.', 'ok');
         await loadData();
       }
+    }
+
+    async function syncPortalQueueNow() {
+      if (!navigator.onLine) {
+        toast('Sem internet neste computador. Tente novamente ao reconectar.', 'warn');
+        setSyncState();
+        return;
+      }
+      const queue = loadQueue();
+      if (!queue.length) {
+        toast('Nao ha pendencias para sincronizar.', 'ok');
+        return;
+      }
+      toast('Sincronizando pendencias...', 'warn');
+      await processQueue();
+      renderPortalQueuePanel();
+    }
+
+    function discardPortalQueueItem(index) {
+      const queue = loadQueue();
+      const item = queue[index];
+      if (!item) return;
+      const label = queueItemTitle(item);
+      if (!confirm(`Remover "${label}" da fila local? Essa acao nao sera enviada ao sistema.`)) return;
+      queue.splice(index, 1);
+      saveQueue(queue);
+      setSyncState();
+      addHistory(`Pendencia removida da fila local: ${label}.`);
+      toast('Pendencia removida deste aparelho.', 'ok');
+    }
+
+    function unlockPortalQueueItem(index) {
+      const queue = loadQueue();
+      const item = queue[index];
+      if (!item) return;
+      item.blocked = false;
+      item.attempts = 0;
+      delete item.last_error;
+      delete item.failed_at;
+      saveQueue(queue);
+      setSyncState();
+      syncPortalQueueNow();
     }
 
     async function getGps() {
@@ -2031,8 +2127,22 @@
           await loadData();
           return false;
         }
-        addQueue({ type:'service-update', id, payload });
-        toast('Sem sincronizar agora. Foi salvo neste celular.', 'warn');
+        const permanent = isPermanentQueueError(e);
+        addQueue({
+          type:'service-update',
+          id,
+          payload,
+          blocked: permanent,
+          attempts: permanent ? 1 : 0,
+          last_error: permanent ? queueErrorMessage(e) : '',
+          failed_at: permanent ? nowIso() : ''
+        });
+        toast(
+          permanent
+            ? 'A acao ficou travada por erro de sincronizacao. Veja a aba Mais.'
+            : 'Sem sincronizar agora. Foi salvo neste celular.',
+          permanent ? 'err' : 'warn'
+        );
         return true;
       }
     }
@@ -2173,6 +2283,7 @@
       document.getElementById(`section-${section}`).classList.add('active');
       document.querySelectorAll('.quick-nav button').forEach(btn => btn.classList.toggle('active', btn.id === `tab-${section}`));
       document.querySelectorAll('.bottom-nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.bottom === section));
+      if (section === 'mais') renderPortalQueuePanel();
       document.querySelector('.app-scroll')?.scrollTo({ top:0, behavior:'auto' });
     }
 
@@ -2212,6 +2323,45 @@
         <div class="meta">Equipe de hoje: ${escapeHtml(team)}</div>
         <div class="meta">Veiculo: ${escapeHtml(vehicle)}</div>
         <div class="meta">Data: ${escapeHtml(formatDateLabel(portal.data))}</div>
+      `;
+    }
+
+    function renderPortalQueuePanel() {
+      const box = document.getElementById('sync-queue-panel');
+      if (!box) return;
+      const queue = loadQueue();
+      if (!queue.length) {
+        box.innerHTML = `
+          <div class="step-title">Sincronizacao</div>
+          <div class="meta">Fila local vazia. Este aparelho nao tem pendencias.</div>
+        `;
+        return;
+      }
+      const rows = queue.map((item, index) => {
+        const blocked = !!item.blocked;
+        const status = blocked ? 'travada' : 'pendente';
+        const error = item.last_error || (blocked ? 'Erro permanente sem detalhe salvo.' : '');
+        return `
+          <div class="history-card" style="border-left:5px solid ${blocked ? 'var(--danger)' : 'var(--warning)'}">
+            <strong>${escapeHtml(queueItemTitle(item))}</strong>
+            <div class="meta">Status: ${escapeHtml(status)}${item.attempts ? ` - tentativa ${escapeHtml(item.attempts)}` : ''}</div>
+            <div class="meta">Horario: ${escapeHtml(item.queued_at || item.updated_at || item.failed_at || 'sem registro')}</div>
+            ${error ? `<div class="meta">Erro: ${escapeHtml(error)}</div>` : ''}
+            <div class="service-actions" style="margin-top:8px">
+              ${blocked ? `<button class="secondary" type="button" onclick="unlockPortalQueueItem(${index})">Tentar novamente</button>` : ''}
+              <button class="danger-soft" type="button" onclick="discardPortalQueueItem(${index})">Remover local</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      box.innerHTML = `
+        <div class="step-title">Sincronizacao</div>
+        <div class="meta">${queue.length} pendencia(s) neste aparelho. Se estiver travada, copie o diagnostico antes de remover.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+          <button class="secondary" type="button" onclick="syncPortalQueueNow()">Sincronizar agora</button>
+          <button class="secondary" type="button" onclick="copyPortalDiagnostics()">Copiar diagnostico</button>
+        </div>
+        <div class="history-list">${rows}</div>
       `;
     }
 
