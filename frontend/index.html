@@ -2096,11 +2096,28 @@ td.bold { color: var(--text); font-weight: 600; }
 .pill-btn { min-height:30px; padding:5px 12px; border-radius:999px; border:1px solid var(--border2); background:var(--bg2); color:var(--text2); font-size:12px; font-weight:700; cursor:pointer; transition:background .15s, border-color .15s, color .15s, box-shadow .15s; white-space:nowrap; }
 .pill-btn:hover { border-color:rgba(79,142,247,.45); color:var(--blue2); background:var(--blue-bg); }
 .pill-btn.active { background:var(--blue); border-color:var(--blue); color:#fff; box-shadow:0 8px 18px rgba(37,99,235,.14); }
-.inventory-category-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px; margin-bottom:14px; }
-.inventory-cat-card { border:1px solid var(--border2); background:var(--bg2); border-radius:var(--r2); padding:10px 12px; text-align:left; color:inherit; cursor:pointer; transition:border-color .15s, background .15s; }
-.inventory-cat-card:hover { border-color:rgba(79,142,247,.35); background:var(--card); }
-.inventory-cat-card-title { font-weight:800; font-size:12px; color:var(--text); margin-bottom:4px; }
-.inventory-cat-card-meta { font-size:11px; color:var(--text3); line-height:1.45; }
+.inventory-shell { display:flex; flex-direction:column; gap:14px; }
+.inventory-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.inventory-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.inventory-kpis { display:grid; grid-template-columns:repeat(5,minmax(120px,1fr)); gap:8px; margin-bottom:2px; }
+.inventory-metric { border:1px solid var(--border); background:var(--card); border-radius:var(--r); padding:10px 12px; min-height:68px; }
+.inventory-metric-label { font-size:10px; font-family:var(--mono); text-transform:uppercase; letter-spacing:1px; color:var(--text3); margin-bottom:5px; }
+.inventory-metric-value { font-size:22px; font-weight:850; color:var(--text); line-height:1; }
+.inventory-metric-note { margin-top:5px; font-size:11px; color:var(--text3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.inventory-tabs { display:flex; gap:6px; padding:4px; border:1px solid var(--border); border-radius:var(--r); background:var(--bg2); overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.inventory-tab-btn { min-height:34px; border:0; border-radius:8px; padding:0 14px; background:transparent; color:var(--text2); font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; }
+.inventory-tab-btn.active { background:var(--card); color:var(--blue2); box-shadow:0 1px 4px rgba(15,23,42,.08); }
+.inventory-tab-panel { display:none; flex-direction:column; gap:14px; }
+.inventory-tab-panel.active { display:flex; }
+.inventory-panel { border:1px solid var(--border); border-radius:var(--r); background:var(--card); padding:14px; }
+.inventory-panel-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.inventory-category-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.inventory-cat-card { border:1px solid var(--border2); background:var(--bg2); border-radius:999px; padding:6px 10px; text-align:left; color:var(--text2); cursor:pointer; transition:border-color .15s, background .15s, color .15s; font-size:11px; }
+.inventory-cat-card:hover { border-color:rgba(79,142,247,.35); background:var(--blue-bg); color:var(--blue2); }
+.inventory-cat-card-title { font-weight:800; font-size:11px; color:inherit; display:inline; margin-right:5px; }
+.inventory-cat-card-meta { font-size:11px; color:inherit; display:inline; opacity:.72; }
+.inventory-row-actions { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+.inventory-row-actions .btn { min-height:26px; padding:3px 8px; }
 .inventory-pagination { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:12px; color:var(--text3); font-size:12px; }
 .inventory-pagination-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .inventory-movements-table-wrap { max-height:520px; overflow:auto; }
@@ -2872,7 +2889,17 @@ textarea { max-width:100%; }
   .filter-bar .fsel { min-width: 0; flex: 1; }
   .pill-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
   .pill-bar .pill-btn { flex: 0 0 auto; }
-  .inventory-category-summary { grid-template-columns: 1fr; }
+  .inventory-head { gap:10px; }
+  .inventory-actions { width:100%; justify-content:stretch; }
+  .inventory-actions .btn { flex:1 1 calc(50% - 6px); }
+  .inventory-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .inventory-metric { min-height:62px; padding:9px 10px; }
+  .inventory-metric-value { font-size:20px; }
+  .inventory-tabs { margin-left:-2px; margin-right:-2px; }
+  .inventory-tab-btn { flex:1 0 auto; }
+  .inventory-panel { padding:12px; }
+  .inventory-category-summary { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+  .inventory-cat-card { flex:0 0 auto; }
   .inventory-movements-table-wrap { max-height:420px; }
   /* Roteiro cards */
   .rot-card { padding: 10px; }
@@ -4379,77 +4406,88 @@ async function carregarVeiculos(){
 
     <!-- ═══ ESTOQUE ═══ -->
     <div id="page-estoque" class="page">
-      <div class="flex ic sb mb4" style="gap:12px;flex-wrap:wrap">
-        <div>
-          <div class="section-title">Controle de Estoque</div>
-          <div class="section-sub">Produtos, entradas e saídas por veículo</div>
-        </div>
-        <div class="flex gap2" style="flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" onclick="openInventoryMovement('saida')">Registrar saída</button>
-          <button class="btn btn-green btn-sm" onclick="openInventoryMovement('entrada')">Nova entrada</button>
-          <button class="btn btn-ghost btn-sm" onclick="openInventoryMovement('ajuste')">Ajustar estoque</button>
-          <button class="btn btn-ghost btn-sm" onclick="openInventoryProduct()">Novo produto</button>
-        </div>
-      </div>
-
-      <div id="inventory-schema-alert" style="display:none;margin-bottom:16px"></div>
-      <div class="grid-kpi mb4" id="inventory-kpis"></div>
-
-      <div class="card mb4" style="padding:16px">
-        <div class="flex ic sb mb3" style="gap:10px;flex-wrap:wrap">
+      <div class="inventory-shell">
+        <div class="inventory-head">
           <div>
-            <div class="card-label">Produtos em estoque</div>
-            <div class="section-sub" style="font-size:12px">Saldo calculado por entradas, saídas e ajustes.</div>
+            <div class="section-title">Controle de Estoque</div>
+            <div class="section-sub">Saldos, alertas e movimentações operacionais.</div>
           </div>
-          <input class="finput" id="inventory-product-search" placeholder="Buscar produto..." oninput="handleInventoryProductSearch()" style="max-width:280px">
-        </div>
-        <div id="inventory-category-summary" class="inventory-category-summary"></div>
-        <div class="pill-bar" id="inventory-product-filters">
-          <button type="button" class="pill-btn active" data-filter="todos" onclick="setInventoryProductFilter('todos')">Todos</button>
-          <button type="button" class="pill-btn" data-filter="desratizacao" onclick="setInventoryProductFilter('desratizacao')">Desratização</button>
-          <button type="button" class="pill-btn" data-filter="desentupimento" onclick="setInventoryProductFilter('desentupimento')">Desentupimento</button>
-          <button type="button" class="pill-btn" data-filter="desinsetizacao" onclick="setInventoryProductFilter('desinsetizacao')">Desinsetização</button>
-          <button type="button" class="pill-btn" data-filter="descupinizacao" onclick="setInventoryProductFilter('descupinizacao')">Descupinização</button>
-          <button type="button" class="pill-btn" data-filter="caixa_agua" onclick="setInventoryProductFilter('caixa_agua')">Caixa d'Água</button>
-          <button type="button" class="pill-btn" data-filter="outros" onclick="setInventoryProductFilter('outros')">Outros</button>
-          <button type="button" class="pill-btn" data-filter="baixo_critico" onclick="setInventoryProductFilter('baixo_critico')">Baixo / Crítico</button>
-          <button type="button" class="pill-btn" data-filter="esgotados" onclick="setInventoryProductFilter('esgotados')">Esgotados</button>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Produto</th><th>Categoria</th><th>Un.</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Ajustes</th><th>Atual</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody id="inventory-products-tbody"></tbody>
-          </table>
-        </div>
-        <div id="inventory-products-pagination" class="inventory-pagination"></div>
-      </div>
-
-      <div class="card" style="padding:16px">
-        <div class="flex ic sb mb3" style="gap:10px;flex-wrap:wrap">
-          <div>
-            <div class="card-label">Histórico de movimentações</div>
-            <div class="section-sub" style="font-size:12px">Registro operacional por data, produto e veículo.</div>
+          <div class="inventory-actions">
+            <button class="btn btn-primary btn-sm" onclick="openInventoryMovement('saida')">Registrar saída</button>
+            <button class="btn btn-green btn-sm" onclick="openInventoryMovement('entrada')">Nova entrada</button>
+            <button class="btn btn-ghost btn-sm" onclick="openInventoryMovement('ajuste')">Ajustar</button>
+            <button class="btn btn-ghost btn-sm" onclick="openInventoryProduct()">Novo produto</button>
           </div>
         </div>
-        <div class="filter-bar">
-          <input type="date" class="fsel" id="inventory-filter-date" onchange="handleInventoryMovementFilterChange()">
-          <select class="fsel" id="inventory-filter-product" onchange="handleInventoryMovementFilterChange()"><option value="">Todos produtos</option></select>
-          <select class="fsel" id="inventory-filter-vehicle" onchange="handleInventoryMovementFilterChange()"><option value="">Todos veículos</option></select>
-          <select class="fsel" id="inventory-filter-type" onchange="handleInventoryMovementFilterChange()">
-            <option value="">Todos tipos</option>
-            <option value="entrada">Entradas</option>
-            <option value="saida">Saídas</option>
-            <option value="ajuste">Ajustes</option>
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="clearInventoryFilters()">Limpar</button>
+
+        <div id="inventory-schema-alert" style="display:none"></div>
+        <div class="inventory-kpis" id="inventory-kpis"></div>
+
+        <div class="inventory-tabs" role="tablist" aria-label="Estoque">
+          <button type="button" class="inventory-tab-btn active" id="inventory-tab-produtos" onclick="setInventoryTab('produtos')" role="tab" aria-selected="true" aria-controls="inventory-panel-produtos">Produtos</button>
+          <button type="button" class="inventory-tab-btn" id="inventory-tab-historico" onclick="setInventoryTab('historico')" role="tab" aria-selected="false" aria-controls="inventory-panel-historico">Histórico</button>
         </div>
-        <div class="tbl-wrap inventory-movements-table-wrap">
-          <table>
-            <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Veículo</th><th>Motivo/OS</th><th>Operador</th><th>Obs.</th></tr></thead>
-            <tbody id="inventory-movements-tbody"></tbody>
-          </table>
+
+        <div class="inventory-tab-panel active" id="inventory-panel-produtos" role="tabpanel" aria-labelledby="inventory-tab-produtos">
+          <div class="inventory-panel">
+            <div class="inventory-panel-head">
+              <div>
+                <div class="card-label">Produtos em estoque</div>
+                <div class="section-sub" style="font-size:12px">Saldo calculado por entradas, saídas e ajustes.</div>
+              </div>
+              <input class="finput" id="inventory-product-search" placeholder="Buscar produto..." oninput="handleInventoryProductSearch()" style="max-width:280px">
+            </div>
+            <div id="inventory-category-summary" class="inventory-category-summary"></div>
+            <div class="pill-bar" id="inventory-product-filters">
+              <button type="button" class="pill-btn active" data-filter="todos" onclick="setInventoryProductFilter('todos')">Todos</button>
+              <button type="button" class="pill-btn" data-filter="desratizacao" onclick="setInventoryProductFilter('desratizacao')">Desratização</button>
+              <button type="button" class="pill-btn" data-filter="desentupimento" onclick="setInventoryProductFilter('desentupimento')">Desentupimento</button>
+              <button type="button" class="pill-btn" data-filter="desinsetizacao" onclick="setInventoryProductFilter('desinsetizacao')">Desinsetização</button>
+              <button type="button" class="pill-btn" data-filter="descupinizacao" onclick="setInventoryProductFilter('descupinizacao')">Descupinização</button>
+              <button type="button" class="pill-btn" data-filter="caixa_agua" onclick="setInventoryProductFilter('caixa_agua')">Caixa d'Água</button>
+              <button type="button" class="pill-btn" data-filter="outros" onclick="setInventoryProductFilter('outros')">Outros</button>
+              <button type="button" class="pill-btn" data-filter="baixo_critico" onclick="setInventoryProductFilter('baixo_critico')">Baixo / Crítico</button>
+              <button type="button" class="pill-btn" data-filter="esgotados" onclick="setInventoryProductFilter('esgotados')">Esgotados</button>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Produto</th><th>Categoria</th><th>Un.</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Ajustes</th><th>Atual</th><th>Status</th><th>Ações</th></tr></thead>
+                <tbody id="inventory-products-tbody"></tbody>
+              </table>
+            </div>
+            <div id="inventory-products-pagination" class="inventory-pagination"></div>
+          </div>
         </div>
-        <div id="inventory-movements-pagination" class="inventory-pagination"></div>
+
+        <div class="inventory-tab-panel" id="inventory-panel-historico" role="tabpanel" aria-labelledby="inventory-tab-historico">
+          <div class="inventory-panel">
+            <div class="inventory-panel-head">
+              <div>
+                <div class="card-label">Histórico de movimentações</div>
+                <div class="section-sub" style="font-size:12px">Registro operacional por data, produto e veículo.</div>
+              </div>
+            </div>
+            <div class="filter-bar">
+              <input type="date" class="fsel" id="inventory-filter-date" onchange="handleInventoryMovementFilterChange()">
+              <select class="fsel" id="inventory-filter-product" onchange="handleInventoryMovementFilterChange()"><option value="">Todos produtos</option></select>
+              <select class="fsel" id="inventory-filter-vehicle" onchange="handleInventoryMovementFilterChange()"><option value="">Todos veículos</option></select>
+              <select class="fsel" id="inventory-filter-type" onchange="handleInventoryMovementFilterChange()">
+                <option value="">Todos tipos</option>
+                <option value="entrada">Entradas</option>
+                <option value="saida">Saídas</option>
+                <option value="ajuste">Ajustes</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="clearInventoryFilters()">Limpar</button>
+            </div>
+            <div class="tbl-wrap inventory-movements-table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Veículo</th><th>Motivo/OS</th><th>Operador</th><th>Obs.</th></tr></thead>
+                <tbody id="inventory-movements-tbody"></tbody>
+              </table>
+            </div>
+            <div id="inventory-movements-pagination" class="inventory-pagination"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -8047,6 +8085,7 @@ let inventoryEditingProductId = null;
 let inventoryProductFilter = 'todos';
 let inventoryProductPage = 1;
 let inventoryMovementPage = 1;
+let inventoryActiveTab = 'produtos';
 let fleetVehicles = [];
 let fleetAlerts = [];
 let fleetSelectedVehicle = null;
@@ -20241,6 +20280,18 @@ function renderInventorySchemaAlert() {
   </div>`;
 }
 
+function setInventoryTab(tab) {
+  inventoryActiveTab = tab === 'historico' ? 'historico' : 'produtos';
+  document.querySelectorAll('#page-estoque .inventory-tab-btn').forEach(btn => {
+    const isActive = btn.id === `inventory-tab-${inventoryActiveTab}`;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+  document.querySelectorAll('#page-estoque .inventory-tab-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === `inventory-panel-${inventoryActiveTab}`);
+  });
+}
+
 function setInventoryProductFilter(filter) {
   inventoryProductFilter = filter || 'todos';
   inventoryProductPage = 1;
@@ -20274,12 +20325,12 @@ function renderInventoryCategorySummary(productRows) {
   if (!el) return;
   el.innerHTML = INVENTORY_CATEGORIES.map(cat => {
     const rows = productRows.filter(row => inventoryProductCategory(row.product) === cat.key);
-    const ok = rows.filter(row => row.status.key === 'ok').length;
     const lowCritical = rows.filter(row => ['baixo','critico'].includes(row.status.key)).length;
     const empty = rows.filter(row => row.status.key === 'esgotado').length;
+    const risk = lowCritical + empty;
     return `<button type="button" class="inventory-cat-card" onclick="setInventoryProductFilter('${cat.key}')">
       <div class="inventory-cat-card-title">${cat.label}</div>
-      <div class="inventory-cat-card-meta">${rows.length} produtos · ${ok} OK · ${lowCritical} críticos · ${empty} esgotados</div>
+      <div class="inventory-cat-card-meta">${rows.length} prod.${risk ? ` · ${risk} alerta${risk === 1 ? '' : 's'}` : ''}</div>
     </button>`;
   }).join('');
 }
@@ -20362,6 +20413,7 @@ function updateInventoryFilterOptions() {
 
 function renderInventory() {
   renderInventorySchemaAlert();
+  setInventoryTab(inventoryActiveTab);
   const kpis = document.getElementById('inventory-kpis');
   const productsBody = document.getElementById('inventory-products-tbody');
   const movementsBody = document.getElementById('inventory-movements-tbody');
@@ -20395,11 +20447,11 @@ function renderInventory() {
   const saidasMes = inventoryMovements.filter(m => m.tipo === 'saida' && String(m.data || '').startsWith(monthKey)).length;
 
   kpis.innerHTML = `
-    <div class="card card-accent"><div class="card-label">Produtos</div><div class="card-value cv-blue">${total}</div><div class="card-trend">cadastrados</div></div>
-    <div class="card card-green"><div class="card-label">Produtos OK</div><div class="card-value cv-green">${ok}</div><div class="card-trend">saldo adequado</div></div>
-    <div class="card card-orange"><div class="card-label">Baixo / crítico</div><div class="card-value cv-orange">${lowCritical}</div><div class="card-trend">pedem atenção</div></div>
-    <div class="card card-red"><div class="card-label">Esgotados</div><div class="card-value cv-red">${empty}</div><div class="card-trend">saldo zerado</div></div>
-    <div class="card"><div class="card-label">Saídas do mês</div><div class="card-value">${saidasMes}</div><div class="card-trend">${new Date().toLocaleDateString('pt-BR', { month:'long' })}</div></div>`;
+    <div class="inventory-metric"><div class="inventory-metric-label">Produtos</div><div class="inventory-metric-value cv-blue">${total}</div><div class="inventory-metric-note">cadastrados</div></div>
+    <div class="inventory-metric"><div class="inventory-metric-label">OK</div><div class="inventory-metric-value cv-green">${ok}</div><div class="inventory-metric-note">saldo adequado</div></div>
+    <div class="inventory-metric"><div class="inventory-metric-label">Atenção</div><div class="inventory-metric-value cv-orange">${lowCritical}</div><div class="inventory-metric-note">baixo / crítico</div></div>
+    <div class="inventory-metric"><div class="inventory-metric-label">Zerados</div><div class="inventory-metric-value cv-red">${empty}</div><div class="inventory-metric-note">saldo zerado</div></div>
+    <div class="inventory-metric"><div class="inventory-metric-label">Saídas</div><div class="inventory-metric-value">${saidasMes}</div><div class="inventory-metric-note">${new Date().toLocaleDateString('pt-BR', { month:'long' })}</div></div>`;
 
   renderInventoryCategorySummary(productRows);
   document.querySelectorAll('#inventory-product-filters .pill-btn').forEach(btn => {
@@ -20423,12 +20475,12 @@ function renderInventory() {
       <td class="mono" style="color:${calc.ajuste < 0 ? 'var(--red)' : 'var(--blue2)'}">${inventoryFmtQty(calc.ajuste)}</td>
       <td class="mono bold" style="color:${status.color}">${inventoryFmtQty(calc.atual)}</td>
       <td><span class="chip ${status.chip}">${status.label}</span></td>
-      <td style="display:flex;gap:4px;flex-wrap:wrap">
+      <td><div class="inventory-row-actions">
         <button class="btn btn-ghost btn-xs" onclick="openInventoryMovement('saida', ${jsArg(product.id)})">Saída</button>
         <button class="btn btn-ghost btn-xs" onclick="openInventoryMovement('entrada', ${jsArg(product.id)})">Entrada</button>
         <button class="btn btn-ghost btn-xs" onclick="openInventoryProduct(${jsArg(product.id)})">Editar</button>
         <button class="btn btn-ghost btn-xs" style="color:var(--red)" onclick="deleteInventoryProduct(${jsArg(product.id)})">Excluir</button>
-      </td>
+      </div></td>
     </tr>`).join('') : '<tr><td colspan="10" class="text-muted">Nenhum produto encontrado.</td></tr>';
   renderInventoryProductPagination(visibleProducts.length, pagedProducts.length, productPageCount, inventoryProductPage);
 
