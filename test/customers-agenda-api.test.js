@@ -37,6 +37,7 @@ function makeState() {
     customer_addresses: [],
     customer_contacts: [],
     customer_aliases: [],
+    storage_uploads: [],
     checklists: [
       { id: 50, date: '2026-05-14', motorista: 'Joao', origem: 'admin' },
       { id: 51, date: '2026-05-15', motorista: 'Maria', origem: 'portal_tecnico' }
@@ -137,6 +138,16 @@ function makeBuilder(state, table) {
 
 function makeDb(state) {
   return {
+    storage: {
+      from(bucket) {
+        return {
+          async upload(path, buffer, options = {}) {
+            state.storage_uploads.push({ bucket, path, size: buffer.length, contentType: options.contentType });
+            return { data: { path }, error: null };
+          }
+        };
+      }
+    },
     from(table) {
       assert.ok(state[table], `unexpected table ${table}`);
       return makeBuilder(state, table);
@@ -772,6 +783,67 @@ test('POST e GET /api/checklists criam e filtram por data', async () => {
     assert.equal(list.status, 200);
     const rows = await list.json();
     assert.equal(rows.every(item => item.date === '2026-05-14'), true);
+  });
+});
+
+test('POST /api/checklists salva metadados do checklist digital', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/checklists`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 100,
+        date: '2026-05-14',
+        tipo: 'diario',
+        equipe: 'Equipe A',
+        motorista: 'Joao',
+        assistente: 'Maria',
+        vei: 'Fox',
+        status: 'problema',
+        fotos_saida: [{ categoria: 'frente', bucket: 'checklist-photos', path: 'checklists/2026-05-14/fox/100/frente.jpg', content_type: 'image/jpeg' }],
+        ocorrencias: [{ tipo: 'veiculo_equipamento', descricao: 'Arranhao registrado', foto: { bucket: 'checklist-photos', path: 'checklists/2026-05-14/fox/100/ocorrencia.jpg' } }],
+        itens: { conferidos: ['EPIs'], faltantes: ['Pulverizador'] },
+        equip: { conferidos: ['EPIs'] },
+        origem: 'portal_tecnico'
+      })
+    });
+
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.equipe, 'Equipe A');
+    assert.equal(payload.status, 'problema');
+    assert.equal(payload.fotos_saida[0].path.includes('base64'), false);
+    assert.equal(payload.ocorrencias[0].foto.path.endsWith('ocorrencia.jpg'), true);
+    assert.deepEqual(payload.itens.faltantes, ['Pulverizador']);
+    assert.equal(state.checklists.some(item => item.id === 100 && item.fotos_saida.length === 1), true);
+  });
+});
+
+test('POST /api/checklists/photos envia foto para Storage e retorna path', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/checklists/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        checklist_id: 101,
+        date: '2026-05-14',
+        veiculo: 'Fox',
+        categoria: 'frente',
+        etapa: 'saida',
+        filename: 'frente.jpg',
+        content_type: 'image/jpeg',
+        data_url: `data:image/jpeg;base64,${Buffer.from('fake image').toString('base64')}`
+      })
+    });
+
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.bucket, 'checklist-photos');
+    assert.equal(payload.path.startsWith('checklists/2026-05-14/fox/101/'), true);
+    assert.equal(payload.path.includes('base64'), false);
+    assert.equal(state.storage_uploads.length, 1);
+    assert.equal(state.storage_uploads[0].bucket, 'checklist-photos');
+    assert.equal(state.storage_uploads[0].contentType, 'image/jpeg');
   });
 });
 

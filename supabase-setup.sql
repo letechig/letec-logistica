@@ -372,6 +372,13 @@ CREATE TABLE IF NOT EXISTS checklists (
   avtxt TEXT,
   obs TEXT,
   equip JSONB DEFAULT '{}'::jsonb,
+  tipo TEXT DEFAULT 'diario',
+  equipe TEXT,
+  service_id BIGINT,
+  fotos_saida JSONB DEFAULT '[]'::jsonb,
+  ocorrencias JSONB DEFAULT '[]'::jsonb,
+  itens JSONB DEFAULT '{}'::jsonb,
+  status TEXT DEFAULT 'pendente',
   importado BOOLEAN DEFAULT false,
   origem TEXT DEFAULT 'admin',
   saida_lat DOUBLE PRECISION,
@@ -384,6 +391,13 @@ CREATE TABLE IF NOT EXISTS checklists (
 
 ALTER TABLE checklists ADD COLUMN IF NOT EXISTS cartao TEXT;
 ALTER TABLE checklists ADD COLUMN IF NOT EXISTS equip JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'diario';
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS equipe TEXT;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS service_id BIGINT;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS fotos_saida JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS ocorrencias JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS itens JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente';
 ALTER TABLE checklists ADD COLUMN IF NOT EXISTS importado BOOLEAN DEFAULT false;
 ALTER TABLE checklists ADD COLUMN IF NOT EXISTS origem TEXT DEFAULT 'admin';
 ALTER TABLE checklists ADD COLUMN IF NOT EXISTS saida_lat DOUBLE PRECISION;
@@ -399,6 +413,23 @@ CREATE INDEX IF NOT EXISTS idx_services_tecnicos_ids ON services USING GIN(tecni
 CREATE INDEX IF NOT EXISTS idx_checklists_date ON checklists(date);
 CREATE INDEX IF NOT EXISTS idx_checklists_motorista ON checklists(LOWER(motorista));
 CREATE INDEX IF NOT EXISTS idx_checklists_origem ON checklists(origem);
+CREATE INDEX IF NOT EXISTS idx_checklists_tipo ON checklists(tipo);
+CREATE INDEX IF NOT EXISTS idx_checklists_equipe ON checklists(equipe);
+CREATE INDEX IF NOT EXISTS idx_checklists_service_id ON checklists(service_id);
+CREATE INDEX IF NOT EXISTS idx_checklists_status ON checklists(status);
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'checklist-photos',
+  'checklist-photos',
+  false,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 CREATE TABLE IF NOT EXISTS technician_events (
   id BIGINT PRIMARY KEY,

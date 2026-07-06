@@ -18,6 +18,8 @@ const PORT = process.env.PORT || 8000;
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
 const EVOLUTION_SEND_DELAY_MS = Number(process.env.EVOLUTION_SEND_DELAY_MS || 1200);
 const CEP_CACHE_TTL_MS = Number(process.env.CEP_CACHE_TTL_MS || 24 * 60 * 60 * 1000);
+const CHECKLIST_PHOTO_BUCKET = process.env.CHECKLIST_PHOTO_BUCKET || 'checklist-photos';
+const CHECKLIST_PHOTO_MAX_BYTES = Number(process.env.CHECKLIST_PHOTO_MAX_BYTES || 5 * 1024 * 1024);
 const CLIENT_IMPORT_WORKBOOK = process.env.CLIENT_IMPORT_WORKBOOK ||
   path.resolve(__dirname, '..', 'BASE_CLIENTES_TRATADA_LETEC (1).xlsx');
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
@@ -648,6 +650,10 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function cleanObject(value, fallback = {}) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback;
+}
+
 function normalizeCep(value) {
   return String(value || '').replace(/\D/g, '');
 }
@@ -844,13 +850,108 @@ function normalizeServicePayload(input = {}, options = {}) {
   return payload;
 }
 
+function sanitizeChecklistPhotoMeta(photo = {}) {
+  const item = cleanObject(photo, null);
+  if (!item) return null;
+  const pathValue = cleanText(item.path, 700);
+  const urlValue = cleanText(item.url, 1000);
+  if (!pathValue && !urlValue) return null;
+  return {
+    categoria: cleanText(item.categoria || item.tipo || item.etapa, 80),
+    etapa: cleanText(item.etapa, 80),
+    bucket: cleanText(item.bucket, 120) || CHECKLIST_PHOTO_BUCKET,
+    path: pathValue,
+    url: urlValue,
+    content_type: cleanText(item.content_type || item.contentType, 80),
+    size: cleanNumber(item.size),
+    created_at: cleanText(item.created_at || item.createdAt, 80) || new Date().toISOString()
+  };
+}
+
+function sanitizeChecklistPhotos(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(sanitizeChecklistPhotoMeta)
+    .filter(Boolean)
+    .slice(0, 40);
+}
+
+function sanitizeChecklistOccurrence(item = {}) {
+  const occurrence = cleanObject(item, null);
+  if (!occurrence) return null;
+  const foto = sanitizeChecklistPhotoMeta(occurrence.foto || occurrence.photo || {});
+  const descricao = cleanText(occurrence.descricao || occurrence.description || occurrence.avtxt, 2000);
+  if (!descricao && !foto) return null;
+  return {
+    id: cleanText(occurrence.id, 120) || String(Date.now()),
+    tipo: cleanText(occurrence.tipo || occurrence.type, 80) || 'ocorrencia',
+    descricao,
+    horario: cleanText(occurrence.horario || occurrence.created_at || occurrence.createdAt, 80) || new Date().toISOString(),
+    foto
+  };
+}
+
+function sanitizeChecklistOccurrences(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(sanitizeChecklistOccurrence)
+    .filter(Boolean)
+    .slice(0, 40);
+}
+
+function checklistPhotoPathSegment(value, fallback = 'item') {
+  const text = normalizeLooseForMatch(value || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return text || fallback;
+}
+
+function decodeChecklistPhotoPayload(input = {}) {
+  const rawType = cleanText(input.content_type || input.contentType, 80) || '';
+  const dataUrl = cleanText(input.data_url || input.dataUrl, CHECKLIST_PHOTO_MAX_BYTES * 2);
+  let contentType = rawType.toLowerCase();
+  let base64 = cleanText(input.base64, CHECKLIST_PHOTO_MAX_BYTES * 2);
+  const match = dataUrl ? dataUrl.match(/^data:([^;]+);base64,(.+)$/) : null;
+  if (match) {
+    contentType = String(match[1] || '').toLowerCase();
+    base64 = match[2];
+  }
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
+    const error = new Error('Formato de foto invalido. Use JPG, PNG ou WEBP.');
+    error.statusCode = 400;
+    error.code = 'invalid_photo_type';
+    throw error;
+  }
+  if (!base64) {
+    const error = new Error('Foto nao enviada.');
+    error.statusCode = 400;
+    error.code = 'missing_photo_data';
+    throw error;
+  }
+  const buffer = Buffer.from(String(base64).replace(/\s/g, ''), 'base64');
+  if (!buffer.length || buffer.length > CHECKLIST_PHOTO_MAX_BYTES) {
+    const error = new Error('Foto excede o limite permitido.');
+    error.statusCode = 413;
+    error.code = 'photo_too_large';
+    throw error;
+  }
+  const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+  return { buffer, contentType, extension };
+}
+
 function normalizeChecklistPayload(input = {}) {
   const kms = cleanNumber(input.kms);
   const kmc = cleanNumber(input.kmc);
   const kmd = input.kmd !== undefined ? cleanNumber(input.kmd) : (kms !== null && kmc !== null ? kmc - kms : null);
+  const hasav = input.hasav === true || String(input.hasav) === 'true';
   return {
     id: input.id !== undefined ? input.id : Date.now(),
     date: cleanDateText(input.date),
+    tipo: cleanText(input.tipo, 80) || 'diario',
+    equipe: cleanText(input.equipe, 200),
+    service_id: cleanNumber(input.service_id),
     motorista: cleanText(input.motorista, 200),
     assistente: cleanText(input.assistente, 200),
     cartao: cleanText(input.cartao, 120),
@@ -861,10 +962,14 @@ function normalizeChecklistPayload(input = {}) {
     hrs: cleanText(input.hrs, 20),
     hrc: cleanText(input.hrc, 20),
     fuel: cleanText(input.fuel, 40),
-    hasav: input.hasav === true || String(input.hasav) === 'true',
+    hasav,
     avtxt: cleanText(input.avtxt, 1000),
     obs: cleanText(input.obs, 2000),
-    equip: input.equip && typeof input.equip === 'object' ? input.equip : {},
+    equip: cleanObject(input.equip, {}),
+    fotos_saida: sanitizeChecklistPhotos(input.fotos_saida),
+    ocorrencias: sanitizeChecklistOccurrences(input.ocorrencias),
+    itens: cleanObject(input.itens, {}),
+    status: cleanText(input.status, 80) || (hasav ? 'problema' : 'completo'),
     importado: input.importado === true || String(input.importado) === 'true',
     origem: cleanText(input.origem, 80) || 'admin',
     saida_lat: cleanNumber(input.saida_lat),
@@ -1522,7 +1627,7 @@ app.use(helmet({
 app.use(cors(corsOptions));
 
 // 3. Body parsing
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '8mb' }));
 
 // 4. Global rate limiting (applies to all routes except /api/health)
 app.use(globalLimiter);
@@ -4298,6 +4403,50 @@ app.post('/api/services/:id/promote-arrival-location', strictLimiter, async (req
   } catch (error) {
     console.error('[POST /api/services/:id/promote-arrival-location] Error:', error.message);
     res.status(500).json({ error: 'Falha ao promover GPS da chegada', details: publicDbErrorDetails(error) });
+  }
+});
+
+app.post('/api/checklists/photos', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
+    const checklistId = cleanText(req.body?.checklist_id || req.body?.checklistId || Date.now(), 120);
+    const date = cleanDateText(req.body?.date) || new Date().toISOString().slice(0, 10);
+    const categoria = checklistPhotoPathSegment(req.body?.categoria || req.body?.tipo || 'foto', 'foto');
+    const etapa = checklistPhotoPathSegment(req.body?.etapa || 'saida', 'saida');
+    const owner = checklistPhotoPathSegment(
+      req.body?.veiculo || req.body?.vei || req.body?.equipe || technicianAuth?.technician?.nome || 'equipe',
+      'equipe'
+    );
+    const { buffer, contentType, extension } = decodeChecklistPhotoPayload(req.body || {});
+    const filenameBase = checklistPhotoPathSegment(req.body?.filename || `${etapa}-${categoria}`, `${etapa}-${categoria}`);
+    const pathValue = `checklists/${date}/${owner}/${checklistPhotoPathSegment(checklistId, 'checklist')}/${filenameBase}-${Date.now()}.${extension}`;
+
+    if (!db.storage?.from) {
+      return res.status(500).json({ error: 'Storage do Supabase nao configurado', code: 'storage_unavailable' });
+    }
+    const { data, error } = await db.storage
+      .from(CHECKLIST_PHOTO_BUCKET)
+      .upload(pathValue, buffer, { contentType, upsert: false });
+    if (error) throw error;
+
+    res.status(201).json({
+      bucket: CHECKLIST_PHOTO_BUCKET,
+      path: data?.path || pathValue,
+      categoria,
+      etapa,
+      content_type: contentType,
+      size: buffer.length,
+      created_at: new Date().toISOString()
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    console.error('[POST /api/checklists/photos] Error:', error.message);
+    res.status(status).json({
+      error: status === 500 ? 'Falha ao salvar foto do checklist' : error.message,
+      code: error.code || 'checklist_photo_upload_failed'
+    });
   }
 });
 

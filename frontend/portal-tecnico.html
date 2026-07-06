@@ -512,6 +512,27 @@
       box-shadow:inset 0 0 0 1px rgba(37,99,235,.12);
     }
     .fuel-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    .photo-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    .photo-card {
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height:136px;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#fff;
+    }
+    .photo-card strong { font-size:13px; line-height:1.25; }
+    .photo-card input { width:100%; font-size:12px; }
+    .photo-status {
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+      line-height:1.35;
+    }
+    .photo-status.ok { color:var(--success); }
+    .photo-status.err { color:var(--danger); }
     .equip-list { display:flex; flex-direction:column; gap:8px; }
     .equip-item {
       display:flex;
@@ -664,6 +685,7 @@
       .quick-nav { grid-template-columns:1fr 1fr; }
       .service-grid, .two-col { grid-template-columns:1fr; }
       .fuel-grid { grid-template-columns:1fr; }
+      .photo-grid { grid-template-columns:1fr; }
       .modal-foot { grid-template-columns:1fr; }
       h1 { font-size:22px; }
       .hero { padding-top:10px; padding-bottom:8px; }
@@ -803,7 +825,7 @@
 
         <div class="form-panel">
           <div class="step-title">3. Saida</div>
-          <div class="step-sub">KM, horario e combustivel na saida.</div>
+          <div class="step-sub">KM, horario, combustivel e fotos do veiculo antes do roteiro.</div>
           <div class="two-col">
             <div class="field"><label for="cl-kms">KM saida</label><input id="cl-kms" type="number" inputmode="numeric" placeholder="Ex: 45320"></div>
             <div class="field"><label for="cl-hs">Hora saida</label><input id="cl-hs" type="time"></div>
@@ -814,28 +836,15 @@
             <div class="fuel-grid" id="fuel-grid"></div>
             <input id="cl-fuel" type="hidden">
           </div>
-        </div>
-
-        <div class="form-panel">
-          <div class="step-title">4. Retorno</div>
-          <div class="step-sub">KM, horario e condicoes do veiculo no retorno.</div>
-          <div class="two-col">
-            <div class="field"><label for="cl-kmc">KM chegada</label><input id="cl-kmc" type="number" inputmode="numeric" placeholder="Ex: 45518"></div>
-            <div class="field"><label for="cl-hc">Hora chegada</label><input id="cl-hc" type="time"></div>
-          </div>
-          <button class="secondary" type="button" onclick="registerDailyMoment('retorno')">Registrar retorno agora</button>
-          <label class="equip-item" style="margin-top:12px">
-            <input id="cl-avaria" type="checkbox" onchange="toggleAvaria()">
-            <span>Registrar avaria?</span>
-          </label>
-          <div class="field" id="avaria-field" style="display:none;margin-top:12px;margin-bottom:0">
-            <label for="cl-avaria-txt">Descreva a avaria</label>
-            <textarea id="cl-avaria-txt" placeholder="Ex: riscado na porta direita"></textarea>
+          <div class="field" style="margin-top:12px;margin-bottom:0">
+            <label>Fotos obrigatorias do veiculo na saida</label>
+            <div class="photo-grid" id="departure-photo-grid"></div>
+            <div class="meta">Tire as fotos antes de sair. Elas ficam como comparativo se ocorrer problema no dia.</div>
           </div>
         </div>
 
         <div class="form-panel">
-          <div class="step-title">5. Equipamentos</div>
+          <div class="step-title">4. Equipamentos</div>
           <div class="step-sub">Toque na linha para marcar os itens conferidos.</div>
           <div class="equip-list" id="equip-list"></div>
           <div class="button-row">
@@ -846,8 +855,33 @@
         </div>
 
         <div class="form-panel">
-          <div class="step-title">6. Observacoes e finalizar</div>
-          <div class="step-sub">Informe ocorrencias gerais do dia.</div>
+          <div class="step-title">5. Ocorrencias</div>
+          <div class="step-sub">Use somente se houve avaria, perda, dano ou falta durante o dia.</div>
+          <label class="equip-item">
+            <input id="cl-avaria" type="checkbox" onchange="toggleAvaria()">
+            <span>Registrar problema no veiculo/equipamento?</span>
+          </label>
+          <div id="avaria-field" style="display:none;margin-top:12px">
+            <div class="field">
+              <label for="cl-avaria-txt">Descreva a ocorrencia</label>
+              <textarea id="cl-avaria-txt" placeholder="Ex: equipamento faltando, dano, perda ou avaria"></textarea>
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label for="cl-ocorrencia-photo">Foto da ocorrencia</label>
+              <input id="cl-ocorrencia-photo" type="file" accept="image/*" capture="environment" onchange="handleOccurrencePhoto(this)">
+              <div class="photo-status" id="occurrence-photo-status">Nenhuma foto selecionada.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-panel">
+          <div class="step-title">6. Retorno e finalizar</div>
+          <div class="step-sub">Registre chegada e observacoes finais do dia.</div>
+          <div class="two-col">
+            <div class="field"><label for="cl-kmc">KM chegada</label><input id="cl-kmc" type="number" inputmode="numeric" placeholder="Ex: 45518"></div>
+            <div class="field"><label for="cl-hc">Hora chegada</label><input id="cl-hc" type="time"></div>
+          </div>
+          <button class="secondary" type="button" onclick="registerDailyMoment('retorno')">Registrar retorno agora</button>
           <div class="choice-grid" style="margin-bottom:12px">
             <button class="choice selected" type="button" data-final="ok" onclick="selectFinalState('ok')">Tudo OK</button>
             <button class="choice" type="button" data-final="problema" onclick="selectFinalState('problema')">Houve problema</button>
@@ -940,7 +974,7 @@
           <label for="service-problem-text">Descreva o problema encontrado</label>
           <textarea id="service-problem-text" placeholder="Explique o que impediu ou afetou a execucao"></textarea>
         </div>
-        <div class="meta" style="margin-top:12px">Estrutura preparada para fotos e assinatura em versoes futuras.</div>
+        <div class="meta" style="margin-top:12px">Se tirou fotos do servico, envie no grupo do WhatsApp. Se houve problema no veiculo/equipamento, registre em Ocorrencias do checklist.</div>
       </div>
       <div class="modal-foot">
         <button class="secondary" type="button" onclick="closeFinishModal()">Cancelar</button>
@@ -1027,6 +1061,13 @@
     const TECH_SESSION_KEY = 'letec_portal_tecnico_session_v1';
     const EQUIPAMENTOS = ['EPIs', 'Pulverizador', 'Iscas', 'Produtos', 'Ferramentas', 'Prancheta', 'Celular carregado', 'Documentos'];
     const FUEL = ['Cheio', '3/4', 'Metade', '1/4', 'Reserva'];
+    const DEPARTURE_PHOTOS = [
+      { key:'frente', label:'Frente do veiculo' },
+      { key:'lateral_esquerda', label:'Lateral esquerda' },
+      { key:'lateral_direita', label:'Lateral direita' },
+      { key:'traseira', label:'Traseira' },
+      { key:'painel_km', label:'Painel/KM' }
+    ];
     const todayIso = new Date().toISOString().slice(0, 10);
 
     function loadPortalContext() {
@@ -1085,6 +1126,8 @@
       weekServicesByDate: {},
       rawServicesCount: 0,
       gps: { saida:null, retorno:null },
+      departurePhotos: {},
+      occurrencePhoto: null,
       matchedTech: null,
       auth: null,
       loading: false,
@@ -1554,6 +1597,44 @@
       });
     }
 
+    function uploadChecklistPhoto(record, photo, etapa) {
+      return requestBackendJson('/api/checklists/photos', {
+        method: 'POST',
+        body: JSON.stringify({
+          checklist_id: record.id,
+          date: record.date,
+          veiculo: record.vei,
+          equipe: record.equipe || portalTeamForDay(),
+          categoria: photo.categoria,
+          etapa,
+          filename: photo.nome || photo.name || photo.categoria,
+          content_type: photo.content_type,
+          data_url: photo.data_url
+        })
+      });
+    }
+
+    async function prepareChecklistRecordForSync(record) {
+      const pendingDeparture = Array.isArray(record.__pending_departure_photos) ? record.__pending_departure_photos : [];
+      const fotosSaida = Array.isArray(record.fotos_saida) ? [...record.fotos_saida] : [];
+      for (const photo of pendingDeparture) {
+        fotosSaida.push(await uploadChecklistPhoto(record, photo, 'saida'));
+      }
+
+      const ocorrencias = Array.isArray(record.ocorrencias)
+        ? record.ocorrencias.map(item => ({ ...item }))
+        : [];
+      const pendingOccurrence = record.__pending_occurrence_photo;
+      if (pendingOccurrence && ocorrencias[0]) {
+        ocorrencias[0].foto = await uploadChecklistPhoto(record, pendingOccurrence, 'ocorrencia');
+      }
+
+      const cleanRecord = { ...record, fotos_saida: fotosSaida, ocorrencias };
+      delete cleanRecord.__pending_departure_photos;
+      delete cleanRecord.__pending_occurrence_photo;
+      return cleanRecord;
+    }
+
     function createEventViaBackend(record) {
       return requestBackendJson('/api/technician-events', {
         method: 'POST',
@@ -1582,7 +1663,8 @@
           if (item.type === 'service-update') {
             await updateServiceViaBackend(item.id, item.payload);
           } else if (item.type === 'checklist-insert') {
-            await createChecklistViaBackend(item.record);
+            const record = await prepareChecklistRecordForSync(item.record);
+            await createChecklistViaBackend(record);
           } else if (item.type === 'event-insert') {
             await createEventViaBackend(item.record);
           } else if (item.type === 'message-read') {
@@ -1916,6 +1998,8 @@
       renderWeek();
       renderVehicles();
       renderFuel();
+      renderDeparturePhotoGrid();
+      renderOccurrencePhotoStatus();
       renderEquipment();
       renderChecklistDefaults();
       renderMessages();
@@ -2254,7 +2338,12 @@
         exec_status: state.finishState === 'problema' ? 'problema' : 'finalizado',
         fim_hora: fim,
         tempo_execucao: minutesBetween(s?.inicio_hora, fim),
-        checklist_servico: { resultado: state.finishState, itens: checked, futuras_opcoes: ['fotos', 'assinatura_cliente'] },
+        checklist_servico: {
+          resultado: state.finishState,
+          itens: checked,
+          lembrete_whatsapp: 'Se tirou fotos do servico, envie no grupo do WhatsApp.',
+          lembrete_ocorrencias: 'Se houve problema no veiculo/equipamento, registre em Ocorrencias do checklist.'
+        },
         problema_descricao: problemText,
       };
       if (state.finishState === 'ok') payload.status = 'executado';
@@ -2262,6 +2351,7 @@
       closeFinishModal();
       const persisted = await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
       if (!persisted) return;
+      toast('Fotos do servico: envie no grupo do WhatsApp se aplicavel.', 'warn');
       const event = await recordEvent(
         state.finishState === 'ok' ? 'finalizacao' : 'problema',
         state.finishState === 'ok' ? 'Servico finalizado' : 'Problema registrado',
@@ -2442,6 +2532,99 @@ Portal: ${currentPortalLink()}${location}`;
       document.querySelectorAll('[data-fuel]').forEach(btn => btn.classList.toggle('selected', btn.dataset.fuel === name));
     }
 
+    function renderDeparturePhotoGrid() {
+      const grid = document.getElementById('departure-photo-grid');
+      if (!grid) return;
+      grid.innerHTML = DEPARTURE_PHOTOS.map(item => {
+        const photo = state.departurePhotos[item.key];
+        const status = photo ? `Selecionada: ${photo.nome || item.label}` : 'Pendente';
+        return `
+          <div class="photo-card">
+            <strong>${escapeHtml(item.label)}</strong>
+            <input type="file" accept="image/*" capture="environment" onchange="handleDeparturePhoto('${item.key}', this)">
+            <div class="photo-status ${photo ? 'ok' : ''}">${escapeHtml(status)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderOccurrencePhotoStatus() {
+      const status = document.getElementById('occurrence-photo-status');
+      if (!status) return;
+      const photo = state.occurrencePhoto;
+      status.textContent = photo ? `Selecionada: ${photo.nome || 'foto da ocorrencia'}` : 'Nenhuma foto selecionada.';
+      status.className = `photo-status ${photo ? 'ok' : ''}`;
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Falha ao ler foto.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function loadImageFromDataUrl(dataUrl) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Falha ao preparar foto.'));
+        img.src = dataUrl;
+      });
+    }
+
+    async function prepareLocalPhoto(file, categoria) {
+      if (!file) return null;
+      if (!file.type || !file.type.startsWith('image/')) throw new Error('Selecione uma imagem.');
+      const dataUrl = await readFileAsDataUrl(file);
+      const img = await loadImageFromDataUrl(dataUrl);
+      const maxSide = 1280;
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const compressed = canvas.toDataURL('image/jpeg', 0.72);
+      return {
+        categoria,
+        nome: file.name || `${categoria}.jpg`,
+        content_type: 'image/jpeg',
+        data_url: compressed,
+        size: Math.round((compressed.length * 3) / 4),
+        created_at: nowIso()
+      };
+    }
+
+    async function handleDeparturePhoto(key, input) {
+      const file = input?.files?.[0];
+      if (!file) return;
+      try {
+        const photo = await prepareLocalPhoto(file, key);
+        state.departurePhotos[key] = photo;
+        renderDeparturePhotoGrid();
+        toast('Foto adicionada ao checklist.', 'ok');
+      } catch(e) {
+        toast(e.message || 'Nao foi possivel preparar a foto.', 'err');
+      }
+    }
+
+    async function handleOccurrencePhoto(input) {
+      const file = input?.files?.[0];
+      if (!file) return;
+      try {
+        state.occurrencePhoto = await prepareLocalPhoto(file, 'ocorrencia');
+        renderOccurrencePhotoStatus();
+        toast('Foto da ocorrencia adicionada.', 'ok');
+      } catch(e) {
+        toast(e.message || 'Nao foi possivel preparar a foto.', 'err');
+      }
+    }
+
+    function selectedDeparturePhotos() {
+      return DEPARTURE_PHOTOS.map(item => state.departurePhotos[item.key]).filter(Boolean);
+    }
+
     function renderEquipment() {
       const list = document.getElementById('equip-list');
       list.innerHTML = EQUIPAMENTOS.map(item => `
@@ -2479,6 +2662,12 @@ Portal: ${currentPortalLink()}${location}`;
     function toggleAvaria() {
       const checked = document.getElementById('cl-avaria').checked;
       document.getElementById('avaria-field').style.display = checked ? 'block' : 'none';
+      if (!checked) {
+        state.occurrencePhoto = null;
+        const input = document.getElementById('cl-ocorrencia-photo');
+        if (input) input.value = '';
+        renderOccurrencePhotoStatus();
+      }
     }
 
     function setAllEquipment(value) {
@@ -2498,8 +2687,17 @@ Portal: ${currentPortalLink()}${location}`;
         toast('Preencha data, motorista e veiculo.', 'err');
         return;
       }
+      const missingPhotos = DEPARTURE_PHOTOS.filter(item => !state.departurePhotos[item.key]);
+      if (missingPhotos.length) {
+        toast(`Faltam fotos da saida: ${missingPhotos.map(item => item.label).join(', ')}.`, 'err');
+        return;
+      }
       if (hasav && !avtxt) {
-        toast('Descreva a avaria.', 'err');
+        toast('Descreva a ocorrencia.', 'err');
+        return;
+      }
+      if (hasav && !state.occurrencePhoto) {
+        toast('Inclua uma foto da ocorrencia.', 'err');
         return;
       }
       if (state.finalDailyState === 'problema' && !obs) {
@@ -2511,10 +2709,33 @@ Portal: ${currentPortalLink()}${location}`;
       btn.textContent = 'Salvando...';
       const kms = parseInt(document.getElementById('cl-kms').value, 10) || null;
       const kmc = parseInt(document.getElementById('cl-kmc').value, 10) || null;
-      const equip = { conferidos: Array.from(document.querySelectorAll('#equip-list input:checked')).map(cb => cb.dataset.equip) };
+      const checkedEquipment = Array.from(document.querySelectorAll('#equip-list input:checked')).map(cb => cb.dataset.equip);
+      const missingEquipment = EQUIPAMENTOS.filter(item => !checkedEquipment.includes(item));
+      if (missingEquipment.length && !obs) {
+        toast('Informe nas observacoes quais equipamentos ficaram faltando.', 'err');
+        btn.disabled = false;
+        btn.textContent = 'Salvar checklist';
+        return;
+      }
+      const equip = { conferidos: checkedEquipment };
+      const itens = {
+        conferidos: checkedEquipment,
+        faltantes: missingEquipment,
+        observacao_faltantes: missingEquipment.length ? obs : ''
+      };
+      const occurrence = hasav ? [{
+        id: `ocorrencia-${Date.now()}`,
+        tipo: 'veiculo_equipamento',
+        descricao: avtxt,
+        horario: nowIso(),
+        foto: null
+      }] : [];
+      const status = hasav || missingEquipment.length || state.finalDailyState === 'problema' ? 'problema' : 'completo';
       const rec = {
         id: Date.now(),
         date,
+        tipo: 'diario',
+        equipe: portalTeamForDay(),
         motorista,
         assistente: document.getElementById('cl-assistente').value.trim(),
         cartao: document.getElementById('cl-cartao').value.trim(),
@@ -2529,26 +2750,44 @@ Portal: ${currentPortalLink()}${location}`;
         avtxt,
         obs,
         equip,
+        itens,
+        fotos_saida: [],
+        ocorrencias: occurrence,
+        status,
         origem: 'portal_tecnico',
         saida_lat: state.gps.saida ? state.gps.saida.lat : null,
         saida_lng: state.gps.saida ? state.gps.saida.lng : null,
         retorno_lat: state.gps.retorno ? state.gps.retorno.lat : null,
         retorno_lng: state.gps.retorno ? state.gps.retorno.lng : null,
+        __pending_departure_photos: selectedDeparturePhotos(),
+        __pending_occurrence_photo: state.occurrencePhoto,
       };
 
       try {
-        const saved = await createChecklistViaBackend(rec);
+        const prepared = await prepareChecklistRecordForSync(rec);
+        const saved = await createChecklistViaBackend(prepared);
         toast('Checklist salvo com sucesso.', 'ok');
         await recordEvent('checklist', 'Checklist diario salvo', `${vei} - ${motorista}`, null, null);
         addHistory('Checklist diario salvo.');
-        state.checklists.unshift(saved || rec);
+        state.checklists.unshift(saved || prepared);
+        state.departurePhotos = {};
+        state.occurrencePhoto = null;
         savePortalCache();
+        renderDeparturePhotoGrid();
+        renderOccurrencePhotoStatus();
         renderHistory();
       } catch(e) {
         console.error(e);
         addQueue({ type:'checklist-insert', record:rec });
-        state.checklists.unshift(rec);
+        const localRecord = { ...rec };
+        delete localRecord.__pending_departure_photos;
+        delete localRecord.__pending_occurrence_photo;
+        state.checklists.unshift(localRecord);
+        state.departurePhotos = {};
+        state.occurrencePhoto = null;
         savePortalCache();
+        renderDeparturePhotoGrid();
+        renderOccurrencePhotoStatus();
         toast('Checklist salvo neste celular para sincronizar.', 'warn');
       } finally {
         btn.disabled = false;
