@@ -4886,7 +4886,20 @@ async function carregarVeiculos(){
               </div>
               <div class="client-field">
                 <label class="client-label">Zona / Região</label>
-                <input id="cli-form-zona" type="text" class="finput" placeholder="Zona operacional">
+                <select id="cli-form-zona" class="fsel" onchange="updateClientCentralSummary()">
+                  <option value="">Selecionar zona</option>
+                  <option value="Centro">Centro</option>
+                  <option value="Zona Norte">Zona Norte</option>
+                  <option value="Zona Sul">Zona Sul</option>
+                  <option value="Zona Leste">Zona Leste</option>
+                  <option value="Zona Oeste">Zona Oeste</option>
+                  <option value="ABC">ABC</option>
+                  <option value="Osasco / Barueri">Osasco / Barueri</option>
+                  <option value="Guarulhos">Guarulhos</option>
+                  <option value="Litoral">Litoral</option>
+                  <option value="Interior">Interior</option>
+                  <option value="Fora de área">Fora de área</option>
+                </select>
               </div>
               <div class="client-field">
                 <label class="client-label">Complemento</label>
@@ -14104,6 +14117,36 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+const CLIENT_ZONE_OPTIONS = new Set([
+  'Centro',
+  'Zona Norte',
+  'Zona Sul',
+  'Zona Leste',
+  'Zona Oeste',
+  'ABC',
+  'Osasco / Barueri',
+  'Guarulhos',
+  'Litoral',
+  'Interior',
+  'Fora de área'
+]);
+
+function setClientZoneValue(value) {
+  const select = document.getElementById('cli-form-zona');
+  if (!select) return;
+  const zone = String(value || '').trim();
+  const legacyOption = select.querySelector('option[data-legacy-zone="true"]');
+  if (legacyOption) legacyOption.remove();
+  if (zone && !CLIENT_ZONE_OPTIONS.has(zone)) {
+    const option = document.createElement('option');
+    option.value = zone;
+    option.textContent = `${zone} (legado)`;
+    option.dataset.legacyZone = 'true';
+    select.appendChild(option);
+  }
+  select.value = zone;
+}
+
 function currentClientDraft() {
   return {
     ...(clienteEditando || {}),
@@ -14125,6 +14168,7 @@ function currentClientDraft() {
     bairro: document.getElementById('cli-form-bairro')?.value.trim() || '',
     cidade: document.getElementById('cli-form-cidade')?.value.trim() || '',
     uf: document.getElementById('cli-form-uf')?.value.trim() || '',
+    zona: document.getElementById('cli-form-zona')?.value || '',
     restricoes_operacionais: document.getElementById('cli-form-restricoes')?.value.trim() || '',
     observacoes_operacionais: document.getElementById('cli-form-obs-operacionais')?.value.trim() || '',
     restricao_horario: document.getElementById('cli-form-restricao-horario')?.value.trim() || '',
@@ -14639,7 +14683,7 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-form-ultimo-servico').value = clienteEditando.data_ultimo_servico ? clienteEditando.data_ultimo_servico.slice(0, 10) : '';
     document.getElementById('cli-form-status-operacional').value = normalizeClienteStatus(clienteEditando.status_operacional) || '';
     document.getElementById('cli-form-prioridade').value = normalizeClientePriority(clienteEditando.prioridade) || '';
-    document.getElementById('cli-form-zona').value = clienteEditando.zona || '';
+    setClientZoneValue(clienteEditando.zona || '');
     document.getElementById('cli-form-origem').value = clienteEditando.origem || '';
     document.getElementById('cli-form-restricoes').value = clienteEditando.restricoes_operacionais || '';
     document.getElementById('cli-form-obs-operacionais').value = clienteEditando.observacoes_operacionais || '';
@@ -14710,7 +14754,7 @@ function openClientModal(clientId = null) {
     document.getElementById('cli-form-ultimo-servico').value = '';
     document.getElementById('cli-form-status-operacional').value = '';
     document.getElementById('cli-form-prioridade').value = '';
-    document.getElementById('cli-form-zona').value = '';
+    setClientZoneValue('');
     document.getElementById('cli-form-origem').value = '';
     document.getElementById('cli-form-restricoes').value = '';
     document.getElementById('cli-form-obs-operacionais').value = '';
