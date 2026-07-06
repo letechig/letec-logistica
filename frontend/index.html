@@ -919,6 +919,95 @@ textarea:focus-visible,
   gap: 7px;
   margin-top: auto;
 }
+.today-priority-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+.today-priority-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.today-priority-title {
+  font-family: var(--display);
+  font-weight: 850;
+  color: var(--text);
+  font-size: 15px;
+}
+.today-priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.today-priority-row {
+  display: grid;
+  grid-template-columns: 120px 70px minmax(0, 1fr) minmax(110px, .45fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--blue);
+  border-radius: var(--r2);
+  padding: 9px 10px;
+  background: #fff;
+  font-size: 12px;
+}
+.today-priority-row.critical { border-left-color: var(--red); background: #fff7f7; }
+.today-priority-row.warn { border-left-color: var(--orange); background: #fffaf3; }
+.today-priority-row.info { border-left-color: var(--blue); background: #f8fbff; }
+.today-priority-time {
+  font-family: var(--mono);
+  color: var(--text2);
+  font-size: 11px;
+}
+.today-priority-main {
+  min-width: 0;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.today-priority-meta {
+  min-width: 0;
+  color: var(--text3);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.today-empty-state {
+  border: 1px solid rgba(22,163,74,.2);
+  background: var(--green-bg);
+  border-radius: var(--r2);
+  padding: 14px;
+  color: var(--green);
+  font-weight: 800;
+}
+.today-compact-overview {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+  gap: 12px;
+}
+.today-detail-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+}
+.today-detail-panel summary {
+  cursor: pointer;
+  font-family: var(--display);
+  font-weight: 850;
+  color: var(--text);
+}
+.today-detail-body {
+  margin-top: 10px;
+}
 .today-alert {
   background: var(--card);
   border: 1px solid var(--border);
@@ -1111,6 +1200,16 @@ textarea:focus-visible,
   margin-top: 10px;
 }
 @media (max-width: 900px) {
+  .today-compact-overview {
+    grid-template-columns: 1fr;
+  }
+  .today-priority-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .today-priority-row .today-alert-actions {
+    margin-left: 0;
+  }
   .today-overview-grid {
     grid-template-columns: 1fr;
   }
@@ -10478,99 +10577,236 @@ function hojeContarErrosWhatsapp(data) {
   }).length;
 }
 
-function hojeAcoesAgoraHtml(A, data) {
-  const eventosDia = fieldOpsSchemaReady
-    ? (technicianEvents || []).filter(ev => (!ev.date || ev.date === data) && isFieldOpsEventPending(ev))
-    : [];
-  const urgentesCampo = eventosDia.filter(ev => getFieldOpsEventPriority(ev) === 'urgente').length;
-  const errosWhatsapp = hojeContarErrosWhatsapp(data);
-  const cards = [];
-
-  if (A.atrasados.length) {
-    cards.push({
-      cls: 'critical',
-      title: 'Serviços atrasados',
-      count: A.atrasados.length,
-      text: 'Horário já passou e ainda não foi marcado como executado.',
-      action: `<button class="btn btn-primary btn-sm" onclick="showSvcDetail(${jsArg(A.atrasados[0].id)})">Ver primeiro</button>`
-    });
-  }
-  if (A.semEquipe.length) {
-    cards.push({
-      cls: 'warn',
-      title: 'Definir técnico',
-      count: A.semEquipe.length,
-      text: 'Serviços sem responsável podem travar roteiro, confirmação e execução.',
-      action: `<button class="btn btn-primary btn-sm" onclick="abrirEdicaoEquipe(${jsArg(A.semEquipe[0].id)})">Definir agora</button>`
-    });
-  }
-  if (A.reagendados.length) {
-    cards.push({
-      cls: 'warn',
-      title: 'Reagendados',
-      count: A.reagendados.length,
-      text: 'Revise os serviços reagendados para confirmar nova data, equipe ou cliente.',
-      action: `<button class="btn btn-ghost btn-sm" onclick="showSvcDetail(${jsArg(A.reagendados[0].id)})">Revisar</button>`
-    });
-  }
-  if (urgentesCampo) {
-    cards.push({
-      cls: 'critical',
-      title: 'Campo urgente',
-      count: urgentesCampo,
-      text: 'Há evento urgente vindo do portal técnico nesta data.',
-      action: '<button class="btn btn-ghost btn-sm" onclick="hojeAbrirCampo()">Ver central</button>'
-    });
-  } else if (eventosDia.length) {
-    cards.push({
-      cls: 'info',
-      title: 'Pendências de campo',
-      count: eventosDia.length,
-      text: 'Eventos do portal técnico aguardam visualização ou conclusão.',
-      action: '<button class="btn btn-ghost btn-sm" onclick="hojeAbrirCampo()">Abrir central</button>'
-    });
-  }
-  if (errosWhatsapp) {
-    cards.push({
-      cls: 'critical',
-      title: 'Erros no WhatsApp',
-      count: errosWhatsapp,
-      text: 'Mensagens falharam e precisam de reenvio ou fallback por cópia.',
-      action: "<button class=\"btn btn-ghost btn-sm\" onclick=\"nav('comunicacao',null)\">Abrir WhatsApp</button>"
-    });
-  }
-
-  const cardHtml = cards.length
-    ? cards.map(card => `<div class="today-now-card ${card.cls}">
-        <div class="today-now-card-top">
-          <div class="today-now-card-title">${sanitize(card.title)}</div>
-          <div class="today-now-number">${card.count}</div>
-        </div>
-        <div class="today-now-card-text">${sanitize(card.text)}</div>
-        <div class="today-now-actions">${card.action}</div>
-      </div>`).join('')
-    : `<div class="today-now-card ok">
-        <div class="today-now-card-top">
-          <div class="today-now-card-title">Operação sem pendência crítica</div>
-          <div class="today-now-number">0</div>
-        </div>
-        <div class="today-now-card-text">Revise a agenda, cadastre novos serviços ou monte o roteiro do dia quando estiver pronto.</div>
-        <div class="today-now-actions">
-          <button class="btn btn-primary btn-sm" onclick="openNewSvc()">Novo serviço</button>
-          <button class="btn btn-ghost btn-sm" onclick="nav('roteiro',null)">Montar roteiro</button>
-        </div>
-      </div>`;
-
-  return `<div class="today-now">
-    <div class="today-now-head">
+function hojeSemServicosHtml(data) {
+  return `<div class="today-priority-panel">
+    <div class="today-priority-head">
       <div>
-        <div class="today-now-title">Ações de agora</div>
-        <div class="today-now-sub">Comece por aqui para resolver o que pode travar a operação do dia.</div>
+        <div class="today-priority-title">Prioridades do dia</div>
+        <div class="today-now-sub">Nenhum serviço cadastrado para esta data.</div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="renderHoje()">Atualizar</button>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="renderHoje()">Atualizar</button>
+        <button class="btn btn-primary btn-sm" onclick="openNewSvc({data:${jsArg(data)}})">Novo serviço</button>
+      </div>
     </div>
-    <div class="today-now-grid">${cardHtml}</div>
+    <div class="today-empty-state">Operação em dia</div>
   </div>`;
+}
+
+function hojeToggleDetails(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.open = true;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function hojePrioridadeRowHtml(item) {
+  return `<div class="today-priority-row ${item.level || 'info'}">
+    <span class="chip ${item.chip || 'chip-blue'}">${sanitize(item.type)}</span>
+    <span class="today-priority-time">${sanitize(item.time || '—')}</span>
+    <span class="today-priority-main" title="${escapeHtmlAttr(item.main || '')}">${sanitize(item.main || '—')}</span>
+    <span class="today-priority-meta" title="${escapeHtmlAttr(item.meta || '')}">${sanitize(item.meta || '—')}</span>
+    <div class="today-alert-actions">${item.action || ''}</div>
+  </div>`;
+}
+
+function hojeBuildPrioridades(A, data) {
+  const priorities = [];
+  const usedServiceIds = new Set();
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const addService = (service, item) => {
+    const id = normId(service?.id);
+    if (id && usedServiceIds.has(id)) return;
+    if (id) usedServiceIds.add(id);
+    priorities.push(item);
+  };
+
+  A.atrasados.forEach(s => {
+    const F = sf(s);
+    const min = hojeParseMin(F.horario) || 0;
+    addService(s, {
+      level: 'critical',
+      chip: 'chip-red',
+      type: 'Atrasado',
+      time: F.horario,
+      main: F.cliente,
+      meta: `${F.equipe || 'sem técnico'}${nowMin > min ? ` · +${nowMin - min}min` : ''}`,
+      action: `<button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Marcar executado</button>`
+    });
+  });
+
+  const jornadaCritica = A.conflitosJornada.filter(c => c.ehCedo);
+  jornadaCritica.forEach(c => {
+    const F = sf(c.svHoje);
+    addService(c.svHoje, {
+      level: 'critical',
+      chip: 'chip-red',
+      type: 'Jornada',
+      time: F.horario,
+      main: F.cliente,
+      meta: `${c.tecnico} · recomendado ${c.hrRecom}`,
+      action: '<button class="svc-btn reagend" onclick="hojeToggleDetails(\'hoje-detalhes-conflitos\')">Ver conflitos</button>'
+    });
+  });
+
+  A.semEquipe.forEach(s => {
+    const F = sf(s);
+    addService(s, {
+      level: 'warn',
+      chip: 'chip-orange',
+      type: 'Sem técnico',
+      time: F.horario,
+      main: F.cliente,
+      meta: F.tipo || 'definir responsável',
+      action: `<button class="svc-btn reagend" style="background:var(--orange);color:white;border-color:var(--orange)" onclick="abrirEdicaoEquipe(${jsArg(s.id)})">Definir técnico</button>`
+    });
+  });
+
+  A.reagendados.forEach(s => {
+    const F = sf(s);
+    addService(s, {
+      level: 'warn',
+      chip: 'chip-yellow',
+      type: 'Reagendado',
+      time: F.horario,
+      main: F.cliente,
+      meta: F.equipe || F.tipo || 'revisar',
+      action: `<button class="svc-btn reagend" onclick="showSvcDetail(${jsArg(s.id)})">Ver serviço</button>`
+    });
+  });
+
+  A.conflitosHorario.slice(0, 4).forEach(c => {
+    const F1 = sf(c.s1);
+    priorities.push({
+      level: 'warn',
+      chip: 'chip-yellow',
+      type: 'Conflito',
+      time: F1.horario,
+      main: c.equipe,
+      meta: `gap ${c.gap}min · ${F1.cliente}`,
+      action: '<button class="svc-btn reagend" onclick="hojeToggleDetails(\'hoje-detalhes-conflitos\')">Ver conflitos</button>'
+    });
+  });
+
+  if (fieldOpsSchemaReady) {
+    const eventosDia = (technicianEvents || []).filter(ev => (!ev.date || ev.date === data) && isFieldOpsEventPending(ev));
+    const urgentes = eventosDia.filter(ev => getFieldOpsEventPriority(ev) === 'urgente');
+    urgentes.slice(0, 3).forEach(ev => priorities.push({
+      level: 'critical',
+      chip: 'chip-red',
+      type: 'Campo urgente',
+      time: fmtPortalDateTime(ev.created_at),
+      main: ev.titulo || ev.tipo || 'Evento do campo',
+      meta: ev.tecnico || ev.equipe || 'Equipe',
+      action: '<button class="svc-btn reagend" onclick="hojeToggleDetails(\'field-ops-panel-details\')">Ver central</button>'
+    }));
+  }
+
+  const errosWhatsapp = hojeContarErrosWhatsapp(data);
+  if (errosWhatsapp) {
+    priorities.push({
+      level: 'critical',
+      chip: 'chip-red',
+      type: 'Erro WhatsApp',
+      time: '—',
+      main: `${errosWhatsapp} mensagem(ns) com erro`,
+      meta: 'reenvio ou fallback',
+      action: "<button class=\"svc-btn reagend\" onclick=\"nav('comunicacao',null)\">Abrir WhatsApp</button>"
+    });
+  }
+
+  return priorities;
+}
+
+function hojePrioridadesHtml(A, data) {
+  const items = hojeBuildPrioridades(A, data);
+  const body = items.length
+    ? `<div class="today-priority-list">${items.map(hojePrioridadeRowHtml).join('')}</div>`
+    : `<div class="today-empty-state">Operação em dia</div>`;
+  return `<div class="today-priority-panel">
+    <div class="today-priority-head">
+      <div>
+        <div class="today-priority-title">Prioridades do dia</div>
+        <div class="today-now-sub">${items.length ? `${items.length} ponto(s) para resolver primeiro` : 'Nenhum bloqueio operacional encontrado para esta data.'}</div>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="renderHoje()">Atualizar</button>
+        <button class="btn btn-primary btn-sm" onclick="openNewSvc({data:${jsArg(data)}})">Novo serviço</button>
+      </div>
+    </div>
+    ${body}
+  </div>`;
+}
+
+function hojeResumoExecucaoHtml(A) {
+  const pctColor = A.pct >= 80 ? 'var(--green)' : A.pct >= 50 ? 'var(--orange)' : 'var(--red)';
+  return `<div class="today-panel today-priority-panel">
+    <div class="today-panel-head">
+      <span class="today-panel-label">Resumo da execução</span>
+      <span class="today-panel-value" style="color:${pctColor}">${A.exec}/${A.total} · ${A.pct}%</span>
+    </div>
+    <div class="today-progress">
+      <div class="today-progress-fill" style="width:${A.pct}%;background:${pctColor}"></div>
+    </div>
+    <div class="today-kpi-row">
+      <div class="today-kpi" style="background:var(--green-bg)"><div class="today-kpi-value" style="color:var(--green)">${A.exec}</div><div class="today-kpi-label" style="color:var(--green)">Executados</div></div>
+      <div class="today-kpi" style="background:var(--blue-bg)"><div class="today-kpi-value" style="color:var(--blue2)">${A.pend}</div><div class="today-kpi-label" style="color:var(--blue2)">Pendentes</div></div>
+      <div class="today-kpi" style="background:var(--orange-bg)"><div class="today-kpi-value" style="color:var(--orange)">${A.reagend}</div><div class="today-kpi-label" style="color:var(--orange)">Reagendados</div></div>
+      <div class="today-kpi" style="background:var(--red-bg)"><div class="today-kpi-value" style="color:var(--red)">${A.atrasados.length}</div><div class="today-kpi-label" style="color:var(--red)">Atrasados</div></div>
+    </div>
+  </div>`;
+}
+
+function hojeCapacidadeCompactaHtml(cap) {
+  const capColor = cap.statusCap === 'sobrecarregado' ? 'var(--red)' : cap.statusCap === 'ocioso' ? 'var(--blue)' : 'var(--green)';
+  const statusLabel = cap.statusCap === 'sobrecarregado' ? 'Sobrecarregada' : cap.statusCap === 'ocioso' ? 'Boa para encaixe' : 'Boa';
+  const shortMsg = cap.statusCap === 'sobrecarregado'
+    ? 'Considere redistribuir serviços.'
+    : cap.slotsLivres > 0
+      ? `Até ${cap.slotsLivres} encaixe(s) conservador(es).`
+      : 'Sem bloco bom para novo encaixe.';
+  const janelaObservada = `${formatarHoraDoDia(cap.inicioObservadoMin)}–${formatarHoraDoDia(cap.fimObservadoMin)}`;
+  return `<div class="today-panel today-priority-panel">
+    <div class="today-panel-label">Capacidade da equipe</div>
+    <div class="today-capacity-status" style="color:${capColor}">
+      <span>${statusLabel}</span>
+      <span class="today-panel-value">${cap.pctCap}%</span>
+    </div>
+    <div class="today-progress">
+      <div class="today-progress-fill" style="width:${Math.min(cap.pctCap,100)}%;background:${capColor}"></div>
+    </div>
+    <div class="today-now-sub">${sanitize(shortMsg)}</div>
+    <details class="today-detail-panel" id="hoje-detalhes-capacidade" style="margin-top:10px">
+      <summary>Ver detalhes da capacidade</summary>
+      <div class="today-detail-body today-capacity-grid">
+        <span class="today-alert-label">Técnicos</span><span class="today-panel-value">${cap.nTecnicos} em campo</span>
+        <span class="today-alert-label">Janela observada</span><span class="today-panel-value">${janelaObservada}</span>
+        <span class="today-alert-label">Tempo alocado</span><span class="today-panel-value" style="color:${capColor}">${cap.hConsumido || formatarMinutosHM(cap.minOcupados || 0)} (${cap.pctCap}%)</span>
+        <span class="today-alert-label">Tempo livre</span><span class="today-panel-value">${cap.hLivre || formatarMinutosHM(cap.minDisponiveis || 0)}</span>
+        <span class="today-alert-label">Maior bloco</span><span class="today-panel-value">${formatarMinutosHM(cap.maiorBlocoLivreMin || 0)}</span>
+      </div>
+    </details>
+  </div>`;
+}
+
+function hojeConflitosDetalhesHtml(A) {
+  const jornadaAviso = A.conflitosJornada.filter(c => !c.ehCedo);
+  if (!A.sobrecarga.length && !A.conflitosHorario.length && !A.conflitosJornada.length) return '';
+  return `<details class="today-detail-panel" id="hoje-detalhes-conflitos">
+    <summary>Ver conflitos e avisos operacionais</summary>
+    <div class="today-detail-body today-alert-list">
+      ${A.sobrecarga.map(s => `<div class="today-alert-row compact"><span class="chip chip-yellow">Sobrecarga</span><span class="today-alert-name">${sanitize(getEquipeTexto(s))}</span><span class="today-alert-label">${s.count} serviços</span></div>`).join('')}
+      ${A.conflitosHorario.map(c => {
+        const F1 = sf(c.s1), F2 = sf(c.s2);
+        return `<div class="today-alert-row compact"><span class="chip chip-yellow">Conflito</span><span class="today-alert-name">${sanitize(c.equipe)}</span><span class="today-alert-time">${sanitize(F1.horario || '—')}</span><span class="today-alert-name">${sanitize(F1.cliente)}</span><span class="today-alert-label">→</span><span class="today-alert-time">${sanitize(F2.horario || '—')}</span><span class="today-alert-name">${sanitize(F2.cliente)}</span><span class="chip chip-yellow">gap ${sanitize(c.gap)}min</span></div>`;
+      }).join('')}
+      ${A.conflitosJornada.map(c => {
+        const F = sf(c.svHoje);
+        return `<div class="today-alert-row compact"><span class="chip ${c.ehCedo ? 'chip-red' : 'chip-purple'}">Jornada</span><span class="today-alert-name">${sanitize(c.tecnico)}</span><span class="today-alert-label">hoje</span><span class="today-alert-time">${sanitize(F.horario || '—')}</span><span class="today-alert-name">${sanitize(F.cliente)}</span></div>`;
+      }).join('')}
+      ${jornadaAviso.length ? '' : ''}
+    </div>
+  </details>`;
 }
 
 // ── Navegação de data ──────────────────────────
@@ -11312,7 +11548,7 @@ function renderHoje() {
   // ── Sem serviços ──
   if (!daySvcs.length) {
     summaryEl.style.display = 'block';
-    summaryEl.innerHTML = hojeAcoesAgoraHtml({ atrasados:[], semEquipe:[], reagendados:[] }, d);
+    summaryEl.innerHTML = hojeSemServicosHtml(d);
     kanbanEl.innerHTML = `<div style="padding:60px 20px;text-align:center;color:var(--text3);grid-column:1/-1">
       <div style="font-size:48px;margin-bottom:16px">📅</div>
       <div style="font-family:var(--display);font-size:16px;font-weight:700;color:var(--text2);margin-bottom:8px">Nenhum serviço nesta data</div>
@@ -11332,234 +11568,14 @@ function renderHoje() {
   document.getElementById('hoje-title').textContent = A.isToday ? `O que precisa de atenção hoje — ${br}` : `Painel — ${br}`;
   document.getElementById('hoje-sub').textContent   = `${A.total} serviço(s) · ${A.exec} executado(s) · ${A.pend} pendente(s)`;
 
-  const pctColor = A.pct >= 80 ? 'var(--green)' : A.pct >= 50 ? 'var(--orange)' : 'var(--red)';
-  const cap      = A.capacidade;
-  const capColor = cap.statusCap === 'sobrecarregado' ? 'var(--red)' : cap.statusCap === 'ocioso' ? 'var(--blue)' : 'var(--green)';
-  const capIcon  = cap.statusCap === 'sobrecarregado' ? '🔴' : cap.statusCap === 'ocioso' ? '🔵' : '🟢';
-  const janelaObservada = `${formatarHoraDoDia(cap.inicioObservadoMin)}–${formatarHoraDoDia(cap.fimObservadoMin)}`;
-  const capMsg   = cap.statusCap === 'sobrecarregado'
-    ? 'Capacidade excedida — considere redistribuir'
-    : cap.statusCap === 'ocioso'
-    ? cap.slotsLivres > 0
-      ? `Encaixe conservador: até ${cap.slotsLivres} serviço(s) médio(s)`
-      : 'Há folga, mas não em blocos bons para novo encaixe'
-    : 'Capacidade bem distribuída';
-
   // ════════════════════════════════════════════
   // CONSTRUÇÃO DO HTML DO SUMMARY
-  // Ordem: críticos → avisos → capacidade + progresso
+  // Ordem: prioridades → execução → capacidade → detalhes
   // ════════════════════════════════════════════
   let html = '<div class="today-summary-stack">';
-  html += hojeAcoesAgoraHtml(A, d);
-
-  // â”€â”€ CRÃTICO 1: Serviços Atrasados ──
-  if (A.atrasados.length) {
-    const agoraMin = new Date().getHours()*60 + new Date().getMinutes();
-    html += `<div class="today-alert critical">
-      <div class="today-alert-head">
-        <span class="today-alert-icon">🚨</span>
-        <span class="today-alert-title">${A.atrasados.length} serviço(s) atrasado(s) — horário já passou</span>
-      </div>
-      <div class="today-alert-list">
-        ${A.atrasados.map(s => {
-          const F = sf(s);
-          const min = hojeParseMin(F.horario)||0;
-          const atrMin = agoraMin - min;
-          return `<div class="today-alert-row">
-            <span class="today-alert-time" style="color:var(--red);border-color:rgba(220,38,38,.25);background:rgba(220,38,38,.12)">${F.horario||'—'}</span>
-            <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
-            <span class="today-alert-label">${F.equipe||'sem técnico'}</span>
-            <span class="chip chip-red">+${atrMin}min</span>
-            <div class="today-alert-actions">
-              <button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Marcar executado</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-
-  // â”€â”€ CRÃTICO 2: Conflito de Jornada (início cedo após noturno) ──
-  const jornadaCritica = A.conflitosJornada.filter(c => c.ehCedo);
-  if (jornadaCritica.length) {
-    html += `<div class="today-alert critical">
-      <div class="today-alert-head">
-        <span class="today-alert-icon">⛔</span>
-        <span class="today-alert-title">Conflito de jornada — início cedo após turno noturno</span>
-      </div>
-      <div class="today-alert-sub">Regra: quem trabalhou após ${OP.HORA_NOTURNA}h não deve iniciar antes das 0${OP.HORA_CEDO}:00 do dia seguinte.</div>
-      <div class="today-alert-list">
-        ${jornadaCritica.map(c => {
-          const F = sf(c.svHoje);
-          const nome = c.tecnico.replace(/(^\w|\s\w)/g, m => m.toUpperCase());
-          const horOntem = c.svOntem ? (c.svOntem.horario||c.svOntem.hr||'?') : '?';
-          return `<div class="today-alert-row compact">
-            <span class="today-alert-name" style="color:var(--red)">${nome}</span>
-            <span class="today-alert-label">ontem até</span>
-            <span class="today-alert-time" style="color:var(--red);border-color:rgba(220,38,38,.25);background:rgba(220,38,38,.12)">${horOntem}</span>
-            <span class="today-alert-label">hoje às</span>
-            <span class="today-alert-time" style="color:var(--red);border-color:rgba(220,38,38,.25);background:rgba(220,38,38,.12)">${F.horario||'?'}</span>
-            <span class="today-alert-label">em</span>
-            <span class="today-alert-name">${F.cliente}</span>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-
-  // ── AVISO 1: Sem equipe + Reagendados ──
-  if (A.semEquipe.length || A.reagendados.length) {
-    html += `<div class="today-alert warn">
-      <div class="today-alert-head">
-        <span class="today-alert-icon">⚠️</span>
-        <span class="today-alert-title">Pendências de hoje — ${A.semEquipe.length + A.reagendados.length} item(s)</span>
-      </div>
-      <div class="today-alert-list">
-        ${A.semEquipe.map(s => {
-          const F = sf(s);
-          return `<div class="today-alert-row">
-            <span class="chip chip-orange">Definir técnico</span>
-            <span class="today-alert-time">${F.horario||'—'}</span>
-            <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
-            <span class="today-alert-label">${F.tipo||'—'}</span>
-            <div class="today-alert-actions">
-              <button class="svc-btn reagend" style="background:var(--orange);color:white;border-color:var(--orange)" onclick="abrirEdicaoEquipe(${jsArg(s.id)})">Definir técnico</button>
-            </div>
-          </div>`;
-        }).join('')}
-        ${A.reagendados.map(s => {
-          const F = sf(s);
-          return `<div class="today-alert-row">
-            <span class="chip chip-yellow">Reagendado</span>
-            <span class="today-alert-time">${F.horario||'—'}</span>
-            <span class="today-alert-name" style="flex:1;min-width:120px">${F.cliente}</span>
-            <div class="today-alert-actions">
-              <button class="svc-btn reagend" onclick="showSvcDetail(${jsArg(s.id)})">Ver serviço</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-
-  // ── AVISO 2: Sobrecarga ──
-  if (A.sobrecarga.length) {
-    html += `<div class="today-alert warn">
-      <div class="today-alert-head">
-        <span class="today-alert-icon">🔥</span>
-        <span class="today-alert-title">${A.sobrecarga.length} equipe(s) sobrecarregada(s) — ≥ ${OP.SOBRECARGA_LIM} serviços</span>
-      </div>
-      <div class="today-pill-list">
-        ${A.sobrecarga.map(s => `<div class="today-pill">
-          <strong style="color:var(--yellow)">${getEquipeTexto(s)}</strong> · ${s.count} serviços
-        </div>`).join('')}
-      </div>
-    </div>`;
-  }
-
-  // ── AVISO 3: Conflitos de Horário ──
-  if (A.conflitosHorario.length) {
-    html += `<div class="today-alert warn">
-      <div class="today-alert-head">
-        <span class="today-alert-icon">⏱</span>
-        <span class="today-alert-title">${A.conflitosHorario.length} conflito(s) de horário — gap &lt; ${OP.GAP_MINIMO_MIN}min entre serviços</span>
-      </div>
-      <div class="today-alert-list">
-        ${A.conflitosHorario.map(c => {
-          const F1 = sf(c.s1), F2 = sf(c.s2);
-          return `<div class="today-alert-row compact">
-            <span class="today-alert-label" style="font-weight:700;color:var(--yellow)">${c.equipe}</span>
-            <span class="today-alert-time">${F1.horario||'—'}</span>
-            <span class="today-alert-name">${F1.cliente}</span>
-            <span class="today-alert-label">→</span>
-            <span class="today-alert-time">${F2.horario||'—'}</span>
-            <span class="today-alert-name">${F2.cliente}</span>
-            <span class="chip chip-yellow">gap ${c.gap}min</span>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-
-  // ── INFO: Jornada (aviso, não crítico) ──
-  const jornadaAviso = A.conflitosJornada.filter(c => !c.ehCedo);
-  if (jornadaAviso.length) {
-    html += `<div class="today-alert info">
-      <div class="today-alert-head">
-        <span class="today-alert-icon">🌙</span>
-        <span class="today-alert-title">Técnico(s) com turno noturno ontem — verificar descanso</span>
-      </div>
-      <div class="today-pill-list">
-        ${jornadaAviso.map(c => {
-          const nome = c.tecnico.replace(/(^\w|\s\w)/g, m => m.toUpperCase());
-          const horOntem = c.svOntem ? (c.svOntem.horario||c.svOntem.hr||'?') : '?';
-          return `<span class="today-pill" style="color:var(--purple);border-color:rgba(124,58,237,.22)">${nome} <span style="opacity:.7">(ontem às ${horOntem})</span></span>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-
-  // ── Painel: Capacidade + Progresso ──
-  html += `<div class="today-overview">
-    <div class="today-overview-grid">
-
-      <div class="today-panel">
-        <div class="today-panel-head">
-          <span class="today-panel-label">Execução do dia</span>
-          <span class="today-panel-value" style="color:${pctColor}">${A.exec}/${A.total} · ${A.pct}%</span>
-        </div>
-        <div class="today-progress">
-          <div class="today-progress-fill" style="width:${A.pct}%;background:${pctColor}"></div>
-        </div>
-        <div class="today-kpi-row">
-          <div class="today-kpi" style="background:var(--green-bg)">
-            <div class="today-kpi-value" style="color:var(--green)">${A.exec}</div>
-            <div class="today-kpi-label" style="color:var(--green)">Executados</div>
-          </div>
-          <div class="today-kpi" style="background:var(--blue-bg)">
-            <div class="today-kpi-value" style="color:var(--blue2)">${A.pend}</div>
-            <div class="today-kpi-label" style="color:var(--blue2)">Pendentes</div>
-          </div>
-          ${A.reagend ? `<div class="today-kpi" style="background:var(--orange-bg)">
-            <div class="today-kpi-value" style="color:var(--orange)">${A.reagend}</div>
-            <div class="today-kpi-label" style="color:var(--orange)">Reagendados</div>
-          </div>` : ''}
-          ${A.cancel ? `<div class="today-kpi" style="background:var(--red-bg)">
-            <div class="today-kpi-value" style="color:var(--red)">${A.cancel}</div>
-            <div class="today-kpi-label" style="color:var(--red)">Cancelados</div>
-          </div>` : ''}
-        </div>
-      </div>
-
-      <div class="today-panel">
-        <div class="today-panel-label">Capacidade real da equipe</div>
-        <div class="today-capacity-status" style="color:${capColor}">
-          <span style="font-size:15px">${capIcon}</span>
-          <span>${capMsg}</span>
-        </div>
-        <div class="today-progress">
-          <div class="today-progress-fill" style="width:${Math.min(cap.pctCap,100)}%;background:${capColor}"></div>
-        </div>
-        <div class="today-capacity-grid">
-          <span class="today-alert-label">👷 Técnicos</span>
-          <span class="today-panel-value">${cap.nTecnicos} em campo</span>
-          <span class="today-alert-label">⏱ Janela observada</span>
-          <span class="today-panel-value">${janelaObservada} · base ${formatarMinutosHM(JORNADA_MIN)}</span>
-          <span class="today-alert-label">📊 Tempo alocado</span>
-          <span class="today-panel-value" style="color:${capColor}">${cap.hConsumido||Math.floor(cap.minOcupados/60)+'h'+cap.minOcupados%60+'min'} (${cap.pctCap}%)</span>
-          <span class="today-alert-label">🕒 Tempo livre</span>
-          <span class="today-panel-value" style="color:${cap.slotsLivres>0?'var(--green)':'var(--text2)'}">${cap.hLivre||Math.floor(cap.minDisponiveis/60)+'h '+cap.minDisponiveis%60+'min'}</span>
-          <span class="today-alert-label">📦 Maior bloco</span>
-          <span class="today-panel-value" style="color:${cap.maiorBlocoLivreMin >= cap.duracaoReferenciaMin ? 'var(--green)' : 'var(--orange)'}">${formatarMinutosHM(cap.maiorBlocoLivreMin || 0)}</span>
-          <span class="today-alert-label">${cap.slotsLivres > 0 ? '✅ Encaixes cons.' : '⚠ Encaixes cons.'}</span>
-          <span class="today-panel-value" style="color:${cap.slotsLivres > 0 ? 'var(--green)' : 'var(--text2)'}">${cap.slotsLivres > 0 ? `até ${cap.slotsLivres} serviço(s) médio(s)` : 'sem bloco bom para novo encaixe'}</span>
-        </div>
-        <div class="today-capacity-note">Base: blocos livres reais por técnico + duração de referência ${formatarMinutosHM(cap.duracaoReferenciaMin || TEMPO_MEDIO_SERVICO_PADRAO)} + folga operacional de 30min</div>
-      </div>
-
-    </div>
-  </div>`;
+  html += hojePrioridadesHtml(A, d);
+  html += `<div class="today-compact-overview">${hojeResumoExecucaoHtml(A)}${hojeCapacidadeCompactaHtml(A.capacidade)}</div>`;
+  html += hojeConflitosDetalhesHtml(A);
 
   html += '</div>';
   summaryEl.style.display = 'block';
@@ -18506,8 +18522,12 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
   const urgentesCampo = eventosDia.filter(ev => isFieldOpsEventPending(ev) && getFieldOpsEventPriority(ev) === 'urgente').length;
   const escalonarCampo = eventosDia.filter(shouldEscalateFieldOpsWhatsapp).length;
   const recados = (technicianMessages || []).filter(msg => !msg.date || msg.date === date).slice(0, 8);
+  const openFieldOps = !!(urgentesCampo || escalonarCampo || recados.some(msg => !msg.lido));
   el.style.display = '';
   el.innerHTML = `
+    <details class="today-detail-panel" id="field-ops-panel-details" ${openFieldOps ? 'open' : ''}>
+      <summary>Central de campo e recados ${pendentesCampo || recados.length ? `· ${pendentesCampo} pendente(s), ${recados.length} recado(s)` : ''}</summary>
+      <div class="today-detail-body">
     <div class="grid-2" style="align-items:start">
       <div class="card" style="padding:14px">
         <div class="flex ic sb mb2">
@@ -18581,7 +18601,9 @@ function renderFieldOpsPanel(data = getFieldOpsDate()) {
           </div>`).join('') : '<div class="text-muted">Nenhum recado nesta data.</div>'}
         </div>
       </div>
-    </div>`;
+    </div>
+      </div>
+    </details>`;
 }
 
 async function marcarEventoCampoVisto(id) {
