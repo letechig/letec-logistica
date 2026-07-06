@@ -20787,12 +20787,14 @@ async function carregarTecnicosConfig() {
   try {
     const data = await requestBackendJson('/api/technicians');
     const items = data || [];
+    const activeCount = items.filter(t => t.ativo !== false).length;
+    const portalCount = items.filter(t => t.portal_login_enabled && t.has_portal_pin).length;
     container.innerHTML = `
       <div class="card" style="margin-bottom:16px;padding:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:12px;flex-wrap:wrap">
           <div>
-            <div class="card-label">👷 Técnicos cadastrados (${items.length})</div>
-            <div class="section-sub" style="font-size:12px;margin-top:4px">Trocar PIN derruba sessões antigas. Desconectar sessões mantém o PIN atual e força novo login no aparelho.</div>
+            <div class="card-label">👷 Técnicos</div>
+            <div class="section-sub" style="font-size:12px;margin-top:4px">${items.length} cadastrados · ${activeCount} ativos · ${portalCount} com portal</div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="formNovoTecnico()">+ Novo Técnico</button>
         </div>
@@ -20807,24 +20809,35 @@ async function carregarTecnicosConfig() {
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('form-novo-tecnico').style.display='none'">Cancelar</button>
           </div>
         </div>
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>WhatsApp</th><th>Ativo</th><th>Portal</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(t => `<tr>
-            <td class="mono">${sanitize(t.id)}</td>
-            <td class="bold">${sanitize(t.nome)}</td>
-            <td class="mono">${sanitize(t.telefone || '—')}</td>
-            <td class="mono">${sanitize(t.whatsapp || '—')}</td>
-            <td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td>
-            <td>${t.portal_login_enabled && t.has_portal_pin ? '<span class="chip chip-green">Acesso habilitado</span>' : '<span class="chip chip-orange">Sem PIN</span>'}</td>
-            <td style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button>
-              <button class="btn btn-ghost btn-sm" onclick="gerarPinTecnico(${jsArg(t.id)}, ${jsArg(t.nome || 'Tecnico')})">${t.has_portal_pin ? 'Trocar PIN' : 'Gerar PIN'}</button>
-              <button class="btn btn-ghost btn-sm" onclick="revogarAcessoTecnico(${jsArg(t.id)})">Desconectar sessões</button>
-            </td>
-          </tr>`).join('')}</tbody>
-        </table></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+          ${items.map(t => renderTecnicoConfigCard(t)).join('')}
+        </div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
+}
+function renderTecnicoConfigCard(t = {}) {
+  const nome = t.nome || 'Técnico';
+  const contato = [t.telefone, t.whatsapp && t.whatsapp !== t.telefone ? t.whatsapp : ''].filter(Boolean);
+  const portalOk = t.portal_login_enabled && t.has_portal_pin;
+  return `
+    <div style="border:1px solid var(--border);border-radius:var(--r2);padding:12px;background:#fff;display:flex;flex-direction:column;gap:10px;min-height:150px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+        <div style="min-width:0">
+          <div class="bold" style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sanitize(nome)}</div>
+          <div class="text-muted mono" style="font-size:11px;margin-top:2px">${sanitize(contato.length ? contato.join(' · ') : 'sem telefone')}</div>
+        </div>
+        ${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${portalOk ? '<span class="chip chip-green">Portal habilitado</span>' : '<span class="chip chip-orange">Sem PIN</span>'}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:auto">
+        <button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button>
+        <button class="btn btn-ghost btn-sm" onclick="gerarPinTecnico(${jsArg(t.id)}, ${jsArg(nome)})">${t.has_portal_pin ? 'Trocar PIN' : 'Gerar PIN'}</button>
+        <button class="btn btn-ghost btn-sm" style="grid-column:1/-1" onclick="revogarAcessoTecnico(${jsArg(t.id)})">Desconectar sessões</button>
+      </div>
+    </div>
+  `;
 }
 function formNovoTecnico() {
   document.getElementById('form-novo-tecnico').style.display = '';
