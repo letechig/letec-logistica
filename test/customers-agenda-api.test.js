@@ -415,6 +415,21 @@ test('GET e PUT /api/customers/:id/contacts salvam multiplos contatos', async ()
   });
 });
 
+test('DELETE /api/technicians/:id remove tecnico freelancer', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.technicians.push({ id: 'free-1', nome: 'Freelancer', ativo: false });
+    const response = await fetch(`${baseUrl}/api/technicians/free-1`, { method: 'DELETE' });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.technician.id, 'free-1');
+    assert.equal(state.technicians.some(item => item.id === 'free-1'), false);
+
+    const missing = await fetch(`${baseUrl}/api/technicians/free-1`, { method: 'DELETE' });
+    assert.equal(missing.status, 404);
+  });
+});
+
 test('POST /api/customers bloqueia duplicidade por WhatsApp e CPF/CNPJ', async () => {
   await withServer(async (baseUrl, state) => {
     state.customers[0].whatsapp = '11988887777';

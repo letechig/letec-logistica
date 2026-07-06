@@ -20809,35 +20809,31 @@ async function carregarTecnicosConfig() {
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('form-novo-tecnico').style.display='none'">Cancelar</button>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
-          ${items.map(t => renderTecnicoConfigCard(t)).join('')}
-        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Técnico</th><th>Contato</th><th>Status</th><th>Portal</th><th>Ações</th></tr></thead>
+          <tbody>${items.map(t => renderTecnicoConfigRow(t)).join('')}</tbody>
+        </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
 }
-function renderTecnicoConfigCard(t = {}) {
+function renderTecnicoConfigRow(t = {}) {
   const nome = t.nome || 'Técnico';
   const contato = [t.telefone, t.whatsapp && t.whatsapp !== t.telefone ? t.whatsapp : ''].filter(Boolean);
   const portalOk = t.portal_login_enabled && t.has_portal_pin;
-  return `
-    <div style="border:1px solid var(--border);border-radius:var(--r2);padding:12px;background:#fff;display:flex;flex-direction:column;gap:10px;min-height:150px">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
-        <div style="min-width:0">
-          <div class="bold" style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sanitize(nome)}</div>
-          <div class="text-muted mono" style="font-size:11px;margin-top:2px">${sanitize(contato.length ? contato.join(' · ') : 'sem telefone')}</div>
-        </div>
-        ${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}
-      </div>
+  return `<tr>
+    <td class="bold">${sanitize(nome)}</td>
+    <td class="mono">${sanitize(contato.length ? contato.join(' · ') : 'sem telefone')}</td>
+    <td>${t.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td>
+    <td>${portalOk ? '<span class="chip chip-green">Portal habilitado</span>' : '<span class="chip chip-orange">Sem PIN</span>'}</td>
+    <td>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${portalOk ? '<span class="chip chip-green">Portal habilitado</span>' : '<span class="chip chip-orange">Sem PIN</span>'}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:auto">
         <button class="btn btn-ghost btn-sm" onclick="toggleTecnico(${jsArg(t.id)}, ${!t.ativo})">${t.ativo ? 'Desativar' : 'Ativar'}</button>
         <button class="btn btn-ghost btn-sm" onclick="gerarPinTecnico(${jsArg(t.id)}, ${jsArg(nome)})">${t.has_portal_pin ? 'Trocar PIN' : 'Gerar PIN'}</button>
-        <button class="btn btn-ghost btn-sm" style="grid-column:1/-1" onclick="revogarAcessoTecnico(${jsArg(t.id)})">Desconectar sessões</button>
+        <button class="btn btn-ghost btn-sm" onclick="revogarAcessoTecnico(${jsArg(t.id)})">Desconectar sessões</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="excluirTecnico(${jsArg(t.id)}, ${jsArg(nome)})">Excluir</button>
       </div>
-    </div>
-  `;
+    </td>
+  </tr>`;
 }
 function formNovoTecnico() {
   document.getElementById('form-novo-tecnico').style.display = '';
@@ -20893,6 +20889,17 @@ async function revogarAcessoTecnico(id) {
     toast('❌ Erro ao desconectar sessões: ' + e.message, 'err');
   }
 }
+async function excluirTecnico(id, nome) {
+  if (!confirmAction(`Excluir definitivamente o técnico "${nome}"? Use isso apenas para freelancer/cadastro que não deve aparecer mais.`)) return;
+  try {
+    await requestBackendJson(`/api/technicians/${encodeURIComponent(id)}`, { method:'DELETE' });
+    toast('✅ Técnico excluído', 'ok');
+    await carregarTecnicosConfig();
+    await carregarTecnicos();
+  } catch(e) {
+    toast('❌ Erro ao excluir técnico: ' + e.message, 'err');
+  }
+}
 async function carregarVeiculosConfig() {
   const container = document.getElementById('config-veiculos');
   container.innerHTML = '<div class="text-muted">Carregando...</div>';
@@ -20910,8 +20917,8 @@ async function carregarVeiculosConfig() {
           <button class="btn btn-primary btn-sm" onclick="abrirCadastroVeiculoFrota(null, 'config')">Novo veículo</button>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>ID</th><th>Nome</th><th>Placa</th><th>KM</th><th>Rodízio</th><th>Ativo</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(v => `<tr><td class="mono">${sanitize(v.id)}</td><td class="bold">${sanitize(v.nome)}</td><td class="mono">${sanitize(v.placa || '—')}</td><td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td><td>${sanitize(v.rodizio?.dia_rodizio || '—')}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)}, 'config')">Editar</button><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${jsArg(v.id)}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button><button class="btn btn-ghost btn-sm" onclick="abrirVeiculoNaFrota(${jsArg(v.id)})">Abrir Frota</button></td></tr>`).join('')}</tbody>
+          <thead><tr><th>Veículo</th><th>Placa</th><th>KM</th><th>Rodízio</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>${items.map(v => `<tr><td class="bold">${sanitize(v.nome)}</td><td class="mono">${sanitize(v.placa || '—')}</td><td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td><td>${sanitize(v.rodizio?.dia_rodizio || '—')}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)}, 'config')">Editar</button><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${jsArg(v.id)}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button><button class="btn btn-ghost btn-sm" onclick="abrirVeiculoNaFrota(${jsArg(v.id)})">Abrir Frota</button></td></tr>`).join('')}</tbody>
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }

@@ -4579,6 +4579,25 @@ app.put('/api/technicians/:id', strictLimiter, async (req, res) => {
   }
 });
 
+app.delete('/api/technicians/:id', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const technicianId = req.params.id;
+    const before = await maybeSingle(db.from('technicians').select('*').eq('id', technicianId));
+    if (!before) return res.status(404).json({ error: 'Tecnico nao encontrado' });
+    try {
+      await db.from('technician_sessions').delete().eq('technician_id', technicianId).select();
+    } catch(e) {}
+    const { data, error } = await db.from('technicians').delete().eq('id', technicianId).select();
+    if (error) throw error;
+    const deleted = data?.[0] || before;
+    res.json({ ok: true, technician: publicTechnician(deleted) });
+  } catch (error) {
+    console.error('[DELETE /api/technicians/:id] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao excluir tecnico' });
+  }
+});
+
 app.post('/api/technicians/:id/portal-pin', strictLimiter, async (req, res) => {
   try {
     const actor = await requireAdminOrOperator(req, res);
