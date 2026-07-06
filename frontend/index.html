@@ -2103,6 +2103,8 @@ td.bold { color: var(--text); font-weight: 600; }
 .inventory-cat-card-meta { font-size:11px; color:var(--text3); line-height:1.45; }
 .inventory-pagination { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:12px; color:var(--text3); font-size:12px; }
 .inventory-pagination-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.inventory-movements-table-wrap { max-height:520px; overflow:auto; }
+.inventory-movements-table-wrap thead th { position:sticky; top:0; z-index:2; }
 
 /* ─── UI REFRESH V1 ───────────────────────────── */
 .ui-page-head {
@@ -2871,6 +2873,7 @@ textarea { max-width:100%; }
   .pill-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
   .pill-bar .pill-btn { flex: 0 0 auto; }
   .inventory-category-summary { grid-template-columns: 1fr; }
+  .inventory-movements-table-wrap { max-height:420px; }
   /* Roteiro cards */
   .rot-card { padding: 10px; }
   /* Modal full height */
@@ -4429,10 +4432,10 @@ async function carregarVeiculos(){
           </div>
         </div>
         <div class="filter-bar">
-          <input type="date" class="fsel" id="inventory-filter-date" onchange="renderInventory()">
-          <select class="fsel" id="inventory-filter-product" onchange="renderInventory()"><option value="">Todos produtos</option></select>
-          <select class="fsel" id="inventory-filter-vehicle" onchange="renderInventory()"><option value="">Todos veículos</option></select>
-          <select class="fsel" id="inventory-filter-type" onchange="renderInventory()">
+          <input type="date" class="fsel" id="inventory-filter-date" onchange="handleInventoryMovementFilterChange()">
+          <select class="fsel" id="inventory-filter-product" onchange="handleInventoryMovementFilterChange()"><option value="">Todos produtos</option></select>
+          <select class="fsel" id="inventory-filter-vehicle" onchange="handleInventoryMovementFilterChange()"><option value="">Todos veículos</option></select>
+          <select class="fsel" id="inventory-filter-type" onchange="handleInventoryMovementFilterChange()">
             <option value="">Todos tipos</option>
             <option value="entrada">Entradas</option>
             <option value="saida">Saídas</option>
@@ -4440,12 +4443,13 @@ async function carregarVeiculos(){
           </select>
           <button class="btn btn-ghost btn-sm" onclick="clearInventoryFilters()">Limpar</button>
         </div>
-        <div class="tbl-wrap">
+        <div class="tbl-wrap inventory-movements-table-wrap">
           <table>
             <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Veículo</th><th>Motivo/OS</th><th>Operador</th><th>Obs.</th></tr></thead>
             <tbody id="inventory-movements-tbody"></tbody>
           </table>
         </div>
+        <div id="inventory-movements-pagination" class="inventory-pagination"></div>
       </div>
     </div>
 
@@ -8042,6 +8046,7 @@ let inventoryModalMode = null;
 let inventoryEditingProductId = null;
 let inventoryProductFilter = 'todos';
 let inventoryProductPage = 1;
+let inventoryMovementPage = 1;
 let fleetVehicles = [];
 let fleetAlerts = [];
 let fleetSelectedVehicle = null;
@@ -20301,6 +20306,40 @@ function renderInventoryProductPagination(totalItems, visibleItems, totalPages, 
     </div>`;
 }
 
+function setInventoryMovementPage(page) {
+  inventoryMovementPage = Math.max(1, Number(page) || 1);
+  renderInventory();
+}
+
+function handleInventoryMovementFilterChange() {
+  inventoryMovementPage = 1;
+  renderInventory();
+}
+
+function renderInventoryMovementPagination(totalItems, visibleItems, totalPages, currentPage) {
+  const el = document.getElementById('inventory-movements-pagination');
+  if (!el) return;
+  if (!totalItems) {
+    el.innerHTML = '';
+    return;
+  }
+  const pageSize = 25;
+  const start = visibleItems ? ((currentPage - 1) * pageSize) + 1 : 0;
+  const end = visibleItems ? start + visibleItems - 1 : 0;
+  const shouldShowAllPages = totalPages <= 7;
+  const pageButtons = shouldShowAllPages ? Array.from({ length: totalPages }, (_, idx) => {
+    const page = idx + 1;
+    return `<button type="button" class="btn ${page === currentPage ? 'btn-primary' : 'btn-ghost'} btn-xs" onclick="setInventoryMovementPage(${page})">${page}</button>`;
+  }).join('') : `<span class="mono">${currentPage}/${totalPages}</span>`;
+  el.innerHTML = `
+    <span>Mostrando ${start}-${end} de ${totalItems} movimentaç${totalItems === 1 ? 'ão' : 'ões'}</span>
+    <div class="inventory-pagination-actions">
+      <button type="button" class="btn btn-ghost btn-xs" ${currentPage <= 1 ? 'disabled' : ''} onclick="setInventoryMovementPage(${currentPage - 1})">Anterior</button>
+      ${pageButtons}
+      <button type="button" class="btn btn-ghost btn-xs" ${currentPage >= totalPages ? 'disabled' : ''} onclick="setInventoryMovementPage(${currentPage + 1})">Próxima</button>
+    </div>`;
+}
+
 function updateInventoryFilterOptions() {
   const productEl = document.getElementById('inventory-filter-product');
   const vehicleEl = document.getElementById('inventory-filter-vehicle');
@@ -20336,6 +20375,8 @@ function renderInventory() {
     if (summary) summary.innerHTML = '';
     const pagination = document.getElementById('inventory-products-pagination');
     if (pagination) pagination.innerHTML = '';
+    const movementsPagination = document.getElementById('inventory-movements-pagination');
+    if (movementsPagination) movementsPagination.innerHTML = '';
     productsBody.innerHTML = '<tr><td colspan="10" class="text-muted">Estoque indisponível até a migração ser aplicada.</td></tr>';
     movementsBody.innerHTML = '<tr><td colspan="8" class="text-muted">Sem histórico disponível.</td></tr>';
     return;
@@ -20401,8 +20442,12 @@ function renderInventory() {
     if (fVehicle && String(m.veiculo_nome || '') !== fVehicle) return false;
     if (fType && m.tipo !== fType) return false;
     return true;
-  }).slice(0, 200);
-  movementsBody.innerHTML = movements.length ? movements.map(m => {
+  });
+  const movementPageSize = 25;
+  const movementPageCount = Math.max(1, Math.ceil(movements.length / movementPageSize));
+  inventoryMovementPage = Math.max(1, Math.min(movementPageCount, inventoryMovementPage));
+  const pagedMovements = movements.slice((inventoryMovementPage - 1) * movementPageSize, inventoryMovementPage * movementPageSize);
+  movementsBody.innerHTML = pagedMovements.length ? pagedMovements.map(m => {
     const meta = inventoryMovementMeta(m.tipo);
     const qty = Math.abs(inventoryNum(m.quantidade));
     const signed = m.tipo === 'ajuste' ? inventoryFmtQty(inventoryNum(m.quantidade)) : `${meta.sign}${inventoryFmtQty(qty)}`;
@@ -20417,6 +20462,7 @@ function renderInventory() {
       <td>${sanitize(m.observacoes || '—')}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="8" class="text-muted">Nenhuma movimentação encontrada.</td></tr>';
+  renderInventoryMovementPagination(movements.length, pagedMovements.length, movementPageCount, inventoryMovementPage);
 }
 
 function clearInventoryFilters() {
@@ -20424,6 +20470,7 @@ function clearInventoryFilters() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  inventoryMovementPage = 1;
   renderInventory();
 }
 
