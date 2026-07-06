@@ -802,7 +802,9 @@
           <div class="section-sub">Registre saida, retorno, veiculo e equipamentos.</div>
         </div>
 
-        <form id="daily-form" onsubmit="event.preventDefault(); saveDailyChecklist();">
+        <div class="portal-panel" id="daily-checklist-status" style="display:none"></div>
+
+        <form id="daily-form" onsubmit="event.preventDefault(); saveDailyChecklist('saida');">
           <div class="form-panel">
             <div class="step-title">1. Equipe</div>
             <div class="step-sub">Dados principais do dia.</div>
@@ -890,7 +892,10 @@
             <label for="cl-obs">Observacoes gerais</label>
             <textarea id="cl-obs" placeholder="Ocorrencias, problemas ou observacoes do dia"></textarea>
           </div>
-          <button class="primary" id="save-checklist-btn" type="submit" style="width:100%">Salvar checklist</button>
+          <div class="button-row">
+            <button class="primary" id="save-checklist-btn" type="submit" style="flex:1">Salvar saida do dia</button>
+            <button class="secondary" id="save-return-btn" type="button" onclick="saveDailyChecklist('retorno')" style="flex:1">Fechar retorno do dia</button>
+          </div>
         </div>
       </form>
     </section>
@@ -1059,7 +1064,31 @@
     const DATA_CACHE_KEY = 'letec_portal_tecnico_data_cache_v1';
     const CONTEXT_KEY = 'letec_portal_tecnico_context_v1';
     const TECH_SESSION_KEY = 'letec_portal_tecnico_session_v1';
-    const EQUIPAMENTOS = ['EPIs', 'Pulverizador', 'Iscas', 'Produtos', 'Ferramentas', 'Prancheta', 'Celular carregado', 'Documentos'];
+    const EQUIPMENT_CATALOG = {
+      "DS - Desinsetizacao": ["Balde","Cx de gel","Pulverizadeira (funil)","Pe de cabra","Bomba costal","Bomba amarela SL","Bomba aluminio","Puls Fog","Puls Fog quente","Luvas descartaveis","Mascara","Placa Cola","Adesivo Placa Cola PC","Armadilha Luminosa","Galao"],
+      "DR - Desratizacao": ["Caixa de DR","Pega Rat","Pulverizadeira","Porta Isca","Placa cola","Adesivo","Tunel","Balde"],
+      "DST - Desentupimento": ["Corda","Roter + 15m de mola","Hidrojateamento (com gatilho)","Mangueira 5m","Mangueira 15m","Mangueira 20m","Mangueira de jardim (laranja)","Mangueira de jardim (amarela)","Mangueira de jardim (verde)","Extensao + cone","Pe de cabra + pasta limpa a mao","Par de luvas verdes","Martelo de borracha","Alicate de bomba","Tufao","Extintor","Bota de borracha (pares)","Rooter de mao","Escada (varao)","Lanterna","Mangueira de bombeiro (agua suja)","Baldao Azul","Caixa de Ferramentas","Rastelo"],
+      "DSC - Cupim/Subterraneo": ["Agulha","Broca","Plug de agulha","Parafusadeira Fenda/Phillips","Caixa laranja","Bolsa Cupim Sub.","Seringa","Martelo de ferro","Trado","Bomba aluminio","Escada","Bomba de chao (gatilho)","Extensao","Lampada"],
+      "Cx d'Agua": ["Bombas","Mangueira","Botas de borracha (pares)","Panos","Extensao","Baldes","Potinhos","Esfregao","Rodo","Escada (vermelha)","Escada (azul)","Escada (marinho)","Cloro (para 10 mil)","Bico jateamento","Lanterna","Cx de Ferramentas"],
+      "HIG - Higienizacao": ["Extratora 220V","Bomba","Extensao","Pano","Tapete","Esfregao","Bico","Politriz 110v","Luva","Cheirinho","Produtos","Fita Adesiva","Fita Zebrada","Borrifador","trena"]
+    };
+    const EQUIPMENT_CATEGORY_BY_TOKEN = [
+      { token:'DSC', category:'DSC - Cupim/Subterraneo' },
+      { token:'CUPIM', category:'DSC - Cupim/Subterraneo' },
+      { token:'SUBTERRANEO', category:'DSC - Cupim/Subterraneo' },
+      { token:'DST', category:'DST - Desentupimento' },
+      { token:'DESENTUPIMENTO', category:'DST - Desentupimento' },
+      { token:'HIG', category:'HIG - Higienizacao' },
+      { token:'HIGIENIZACAO', category:'HIG - Higienizacao' },
+      { token:'LCA', category:"Cx d'Agua" },
+      { token:'CAIXA D AGUA', category:"Cx d'Agua" },
+      { token:'CX D AGUA', category:"Cx d'Agua" },
+      { token:'DR', category:'DR - Desratizacao' },
+      { token:'DESRATIZACAO', category:'DR - Desratizacao' },
+      { token:'RATIZACAO', category:'DR - Desratizacao' },
+      { token:'DS', category:'DS - Desinsetizacao' },
+      { token:'DESINSETIZACAO', category:'DS - Desinsetizacao' }
+    ];
     const FUEL = ['Cheio', '3/4', 'Metade', '1/4', 'Reserva'];
     const DEPARTURE_PHOTOS = [
       { key:'frente', label:'Frente do veiculo' },
@@ -1245,6 +1274,7 @@
     function queueItemTitle(item = {}) {
       if (item.type === 'service-update') return `Servico #${item.id || '?'}`;
       if (item.type === 'checklist-insert') return 'Checklist';
+      if (item.type === 'checklist-update') return `Retorno do checklist #${item.id || '?'}`;
       if (item.type === 'event-insert') return 'Evento';
       if (item.type === 'message-read') return `Recado #${item.id || '?'}`;
       return item.type || 'Pendencia';
@@ -1597,6 +1627,13 @@
       });
     }
 
+    function updateChecklistViaBackend(id, record) {
+      return requestBackendJson(`/api/checklists/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(record)
+      });
+    }
+
     function uploadChecklistPhoto(record, photo, etapa) {
       return requestBackendJson('/api/checklists/photos', {
         method: 'POST',
@@ -1635,6 +1672,21 @@
       return cleanRecord;
     }
 
+    async function prepareChecklistUpdateForSync(record) {
+      const ocorrencias = Array.isArray(record.ocorrencias)
+        ? record.ocorrencias.map(item => ({ ...item }))
+        : undefined;
+      const pendingOccurrence = record.__pending_occurrence_photo;
+      if (pendingOccurrence && ocorrencias?.[0]) {
+        ocorrencias[0].foto = await uploadChecklistPhoto(record, pendingOccurrence, 'ocorrencia');
+      }
+      const cleanRecord = { ...record };
+      if (ocorrencias) cleanRecord.ocorrencias = ocorrencias;
+      delete cleanRecord.__pending_departure_photos;
+      delete cleanRecord.__pending_occurrence_photo;
+      return cleanRecord;
+    }
+
     function createEventViaBackend(record) {
       return requestBackendJson('/api/technician-events', {
         method: 'POST',
@@ -1665,6 +1717,9 @@
           } else if (item.type === 'checklist-insert') {
             const record = await prepareChecklistRecordForSync(item.record);
             await createChecklistViaBackend(record);
+          } else if (item.type === 'checklist-update') {
+            const record = await prepareChecklistUpdateForSync(item.record);
+            await updateChecklistViaBackend(item.id, record);
           } else if (item.type === 'event-insert') {
             await createEventViaBackend(item.record);
           } else if (item.type === 'message-read') {
@@ -2625,20 +2680,188 @@ Portal: ${currentPortalLink()}${location}`;
       return DEPARTURE_PHOTOS.map(item => state.departurePhotos[item.key]).filter(Boolean);
     }
 
+    function normalizeEquipmentMatch(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function serviceTypeTextsForDay() {
+      const texts = [];
+      (state.services || []).forEach(service => {
+        if (Array.isArray(service.tipos)) texts.push(...service.tipos);
+        ['tiposervico', 'tipoServico', 'sc', 'tipo'].forEach(key => {
+          if (service[key]) texts.push(service[key]);
+        });
+      });
+      return texts.map(normalizeEquipmentMatch).filter(Boolean);
+    }
+
+    function serviceMatchesEquipmentToken(text, token) {
+      const normalizedToken = normalizeEquipmentMatch(token);
+      if (!normalizedToken) return false;
+      if (['DS', 'DR', 'DST', 'DSC', 'HIG', 'LCA'].includes(normalizedToken)) {
+        return new RegExp(`(^|\\s)${normalizedToken}(\\s|$)`).test(text);
+      }
+      return text.includes(normalizedToken);
+    }
+
+    function activeEquipmentCategories() {
+      const current = currentDailyChecklist();
+      if (current && isChecklistOpenForReturn(current)) {
+        const categoriesFromChecklist = [...new Set(
+          checklistStageItems(current, 'saida')
+            .map(row => row.category || row.categoria)
+            .filter(Boolean)
+        )];
+        if (categoriesFromChecklist.length) return categoriesFromChecklist;
+      }
+      const serviceTexts = serviceTypeTextsForDay();
+      const categories = [];
+      EQUIPMENT_CATEGORY_BY_TOKEN.forEach(rule => {
+        if (serviceTexts.some(text => serviceMatchesEquipmentToken(text, rule.token)) && !categories.includes(rule.category)) {
+          categories.push(rule.category);
+        }
+      });
+      return categories.length ? categories : Object.keys(EQUIPMENT_CATALOG);
+    }
+
+    function activeEquipmentItems() {
+      return activeEquipmentCategories().flatMap(category =>
+        (EQUIPMENT_CATALOG[category] || []).map(item => ({ category, item }))
+      );
+    }
+
+    function equipmentKey(category, item) {
+      return `${normalizeText(category)}|${normalizeText(item)}`;
+    }
+
+    function checklistStageItems(checklist = {}, stage = 'saida') {
+      const value = checklist.itens || {};
+      if (Array.isArray(value[stage])) return value[stage];
+      if (stage === 'saida' && Array.isArray(value.conferidos)) {
+        return value.conferidos.map(item => ({ category:'Equipamentos', item, presente:true, etapa:'saida', observacao:'' }));
+      }
+      return [];
+    }
+
+    function currentReturnPresentKeys() {
+      const current = currentDailyChecklist();
+      if (!current || !isChecklistOpenForReturn(current)) return null;
+      const keys = new Set();
+      checklistStageItems(current, 'saida')
+        .filter(row => row.presente !== false)
+        .forEach(row => keys.add(equipmentKey(row.category || row.categoria || 'Equipamentos', row.item)));
+      return keys;
+    }
+
     function renderEquipment() {
       const list = document.getElementById('equip-list');
-      list.innerHTML = EQUIPAMENTOS.map(item => `
-        <label class="equip-item">
-          <input type="checkbox" data-equip="${escapeHtml(item)}">
-          <span>${escapeHtml(item)}</span>
-        </label>
-      `).join('');
+      const returnKeys = currentReturnPresentKeys();
+      const categories = activeEquipmentCategories();
+      list.innerHTML = categories.map(category => {
+        const items = EQUIPMENT_CATALOG[category] || [];
+        return `
+          <div class="step-sub" style="margin:6px 0 0;font-weight:900;color:var(--text-2)">${escapeHtml(category)}</div>
+          ${items.map(item => {
+            const checked = returnKeys ? returnKeys.has(equipmentKey(category, item)) : false;
+            return `
+              <label class="equip-item">
+                <input type="checkbox" data-equip="${escapeHtml(item)}" data-category="${escapeHtml(category)}" ${checked ? 'checked' : ''}>
+                <span>${escapeHtml(item)}</span>
+              </label>
+            `;
+          }).join('')}
+        `;
+      }).join('');
+    }
+
+    function collectEquipmentStage(stage) {
+      const inputs = Array.from(document.querySelectorAll('#equip-list input[data-category][data-equip]'));
+      return activeEquipmentItems().map(row => {
+        const input = inputs.find(item =>
+          item.dataset.category === row.category && item.dataset.equip === row.item
+        );
+        return {
+          etapa: stage,
+          categoria: row.category,
+          item: row.item,
+          presente: !!input?.checked,
+          observacao: ''
+        };
+      });
+    }
+
+    function groupPresentEquipment(rows) {
+      return rows.reduce((acc, row) => {
+        if (!row.presente) return acc;
+        if (!acc[row.categoria]) acc[row.categoria] = [];
+        acc[row.categoria].push(row.item);
+        return acc;
+      }, {});
     }
 
     function renderChecklistDefaults() {
       document.getElementById('cl-data').value = portal.data;
       document.getElementById('cl-motorista').value = portal.tecnico === 'Tecnico' ? '' : portal.tecnico;
       if (portal.veiculo) selectVehicle(portal.veiculo);
+      renderDailyChecklistStatus();
+    }
+
+    function checklistMatchesToday(item = {}) {
+      const team = normalizeText(portalTeamForDay());
+      const tech = normalizeText(portal.tecnico);
+      const selectedVehicle = normalizeText(document.getElementById('cl-veiculo')?.value || portalVehicleForDay());
+      const itemTeam = normalizeText(item.equipe);
+      const itemVehicle = normalizeText(item.vei);
+      const names = normalizeText(`${item.motorista || ''} ${item.assistente || ''}`);
+      return item.date === portal.data && (!selectedVehicle || !itemVehicle || itemVehicle === selectedVehicle) && (
+        (team && itemTeam === team) ||
+        (tech && names.includes(tech)) ||
+        (!team && !tech)
+      );
+    }
+
+    function currentDailyChecklist() {
+      return (state.checklists || [])
+        .filter(checklistMatchesToday)
+        .sort((a, b) => new Date(b.created_at || b.id || 0) - new Date(a.created_at || a.id || 0))[0] || null;
+    }
+
+    function isChecklistOpenForReturn(item = {}) {
+      return !!item && (!item.hrc || !item.kmc || item.status === 'saida_aberta');
+    }
+
+    function renderDailyChecklistStatus() {
+      const box = document.getElementById('daily-checklist-status');
+      if (!box) return;
+      const current = currentDailyChecklist();
+      if (!current) {
+        box.style.display = 'block';
+        box.innerHTML = `
+          <div class="step-title">Checklist do dia</div>
+          <div class="meta">Nenhuma saida registrada hoje. Preencha a saida antes de iniciar o roteiro.</div>
+        `;
+        return;
+      }
+      const open = isChecklistOpenForReturn(current);
+      box.style.display = 'block';
+      box.innerHTML = `
+        <div class="step-title">${open ? 'Saida ja registrada' : 'Checklist do dia fechado'}</div>
+        <div class="meta">Veiculo: ${escapeHtml(current.vei || '-')} - Saida: ${escapeHtml(current.hrs || '-')} - KM: ${escapeHtml(current.kms || '-')}</div>
+        <div class="meta">${open ? 'No retorno, preencha KM chegada e hora chegada e toque em Fechar retorno do dia.' : `Retorno: ${escapeHtml(current.hrc || '-')} - KM: ${escapeHtml(current.kmc || '-')}`}</div>
+      `;
+      if (current.vei) selectVehicle(current.vei);
+      if (current.kms) document.getElementById('cl-kms').value = current.kms;
+      if (current.hrs) document.getElementById('cl-hs').value = current.hrs;
+      if (current.fuel) selectFuel(current.fuel);
+      if (current.motorista && !document.getElementById('cl-motorista').value) document.getElementById('cl-motorista').value = current.motorista;
+      if (current.assistente) document.getElementById('cl-assistente').value = current.assistente;
+      if (current.cartao) document.getElementById('cl-cartao').value = current.cartao;
     }
 
     function selectFinalState(value) {
@@ -2674,22 +2897,18 @@ Portal: ${currentPortalLink()}${location}`;
       document.querySelectorAll('#equip-list input[type="checkbox"]').forEach(cb => cb.checked = value);
     }
 
-    async function saveDailyChecklist() {
-      const btn = document.getElementById('save-checklist-btn');
+    async function saveDailyChecklist(mode = 'saida') {
+      const btn = document.getElementById(mode === 'retorno' ? 'save-return-btn' : 'save-checklist-btn');
       const date = document.getElementById('cl-data').value;
       const motorista = document.getElementById('cl-motorista').value.trim();
       const vei = document.getElementById('cl-veiculo').value;
       const obs = document.getElementById('cl-obs').value.trim();
       const hasav = document.getElementById('cl-avaria').checked;
       const avtxt = document.getElementById('cl-avaria-txt').value.trim();
+      const current = currentDailyChecklist();
 
       if (!date || !motorista || !vei) {
         toast('Preencha data, motorista e veiculo.', 'err');
-        return;
-      }
-      const missingPhotos = DEPARTURE_PHOTOS.filter(item => !state.departurePhotos[item.key]);
-      if (missingPhotos.length) {
-        toast(`Faltam fotos da saida: ${missingPhotos.map(item => item.label).join(', ')}.`, 'err');
         return;
       }
       if (hasav && !avtxt) {
@@ -2706,23 +2925,13 @@ Portal: ${currentPortalLink()}${location}`;
       }
 
       btn.disabled = true;
-      btn.textContent = 'Salvando...';
+      btn.textContent = mode === 'retorno' ? 'Fechando...' : 'Salvando...';
       const kms = parseInt(document.getElementById('cl-kms').value, 10) || null;
       const kmc = parseInt(document.getElementById('cl-kmc').value, 10) || null;
-      const checkedEquipment = Array.from(document.querySelectorAll('#equip-list input:checked')).map(cb => cb.dataset.equip);
-      const missingEquipment = EQUIPAMENTOS.filter(item => !checkedEquipment.includes(item));
-      if (missingEquipment.length && !obs) {
-        toast('Informe nas observacoes quais equipamentos ficaram faltando.', 'err');
-        btn.disabled = false;
-        btn.textContent = 'Salvar checklist';
-        return;
-      }
-      const equip = { conferidos: checkedEquipment };
-      const itens = {
-        conferidos: checkedEquipment,
-        faltantes: missingEquipment,
-        observacao_faltantes: missingEquipment.length ? obs : ''
-      };
+      const hrs = document.getElementById('cl-hs').value;
+      const hrc = document.getElementById('cl-hc').value;
+      const stageRows = collectEquipmentStage(mode);
+      const missingEquipment = stageRows.filter(row => !row.presente);
       const occurrence = hasav ? [{
         id: `ocorrencia-${Date.now()}`,
         tipo: 'veiculo_equipamento',
@@ -2730,7 +2939,120 @@ Portal: ${currentPortalLink()}${location}`;
         horario: nowIso(),
         foto: null
       }] : [];
-      const status = hasav || missingEquipment.length || state.finalDailyState === 'problema' ? 'problema' : 'completo';
+
+      if (mode === 'retorno') {
+        if (!current || !isChecklistOpenForReturn(current)) {
+          toast('Nenhuma saida aberta para fechar hoje.', 'err');
+          btn.disabled = false;
+          btn.textContent = 'Fechar retorno do dia';
+          return;
+        }
+        if (!kmc || !hrc) {
+          toast('Informe KM chegada e hora chegada para fechar o retorno.', 'err');
+          btn.disabled = false;
+          btn.textContent = 'Fechar retorno do dia';
+          return;
+        }
+        const previousItems = current.itens && typeof current.itens === 'object' ? current.itens : {};
+        const missingReturn = stageRows.filter(row => !row.presente);
+        if (missingReturn.length && !obs && !avtxt) {
+          toast('Informe nas observacoes o que faltou no retorno.', 'err');
+          btn.disabled = false;
+          btn.textContent = 'Fechar retorno do dia';
+          return;
+        }
+        const missingOccurrence = missingReturn.length ? [{
+          id: `faltante-retorno-${Date.now()}`,
+          tipo: 'equipamento_faltante_retorno',
+          descricao: obs || `Equipamento(s) faltando no retorno: ${missingReturn.map(row => row.item).join(', ')}`,
+          horario: nowIso(),
+          foto: null
+        }] : [];
+        const status = hasav || missingReturn.length || state.finalDailyState === 'problema' || current.status === 'problema' ? 'problema' : 'completo';
+        const update = {
+          id: current.id,
+          date,
+          equipe: current.equipe || portalTeamForDay(),
+          vei,
+          kmc,
+          kmd: (current.kms || kms) && kmc ? kmc - (current.kms || kms) : null,
+          hrc,
+          hasav: hasav || !!current.hasav,
+          avtxt: avtxt || current.avtxt || '',
+          obs: obs || current.obs || '',
+          itens: { ...previousItems, retorno: stageRows },
+          equip: groupPresentEquipment(stageRows),
+          ocorrencias: [...(current.ocorrencias || []), ...occurrence, ...missingOccurrence],
+          status,
+          retorno_lat: state.gps.retorno ? state.gps.retorno.lat : null,
+          retorno_lng: state.gps.retorno ? state.gps.retorno.lng : null,
+          __pending_occurrence_photo: state.occurrencePhoto
+        };
+        try {
+          const prepared = await prepareChecklistUpdateForSync(update);
+          const saved = await updateChecklistViaBackend(current.id, prepared);
+          state.checklists = state.checklists.map(item => String(item.id) === String(current.id) ? (saved || { ...item, ...prepared }) : item);
+          toast('Retorno do checklist fechado.', 'ok');
+          await recordEvent('checklist_retorno', 'Retorno do checklist fechado', `${vei} - ${motorista}`, null, null);
+          addHistory('Retorno do checklist fechado.');
+          state.occurrencePhoto = null;
+          savePortalCache();
+          renderOccurrencePhotoStatus();
+          renderEquipment();
+          renderDailyChecklistStatus();
+          renderHistory();
+        } catch(e) {
+          console.error(e);
+          addQueue({ type:'checklist-update', id:current.id, record:update });
+          state.checklists = state.checklists.map(item => String(item.id) === String(current.id) ? { ...item, ...update, __pending_occurrence_photo: undefined } : item);
+          state.occurrencePhoto = null;
+          savePortalCache();
+          renderOccurrencePhotoStatus();
+          renderEquipment();
+          renderDailyChecklistStatus();
+          toast('Retorno salvo neste celular para sincronizar.', 'warn');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Fechar retorno do dia';
+        }
+        return;
+      }
+
+      if (current) {
+        toast('Ja existe checklist de saida para hoje. Use Fechar retorno do dia quando voltar.', 'warn');
+        btn.disabled = false;
+        btn.textContent = 'Salvar saida do dia';
+        return;
+      }
+      const missingPhotos = DEPARTURE_PHOTOS.filter(item => !state.departurePhotos[item.key]);
+      if (missingPhotos.length) {
+        toast(`Faltam fotos da saida: ${missingPhotos.map(item => item.label).join(', ')}.`, 'err');
+        btn.disabled = false;
+        btn.textContent = 'Salvar saida do dia';
+        return;
+      }
+      if (missingEquipment.length && !obs) {
+        toast('Informe nas observacoes quais equipamentos ficaram faltando.', 'err');
+        btn.disabled = false;
+        btn.textContent = 'Salvar saida do dia';
+        return;
+      }
+      const equip = groupPresentEquipment(stageRows);
+      const missingStartOccurrence = missingEquipment.length ? [{
+        id: `faltante-saida-${Date.now()}`,
+        tipo: 'equipamento_faltante_saida',
+        descricao: obs || `Equipamento(s) faltando na saida: ${missingEquipment.map(row => row.item).join(', ')}`,
+        horario: nowIso(),
+        foto: null
+      }] : [];
+      const itens = {
+        saida: stageRows,
+        retorno: [],
+        conferidos: stageRows.filter(row => row.presente).map(row => row.item),
+        faltantes: missingEquipment.map(row => row.item),
+        observacao_faltantes: missingEquipment.length ? obs : ''
+      };
+      const status = hasav || missingEquipment.length || state.finalDailyState === 'problema' ? 'problema' : 'saida_aberta';
       const rec = {
         id: Date.now(),
         date,
@@ -2741,10 +3063,10 @@ Portal: ${currentPortalLink()}${location}`;
         cartao: document.getElementById('cl-cartao').value.trim(),
         vei,
         kms,
-        kmc,
-        kmd: kms && kmc ? kmc - kms : null,
-        hrs: document.getElementById('cl-hs').value,
-        hrc: document.getElementById('cl-hc').value,
+        kmc: null,
+        kmd: null,
+        hrs,
+        hrc: '',
         fuel: document.getElementById('cl-fuel').value,
         hasav,
         avtxt,
@@ -2752,7 +3074,7 @@ Portal: ${currentPortalLink()}${location}`;
         equip,
         itens,
         fotos_saida: [],
-        ocorrencias: occurrence,
+        ocorrencias: [...occurrence, ...missingStartOccurrence],
         status,
         origem: 'portal_tecnico',
         saida_lat: state.gps.saida ? state.gps.saida.lat : null,
@@ -2775,6 +3097,8 @@ Portal: ${currentPortalLink()}${location}`;
         savePortalCache();
         renderDeparturePhotoGrid();
         renderOccurrencePhotoStatus();
+        renderEquipment();
+        renderDailyChecklistStatus();
         renderHistory();
       } catch(e) {
         console.error(e);
@@ -2788,10 +3112,12 @@ Portal: ${currentPortalLink()}${location}`;
         savePortalCache();
         renderDeparturePhotoGrid();
         renderOccurrencePhotoStatus();
+        renderEquipment();
+        renderDailyChecklistStatus();
         toast('Checklist salvo neste celular para sincronizar.', 'warn');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Salvar checklist';
+        btn.textContent = 'Salvar saida do dia';
       }
     }
 

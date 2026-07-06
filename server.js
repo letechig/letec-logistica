@@ -944,7 +944,7 @@ function decodeChecklistPhotoPayload(input = {}) {
 function normalizeChecklistPayload(input = {}) {
   const kms = cleanNumber(input.kms);
   const kmc = cleanNumber(input.kmc);
-  const kmd = input.kmd !== undefined ? cleanNumber(input.kmd) : (kms !== null && kmc !== null ? kmc - kms : null);
+  const kmd = input.kmd !== undefined ? cleanNumber(input.kmd) : (Number.isFinite(kms) && Number.isFinite(kmc) ? kmc - kms : null);
   const hasav = input.hasav === true || String(input.hasav) === 'true';
   return {
     id: input.id !== undefined ? input.id : Date.now(),
@@ -977,6 +977,18 @@ function normalizeChecklistPayload(input = {}) {
     retorno_lat: cleanNumber(input.retorno_lat),
     retorno_lng: cleanNumber(input.retorno_lng)
   };
+}
+
+function normalizeChecklistUpdatePayload(input = {}) {
+  const payload = normalizeChecklistPayload({ ...input, id: input.id ?? undefined });
+  delete payload.id;
+  Object.keys(payload).forEach(key => {
+    if (input[key] === undefined && !['kmd', 'status'].includes(key)) delete payload[key];
+  });
+  if (input.kms === undefined && input.kmc === undefined && input.kmd === undefined) delete payload.kmd;
+  if (input.status === undefined) delete payload.status;
+  payload.updated_at = new Date().toISOString();
+  return payload;
 }
 
 function normalizeTechnicianEventPayload(input = {}, options = {}) {
@@ -4454,6 +4466,34 @@ app.post('/api/checklists/photos', strictLimiter, async (req, res) => {
   }
 });
 
+app.post('/api/checklists/photos/signed-url', strictLimiter, async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
+    if (!technicianAuth) {
+      const appAuth = await resolveAppUserRole(req);
+      if (!appAuth) return res.status(401).json({ error: 'Autenticacao obrigatoria', code: 'auth_required' });
+    }
+    const bucket = cleanText(req.body?.bucket, 120) || CHECKLIST_PHOTO_BUCKET;
+    const pathValue = cleanText(req.body?.path, 1000);
+    if (!pathValue || pathValue.includes('..') || !pathValue.startsWith('checklists/')) {
+      return res.status(400).json({ error: 'Caminho da foto invalido', code: 'invalid_photo_path' });
+    }
+    if (!db.storage?.from) {
+      return res.status(500).json({ error: 'Storage do Supabase nao configurado', code: 'storage_unavailable' });
+    }
+    const { data, error } = await db.storage
+      .from(bucket)
+      .createSignedUrl(pathValue, 60 * 10);
+    if (error) throw error;
+    res.json({ url: data?.signedUrl || data?.signedURL || '', expires_in: 600 });
+  } catch (error) {
+    console.error('[POST /api/checklists/photos/signed-url] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao gerar link da foto', code: 'checklist_photo_signed_url_failed' });
+  }
+});
+
 app.get('/api/checklists', async (req, res) => {
   try {
     const db = getSupabaseClient();
@@ -4488,6 +4528,27 @@ app.post('/api/checklists', async (req, res) => {
     if (technicianAuth) {
       payload.motorista = technicianAuth.technician.nome || payload.motorista;
     }
+    if (payload.origem === 'portal_tecnico' && payload.date && payload.equipe && payload.vei) {
+      const existing = await maybeSingle(
+        db.from('checklists')
+          .select('id,status')
+          .eq('date', payload.date)
+          .eq('equipe', payload.equipe)
+          .eq('vei', payload.vei)
+          .limit(1)
+      ).catch(error => {
+        if (isMissingRelationError(error)) return null;
+        throw error;
+      });
+      if (existing?.id) {
+        return res.status(409).json({
+          error: 'Checklist de saida ja registrado para esta equipe e veiculo nesta data',
+          code: 'daily_checklist_exists',
+          checklist_id: existing.id,
+          status: existing.status || ''
+        });
+      }
+    }
     const { data, error } = await db
       .from('checklists')
       .insert([payload])
@@ -4498,6 +4559,40 @@ app.post('/api/checklists', async (req, res) => {
   } catch (error) {
     console.error('[POST /api/checklists] Error:', error.message);
     res.status(500).json({ error: 'Falha ao criar checklist' });
+  }
+});
+
+app.put('/api/checklists/:id', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const technicianAuth = await requireTechnicianForPortal(req, res);
+    if (technicianAuth === false) return;
+    const payload = normalizeChecklistUpdatePayload(req.body);
+    if (Number.isFinite(payload.kmc) && !Number.isFinite(payload.kms) && payload.kmd == null) {
+      const existing = await maybeSingle(
+        db.from('checklists')
+          .select('id,kms')
+          .eq('id', req.params.id)
+          .limit(1)
+      ).catch(error => {
+        if (isMissingRelationError(error)) return null;
+        throw error;
+      });
+      if (Number.isFinite(existing?.kms)) payload.kmd = payload.kmc - existing.kms;
+    }
+    const { data, error } = await db
+      .from('checklists')
+      .update(payload)
+      .eq('id', req.params.id)
+      .select();
+
+    if (error) throw error;
+    const updated = data?.[0] || null;
+    if (!updated) return res.status(404).json({ error: 'Checklist nao encontrado', code: 'checklist_not_found' });
+    res.json(updated);
+  } catch (error) {
+    console.error('[PUT /api/checklists/:id] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao atualizar checklist' });
   }
 });
 

@@ -16477,6 +16477,69 @@ function renderHist(){
   }).join('');
 }
 
+async function openChecklistPhoto(bucket, path) {
+  try {
+    const payload = await requestBackendJson('/api/checklists/photos/signed-url', {
+      method: 'POST',
+      body: JSON.stringify({ bucket, path })
+    });
+    if (!payload?.url) throw new Error('Link da foto indisponivel');
+    window.open(payload.url, '_blank', 'noopener,noreferrer');
+  } catch(e) {
+    toast('Nao foi possivel abrir a foto: ' + e.message, 'err');
+  }
+}
+
+function escapeChecklistHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function checklistPhotoActions(photos = [], title = 'Fotos') {
+  const items = Array.isArray(photos) ? photos.filter(photo => photo?.path) : [];
+  if (!items.length) return `<div class="text-muted">${escapeChecklistHtml(title)}: nenhuma foto registrada</div>`;
+  return `
+    <div class="mb3">
+      <div class="card-label mb2">${escapeChecklistHtml(title)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${items.map((photo, index) => `
+          <button class="btn btn-ghost btn-sm" onclick="openChecklistPhoto(${JSON.stringify(photo.bucket || 'checklist-photos')}, ${JSON.stringify(photo.path)})">
+            Ver ${escapeChecklistHtml(photo.categoria || photo.etapa || `foto ${index + 1}`)}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function checklistOccurrencesHtml(items = []) {
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return '<div class="text-muted">Nenhuma ocorrencia registrada</div>';
+  return rows.map((item, index) => `
+    <div class="note mb2">
+      <strong>${escapeChecklistHtml(item.tipo || 'Ocorrencia')} ${item.horario ? '- ' + escapeChecklistHtml(new Date(item.horario).toLocaleString('pt-BR')) : ''}</strong>
+      <div>${escapeChecklistHtml(item.descricao || 'Sem descricao')}</div>
+      ${item.foto?.path ? `<button class="btn btn-ghost btn-sm mt2" onclick="openChecklistPhoto(${JSON.stringify(item.foto.bucket || 'checklist-photos')}, ${JSON.stringify(item.foto.path)})">Ver foto da ocorrencia ${index + 1}</button>` : ''}
+    </div>
+  `).join('');
+}
+
+function checklistItemsStageHtml(checklist = {}, stage = 'saida') {
+  const itens = checklist.itens || {};
+  const rows = Array.isArray(itens[stage]) ? itens[stage] : [];
+  if (!rows.length) return `<div class="text-muted">Sem conferencia de ${stage} registrada.</div>`;
+  const missing = rows.filter(item => item.presente === false);
+  const presentCount = rows.length - missing.length;
+  const missingHtml = missing.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">${missing.map(item => `<span class="chip chip-orange">${escapeChecklistHtml(item.categoria || '')}: ${escapeChecklistHtml(item.item || '')}</span>`).join('')}</div>`
+    : '<div class="text-muted mt2">Nenhum item faltante.</div>';
+  return `
+    <div class="note mb2">
+      <strong>${stage === 'saida' ? 'Saida' : 'Retorno'}: ${presentCount}/${rows.length} presente(s)</strong>
+      ${missingHtml}
+    </div>
+  `;
+}
+
 function showCLDetail(id){
   const r=clRecords.find(x=>x.id===id); if(!r) return;
   const eq=Object.entries(r.equip||{}).filter(([,v])=>v.length>0).map(([cat,items])=>`<div class="mb2"><div class="card-label" style="color:${ECAT_COLORS[cat]||'var(--text3)'};margin-bottom:6px">${cat}</div><div style="display:flex;flex-wrap:wrap;gap:5px">${items.map(i=>`<span class="chip chip-green">${i}</span>`).join('')}</div></div>`).join('')||'<div class="text-muted">Equipamentos não registrados</div>';
@@ -16492,6 +16555,11 @@ function showCLDetail(id){
     </div>
     ${r.obs?`<div class="note mb3">${r.obs}</div>`:''}
     <div><div class="card-label mb2">Equipamentos conferidos</div>${eq}</div>
+    <div style="height:12px"></div>
+    <div><div class="card-label mb2">Resumo de equipamentos</div>${checklistItemsStageHtml(r, 'saida')}${checklistItemsStageHtml(r, 'retorno')}</div>
+    <div style="height:12px"></div>
+    ${checklistPhotoActions(r.fotos_saida, 'Fotos do veiculo na saida')}
+    <div><div class="card-label mb2">Ocorrencias do dia</div>${checklistOccurrencesHtml(r.ocorrencias)}</div>
   `;
   currentDelId={type:'cl',id};
   document.getElementById('modal-del').style.display='inline-flex';

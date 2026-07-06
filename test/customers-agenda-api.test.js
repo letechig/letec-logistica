@@ -144,6 +144,9 @@ function makeDb(state) {
           async upload(path, buffer, options = {}) {
             state.storage_uploads.push({ bucket, path, size: buffer.length, contentType: options.contentType });
             return { data: { path }, error: null };
+          },
+          async createSignedUrl(path, expiresIn) {
+            return { data: { signedUrl: `https://signed.example/${bucket}/${path}?expires=${expiresIn}` }, error: null };
           }
         };
       }
@@ -802,7 +805,15 @@ test('POST /api/checklists salva metadados do checklist digital', async () => {
         status: 'problema',
         fotos_saida: [{ categoria: 'frente', bucket: 'checklist-photos', path: 'checklists/2026-05-14/fox/100/frente.jpg', content_type: 'image/jpeg' }],
         ocorrencias: [{ tipo: 'veiculo_equipamento', descricao: 'Arranhao registrado', foto: { bucket: 'checklist-photos', path: 'checklists/2026-05-14/fox/100/ocorrencia.jpg' } }],
-        itens: { conferidos: ['EPIs'], faltantes: ['Pulverizador'] },
+        itens: {
+          saida: [
+            { etapa: 'saida', categoria: 'DS - Desinsetizacao', item: 'Balde', presente: true },
+            { etapa: 'saida', categoria: 'DS - Desinsetizacao', item: 'Cx de gel', presente: false }
+          ],
+          retorno: [],
+          conferidos: ['Balde'],
+          faltantes: ['Cx de gel']
+        },
         equip: { conferidos: ['EPIs'] },
         origem: 'portal_tecnico'
       })
@@ -814,8 +825,25 @@ test('POST /api/checklists salva metadados do checklist digital', async () => {
     assert.equal(payload.status, 'problema');
     assert.equal(payload.fotos_saida[0].path.includes('base64'), false);
     assert.equal(payload.ocorrencias[0].foto.path.endsWith('ocorrencia.jpg'), true);
-    assert.deepEqual(payload.itens.faltantes, ['Pulverizador']);
+    assert.deepEqual(payload.itens.faltantes, ['Cx de gel']);
+    assert.equal(payload.itens.saida[1].presente, false);
     assert.equal(state.checklists.some(item => item.id === 100 && item.fotos_saida.length === 1), true);
+  });
+});
+
+test('POST /api/checklists bloqueia segunda saida da mesma equipe e veiculo no dia', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.checklists.push({ id: 110, date: '2026-05-14', equipe: 'Equipe A', motorista: 'Joao', vei: 'Fox', status: 'saida_aberta', origem: 'portal_tecnico' });
+    const response = await fetch(`${baseUrl}/api/checklists`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 111, date: '2026-05-14', equipe: 'Equipe A', motorista: 'Joao', vei: 'Fox', origem: 'portal_tecnico' })
+    });
+
+    assert.equal(response.status, 409);
+    const payload = await response.json();
+    assert.equal(payload.code, 'daily_checklist_exists');
+    assert.equal(payload.checklist_id, 110);
   });
 });
 
@@ -844,6 +872,52 @@ test('POST /api/checklists/photos envia foto para Storage e retorna path', async
     assert.equal(state.storage_uploads.length, 1);
     assert.equal(state.storage_uploads[0].bucket, 'checklist-photos');
     assert.equal(state.storage_uploads[0].contentType, 'image/jpeg');
+  });
+});
+
+test('PUT /api/checklists/:id atualiza retorno do checklist do dia', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.checklists.push({ id: 120, date: '2026-05-14', motorista: 'Joao', vei: 'Fox', kms: 1000, hrs: '08:00', status: 'saida_aberta' });
+    const response = await fetch(`${baseUrl}/api/checklists/120`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kmc: 1080, hrc: '17:30', status: 'completo', ocorrencias: [] })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.kmc, 1080);
+    assert.equal(payload.kmd, 80);
+    assert.equal(payload.hrc, '17:30');
+    assert.equal(payload.status, 'completo');
+  });
+});
+
+test('POST /api/checklists/photos/signed-url retorna link temporario autenticado', async () => {
+  await withServer(async (baseUrl) => {
+    const headers = await adminHeaders(baseUrl);
+    const response = await fetch(`${baseUrl}/api/checklists/photos/signed-url`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ bucket: 'checklist-photos', path: 'checklists/2026-05-14/fox/101/frente.jpg' })
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.expires_in, 600);
+    assert.equal(payload.url.includes('checklists/2026-05-14/fox/101/frente.jpg'), true);
+  });
+});
+
+test('POST /api/checklists/photos/signed-url exige autenticacao', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/checklists/photos/signed-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucket: 'checklist-photos', path: 'checklists/2026-05-14/fox/101/frente.jpg' })
+    });
+
+    assert.equal(response.status, 401);
   });
 });
 
