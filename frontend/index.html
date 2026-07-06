@@ -3539,6 +3539,12 @@ async function carregarVeiculos(){
     ['cep','rua','numero','bairro','cidade','uf','complemento','referencia','latitude','longitude'].forEach(key => {
       if (servico && Object.prototype.hasOwnProperty.call(servico, key)) payload[key] = servico[key];
     });
+    if (servico && Object.prototype.hasOwnProperty.call(servico, 'salvar_unidade_cliente')) {
+      payload.salvar_unidade_cliente = servico.salvar_unidade_cliente === true;
+    }
+    if (servico && Object.prototype.hasOwnProperty.call(servico, 'save_customer_address')) {
+      payload.save_customer_address = servico.save_customer_address === true;
+    }
     return payload;
   }
 
@@ -15744,11 +15750,11 @@ function renderEnderecosClienteServico(prefix = 'ns', customerId, currentAddress
     '<option value="">Usar endereco digitado / nova unidade</option>',
     ...addresses.map(item => `<option value="${escapeHtmlAttr(item.id)}" ${String(item.id) === String(selected?.id) ? 'selected' : ''}>${sanitize(formatServiceAddressOption(item))}</option>`)
   ].join('');
-  if (saveNew) saveNew.checked = !selected;
+  if (saveNew) saveNew.checked = false;
   if (hint) {
     hint.textContent = addresses.length
-      ? 'Escolha uma unidade existente ou mantenha o endereco digitado para salvar como nova unidade.'
-      : 'Este cliente ainda nao tem unidades salvas. O endereco digitado sera salvo como primeira unidade.';
+      ? 'Escolha uma unidade existente ou marque a opcao abaixo para salvar o endereco digitado como nova unidade.'
+      : 'Este cliente ainda nao tem unidades salvas. O servico usara o endereco digitado; marque a opcao abaixo para salvar como unidade.';
   }
 }
 
@@ -15765,8 +15771,6 @@ function selecionarEnderecoServico(prefix = 'ns') {
     enderecoInput.value = address.endereco_completo || address.endereco || buildClientAddress(address) || '';
     setServicoAddressFields(prefix, address);
     if (saveNew) saveNew.checked = false;
-  } else if (saveNew) {
-    saveNew.checked = true;
   }
   if (prefix === 'ns') updateNewSvcGuideSummary();
 }
@@ -16675,7 +16679,7 @@ function openNewSvc(initialData = {}){
                   <option value="">Use o endereço digitado</option>
                 </select>
                 <label class="client-checkbox-row" style="margin-top:8px" for="ns-save-address-unit">
-                  <input type="checkbox" id="ns-save-address-unit" checked>
+                  <input type="checkbox" id="ns-save-address-unit">
                   <span>Salvar endereço digitado como nova unidade do cliente</span>
                 </label>
                 <div id="ns-address-hint" class="svc-edit-help">Ao selecionar um cliente, as unidades cadastradas aparecem aqui.</div>
@@ -16771,7 +16775,7 @@ async function confirmNewSvc(){
   const horario     = document.getElementById('ns-hr')?.value||'';
   const cliente_id = document.getElementById('ns-client-select')?.value || clienteInput?.dataset.clientId || enderecoEl?.dataset.clientId || '';
   const customer_address_id = document.getElementById('ns-address-select')?.value || '';
-  const salvarUnidadeCliente = document.getElementById('ns-save-address-unit')?.checked !== false;
+  const salvarUnidadeCliente = document.getElementById('ns-save-address-unit')?.checked === true;
   const addressPayload = servicoAddressPayloadFromForm('ns');
   if (!customer_address_id && salvarUnidadeCliente) {
     const cepDigits = String(addressPayload.cep || '').replace(/\D/g, '');

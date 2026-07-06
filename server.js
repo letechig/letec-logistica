@@ -2903,6 +2903,10 @@ async function ensureCustomerForServicePayload(db, servicePayload = {}, options 
     return { payload: servicePayload, customer: duplicate, address: addressRecord, created: false };
   }
 
+  if (!shouldSaveAddress) {
+    return { payload: servicePayload, customer: null, address: null, created: false };
+  }
+
   const insertPayload = {
     nome: name,
     nome_normalizado: normalizeCustomerName(name),

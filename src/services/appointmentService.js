@@ -30,6 +30,16 @@ function createAppointmentService(deps) {
     return String(value || '').trim().toLowerCase();
   }
 
+  function hasCompleteAddressInput(input = {}) {
+    const cep = String(input.cep || '').replace(/\D/g, '');
+    return cep.length === 8
+      && !!String(input.numero || '').trim()
+      && !!String(input.rua || '').trim()
+      && !!String(input.bairro || '').trim()
+      && !!String(input.cidade || '').trim()
+      && !!String(input.uf || '').trim();
+  }
+
   function parseArrayLike(value) {
     if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
     if (value === null || value === undefined || value === '') return [];
@@ -155,7 +165,11 @@ function createAppointmentService(deps) {
 
     let customerLink = null;
     try {
-      const saveAddress = input?.salvar_unidade_cliente !== false && input?.save_customer_address !== false;
+      const hasExplicitAddressChoice = Object.prototype.hasOwnProperty.call(input || {}, 'salvar_unidade_cliente')
+        || Object.prototype.hasOwnProperty.call(input || {}, 'save_customer_address');
+      const saveAddress = hasExplicitAddressChoice
+        ? (input?.salvar_unidade_cliente === true || input?.save_customer_address === true)
+        : hasCompleteAddressInput(input);
       customerLink = await ensureCustomerForServicePayload(db, payload, { saveAddress, input });
     } catch (error) {
       return { status: error.statusCode || 500, error, customerLinkFailed: true };
