@@ -4026,98 +4026,96 @@ async function carregarVeiculos(){
 
     <!-- ═══ MAPA & ROTEIROS (Sistema Local) ═══ -->
     <div id="page-roteiro" class="page">
-      <div class="flex ic sb mb3">
+      <div class="rot-workbench-head">
         <div>
+          <div class="ui-page-kicker">Planejamento de campo</div>
           <div class="section-title">Mapa & Roteiros</div>
-            <div class="section-sub">Visualize serviços no mapa, filtre equipes e monte a sequência do dia.</div>
+          <div class="section-sub">Escolha o dia, revise o mapa e envie o roteiro aos técnicos.</div>
+          <div class="rot-flow-status" id="rot-flow-status">
+            <span class="active">Data selecionada</span>
+            <span>Roteiro montado</span>
+            <span>Revisão</span>
+            <span>Envio</span>
+          </div>
         </div>
-        <div class="flex gap2" style="flex-wrap:wrap;align-items:center">
+        <div class="rot-primary-actions">
           <input type="date" class="fsel" id="rot-data" onchange="rotGerarDoSistema()">
           <button class="btn btn-primary btn-sm" onclick="rotGerarDoSistema()">Montar roteiro do dia</button>
         </div>
       </div>
 
-      <div class="flow-guide">
-        <div class="flow-guide-step"><span class="flow-guide-num">1</span><div><div class="flow-guide-title">Escolha a data</div><div class="flow-guide-text">Use a data do dia ou revise um período específico.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">2</span><div><div class="flow-guide-title">Monte o roteiro</div><div class="flow-guide-text">O sistema agrupa por técnico e mostra a sequência.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Revise por técnico</div><div class="flow-guide-text">Confira horários, endereços e alertas antes de enviar.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">4</span><div><div class="flow-guide-title">Enviar ou copiar</div><div class="flow-guide-text">Envie aos técnicos ou use copiar como fallback.</div></div></div>
+      <div class="rot-filter-panel">
+        <div class="rot-filter-main">
+          <select class="fsel" id="mapa-rot-periodo" onchange="renderMapaRoteiros()">
+            <option value="day">Dia</option>
+            <option value="week">Semana</option>
+            <option value="month">Mês</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="renderMapaRoteiros()">Atualizar mapa</button>
+        </div>
+        <details class="rot-advanced-filters">
+          <summary>Filtros avançados</summary>
+          <div class="rot-advanced-grid">
+            <select class="fsel" id="mapa-rot-equipe" onchange="renderMapaRoteiros()"></select>
+            <select class="fsel" id="mapa-rot-veiculo" onchange="renderMapaRoteiros()"></select>
+            <select class="fsel" id="mapa-rot-status" onchange="renderMapaRoteiros()">
+              <option value="">Todos os status</option>
+              <option value="atrasado">Atrasados</option>
+              <option value="critico">Críticos / reagendados</option>
+              <option value="pendente">Pendentes no prazo</option>
+              <option value="executado">Executados</option>
+            </select>
+            <select class="fsel" id="mapa-rot-tipo" onchange="renderMapaRoteiros()"></select>
+          </div>
+        </details>
       </div>
 
-      <div class="op-map-toolbar op-map-toolbar-full">
-        <select class="fsel" id="mapa-rot-periodo" onchange="renderMapaRoteiros()">
-          <option value="day">Dia</option>
-          <option value="week">Semana</option>
-          <option value="month">Mês</option>
-        </select>
-        <select class="fsel" id="mapa-rot-equipe" onchange="renderMapaRoteiros()"></select>
-        <select class="fsel" id="mapa-rot-veiculo" onchange="renderMapaRoteiros()"></select>
-        <select class="fsel" id="mapa-rot-status" onchange="renderMapaRoteiros()">
-          <option value="">Todos os status</option>
-          <option value="atrasado">Atrasados</option>
-          <option value="critico">Críticos / reagendados</option>
-          <option value="pendente">Pendentes no prazo</option>
-          <option value="executado">Executados</option>
-        </select>
-        <select class="fsel" id="mapa-rot-tipo" onchange="renderMapaRoteiros()"></select>
-        <button class="btn btn-ghost btn-sm" onclick="renderMapaRoteiros()">Atualizar mapa</button>
+      <div id="rot-kpis" style="display:none" class="rot-kpi-strip">
+        <div><span>Serviços</span><strong id="rot-kpi-total">0</strong></div>
+        <div><span>Técnicos</span><strong id="rot-kpi-equipes">0</strong></div>
+        <div><span>Executados</span><strong id="rot-kpi-exec">0</strong></div>
+        <div><span>Pendentes</span><strong id="rot-kpi-pend">0</strong></div>
+        <div><span>Tempo técnico</span><strong id="rot-kpi-tempo">0h</strong></div>
+        <div><span>KM técnico</span><strong id="rot-kpi-km">0</strong></div>
       </div>
 
-      <div id="mapa-roteiros-operacional" class="op-map-expanded"></div>
-
-      <!-- KPIs -->
-      <div id="rot-kpis" style="display:none;margin-bottom:16px" class="grid-kpi">
-        <div class="card card-accent">
-          <div class="card-label">Serviços no dia</div>
-          <div class="card-value cv-blue" id="rot-kpi-total">0</div>
-        </div>
-        <div class="card card-green">
-          <div class="card-label">Técnicos</div>
-          <div class="card-value cv-green" id="rot-kpi-equipes">0</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Executados</div>
-          <div class="card-value" id="rot-kpi-exec">0</div>
-        </div>
-        <div class="card card-orange">
-          <div class="card-label">Pendentes</div>
-          <div class="card-value cv-orange" id="rot-kpi-pend">0</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Tempo Técnico</div>
-          <div class="card-value" id="rot-kpi-tempo">0h</div>
-        </div>
-        <div class="card">
-          <div class="card-label">KM Técnico</div>
-          <div class="card-value" id="rot-kpi-km">0</div>
-        </div>
+      <div class="rot-tabs" role="tablist" aria-label="Visualização de roteiros">
+        <button id="rot-tab-mapa" class="active" onclick="rotSetTab('mapa')">Mapa</button>
+        <button id="rot-tab-tecnicos" onclick="rotSetTab('tecnicos')">Roteiros por técnico</button>
+        <button id="rot-tab-envio" onclick="rotSetTab('envio')">Envio</button>
       </div>
 
-      <!-- Botões globais -->
-      <div id="rot-actions" style="display:none;margin-bottom:16px;display:none" class="flex gap2">
-        <button class="btn btn-green" onclick="rotWhatsAppTudo()">Enviar roteiro aos técnicos</button>
-        <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">Copiar roteiro</button>
-        <button class="btn btn-ghost btn-sm" onclick="rotCopiarLinksPortais()">🔗 Copiar links dos portais</button>
+      <div id="rot-panel-mapa" class="rot-tab-panel active">
+        <div id="mapa-roteiros-operacional" class="op-map-expanded"></div>
       </div>
 
-      <div id="rot-sugestao-wrap" style="display:none;margin-bottom:20px">
-        <div class="section-title" style="font-size:18px;margin-bottom:4px">Sugestão de Rota</div>
-        <div class="section-sub" style="margin-bottom:14px">Ordem otimizada por técnico com base em horário + proximidade do endereço</div>
-        <div id="rot-sugestao-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px"></div>
+      <div id="rot-panel-tecnicos" class="rot-tab-panel">
+        <div id="rot-equipes-grid" class="rot-tech-grid"></div>
       </div>
 
-      <div id="customer-reminders-panel" style="display:none;margin-bottom:20px"></div>
-
-      <!-- Cards por equipe -->
-      <div id="rot-equipes-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;margin-bottom:24px"></div>
-
-      <!-- Empty state -->
-      <div id="rot-empty" style="text-align:center;padding:60px 20px;color:var(--text3)">
-        <div style="font-size:48px;margin-bottom:16px">📋</div>
-        <div style="font-family:var(--display);font-size:18px;font-weight:700;color:var(--text2);margin-bottom:6px">Selecione uma data para montar o roteiro</div>
-        <div style="font-size:12px;max-width:400px;margin:0 auto;line-height:1.6">
-          O roteiro é gerado automaticamente com os serviços cadastrados no sistema,<br>agrupados por técnico e prontos para enviar pelo WhatsApp.
+      <div id="rot-panel-envio" class="rot-tab-panel">
+        <div id="rot-actions" style="display:none" class="rot-send-panel">
+          <div>
+            <div class="rot-send-title">Enviar roteiro</div>
+            <div class="rot-send-sub">Revise os técnicos antes de enviar. Use copiar como fallback operacional.</div>
+          </div>
+          <div class="rot-send-actions">
+            <button class="btn btn-green" onclick="rotWhatsAppTudo()">Enviar roteiro aos técnicos</button>
+            <button class="btn btn-ghost btn-sm" onclick="rotCopiarTudo()">Copiar roteiro</button>
+            <button class="btn btn-ghost btn-sm" onclick="rotCopiarLinksPortais()">Copiar links dos portais</button>
+          </div>
         </div>
+        <div id="customer-reminders-panel" style="display:none"></div>
+      </div>
+
+      <div id="rot-sugestao-wrap" class="rot-legacy-suggestion" style="display:none">
+        <div id="rot-sugestao-grid"></div>
+      </div>
+
+      <div id="rot-empty" class="rot-empty-state">
+        <div class="rot-empty-icon">📋</div>
+        <div class="rot-empty-title">Selecione uma data para montar o roteiro</div>
+        <div class="rot-empty-text">O roteiro é gerado automaticamente com os serviços cadastrados no sistema, agrupados por técnico e pronto para envio.</div>
       </div>
     </div>
 
@@ -5532,6 +5530,190 @@ async function carregarVeiculos(){
 .rot-spinner { width:14px;height:14px;border:2px solid rgba(37,99,235,.3);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
+/* ─── ROTEIRO — WORKBENCH UX ────────────────── */
+.rot-workbench-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:18px;
+  flex-wrap:wrap;
+  padding:16px 18px;
+  margin-bottom:12px;
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:var(--radius-lg);
+  background:linear-gradient(180deg,#fff,#f8fafc);
+  box-shadow:var(--shadow-sm);
+}
+.rot-primary-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+.rot-primary-actions .fsel { min-width:150px; }
+.rot-flow-status {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.rot-flow-status span {
+  min-height:24px;
+  display:inline-flex;
+  align-items:center;
+  padding:3px 8px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:#fff;
+  color:var(--text3);
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:800;
+}
+.rot-flow-status span.active {
+  border-color:rgba(37,99,235,.25);
+  background:var(--blue-bg);
+  color:var(--blue2);
+}
+.rot-flow-status span.done {
+  border-color:rgba(22,163,74,.25);
+  background:var(--green-bg);
+  color:var(--green);
+}
+.rot-filter-panel {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:10px;
+  margin-bottom:10px;
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+}
+.rot-filter-main { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.rot-filter-main .fsel { min-width:120px; }
+.rot-advanced-filters {
+  min-width:280px;
+  flex:1 1 520px;
+  display:flex;
+  justify-content:flex-end;
+}
+.rot-advanced-filters summary {
+  width:max-content;
+  margin-left:auto;
+  min-height:34px;
+  display:flex;
+  align-items:center;
+  padding:0 12px;
+  border:1px solid var(--border2);
+  border-radius:10px;
+  background:var(--card);
+  color:var(--text2);
+  font-size:12px;
+  font-weight:800;
+  cursor:pointer;
+  list-style:none;
+}
+.rot-advanced-filters summary::-webkit-details-marker { display:none; }
+.rot-advanced-filters[open] summary { color:var(--blue2); border-color:rgba(37,99,235,.25); background:var(--blue-bg); }
+.rot-advanced-grid {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(140px,1fr));
+  gap:8px;
+  width:100%;
+  margin-top:8px;
+}
+.rot-kpi-strip {
+  display:grid;
+  grid-template-columns:repeat(6,minmax(110px,1fr));
+  gap:8px;
+  margin-bottom:10px;
+}
+.rot-kpi-strip > div {
+  min-height:58px;
+  padding:9px 11px;
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+}
+.rot-kpi-strip span {
+  display:block;
+  color:var(--text3);
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.rot-kpi-strip strong {
+  display:block;
+  margin-top:5px;
+  color:var(--text);
+  font-family:var(--display);
+  font-size:22px;
+  line-height:1;
+}
+.rot-tabs {
+  display:flex;
+  gap:4px;
+  padding:4px;
+  margin-bottom:10px;
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  background:var(--bg2);
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.rot-tabs button {
+  min-height:36px;
+  border:0;
+  border-radius:8px;
+  padding:0 14px;
+  background:transparent;
+  color:var(--text2);
+  font-size:12px;
+  font-weight:850;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.rot-tabs button.active { background:#fff; color:var(--blue2); box-shadow:var(--shadow-sm); }
+.rot-tab-panel { display:none; }
+.rot-tab-panel.active { display:block; }
+.rot-tech-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+  gap:12px;
+  margin-bottom:20px;
+}
+.rot-send-panel {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+  padding:16px;
+  margin-bottom:14px;
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+}
+.rot-send-title { font-family:var(--display); font-size:16px; font-weight:850; color:var(--text); }
+.rot-send-sub { margin-top:3px; font-size:12px; color:var(--text3); }
+.rot-send-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.rot-empty-state {
+  text-align:center;
+  padding:46px 20px;
+  color:var(--text3);
+  border:1px dashed var(--border2);
+  border-radius:var(--r);
+  background:#fff;
+}
+.rot-empty-icon { font-size:40px; margin-bottom:12px; }
+.rot-empty-title { font-family:var(--display); font-size:18px; font-weight:800; color:var(--text2); margin-bottom:6px; }
+.rot-empty-text { max-width:520px; margin:0 auto; font-size:12px; line-height:1.55; }
+.rot-legacy-suggestion { display:none !important; }
+
 /* ─── ROTEIRO — EQUIPE CARD ─────────────────── */
 .rot-eq-card {
   background:var(--card);
@@ -5822,11 +6004,26 @@ async function carregarVeiculos(){
   .op-map-layout, .op-map-expanded .op-map-layout { grid-template-columns:1fr; }
   .op-map-side { border-left:0; border-top:1px solid var(--border); max-height:none; }
   .op-map-canvas, .op-map-expanded .op-map-canvas { min-height:360px; }
+  .rot-kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .rot-advanced-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media(max-width:560px) {
   .op-map-head { flex-direction:column; }
   .op-map-toolbar .fsel, .op-map-toolbar .btn { flex:1 1 140px; }
   .op-map-summary-grid { grid-template-columns:1fr; }
+  .rot-workbench-head { padding:14px; }
+  .rot-primary-actions, .rot-primary-actions .fsel, .rot-primary-actions .btn { width:100%; }
+  .rot-primary-actions .btn { justify-content:center; }
+  .rot-filter-panel { flex-direction:column; }
+  .rot-filter-main, .rot-filter-main .fsel, .rot-filter-main .btn { width:100%; }
+  .rot-filter-main .btn { justify-content:center; }
+  .rot-advanced-filters { min-width:0; width:100%; flex-basis:auto; }
+  .rot-advanced-filters summary { width:100%; justify-content:center; margin-left:0; }
+  .rot-advanced-grid { grid-template-columns:1fr; }
+  .rot-kpi-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .rot-tech-grid { grid-template-columns:1fr; }
+  .rot-send-actions, .rot-send-actions .btn { width:100%; }
+  .rot-send-actions .btn { justify-content:center; }
 }
 </style>
 
@@ -17259,6 +17456,7 @@ function confirmAction(message){
 // ════════════════════════════════════════════════
 
 let rotDados = [];     // [{equipe, veiculo, svcs:[], sequencia, whatsappText}]
+let rotCurrentTab = 'mapa';
 const ROT_FALLBACK_MSG = 'Rota estimada localmente no modo econômico';
 const ROT_BASE_PLUS_CODE = 'R. Maria José Rangel, 135 - Vila Sao Paulo, São Paulo - SP';
 
@@ -17267,6 +17465,32 @@ function rotInit() {
   const today = new Date().toISOString().split('T')[0];
   const el = document.getElementById('rot-data');
   if (el && !el.value) el.value = today;
+  rotUpdateFlowStatus();
+}
+
+function rotSetTab(tab) {
+  rotCurrentTab = ['mapa', 'tecnicos', 'envio'].includes(tab) ? tab : 'mapa';
+  ['mapa', 'tecnicos', 'envio'].forEach(key => {
+    const btn = document.getElementById('rot-tab-' + key);
+    const panel = document.getElementById('rot-panel-' + key);
+    if (btn) btn.classList.toggle('active', key === rotCurrentTab);
+    if (panel) panel.classList.toggle('active', key === rotCurrentTab);
+  });
+  rotUpdateFlowStatus();
+  if (rotCurrentTab === 'mapa') setTimeout(() => renderMapaRoteiros(), 80);
+}
+
+function rotUpdateFlowStatus() {
+  const el = document.getElementById('rot-flow-status');
+  if (!el) return;
+  const steps = Array.from(el.querySelectorAll('span'));
+  const hasDate = !!document.getElementById('rot-data')?.value;
+  const hasRoute = rotDados.length > 0;
+  const activeIndex = !hasDate ? 0 : !hasRoute ? 0 : rotCurrentTab === 'envio' ? 3 : rotCurrentTab === 'tecnicos' ? 2 : 1;
+  steps.forEach((step, index) => {
+    step.classList.toggle('done', index < activeIndex);
+    step.classList.toggle('active', index === activeIndex);
+  });
 }
 
 function rotVeiculoPreferencial(servicos, fallback = '') {
@@ -18256,6 +18480,7 @@ function renderMapaRoteiros(dateOverride = '') {
 async function rotGerarDoSistema() {
   const data = document.getElementById('rot-data')?.value;
   if (!data) { toast('Selecione uma data', 'err'); return; }
+  rotUpdateFlowStatus();
   try {
     const daySvcs = services.filter(s => getServiceDateValue(s) === data);
     if (!daySvcs.length) {
@@ -18269,6 +18494,8 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-equipes-grid').innerHTML = '';
       renderCustomerRemindersPanel([], data);
       renderMapaRoteiros(data);
+      rotSetTab('mapa');
+      rotUpdateFlowStatus();
       return;
     }
 
@@ -18288,6 +18515,8 @@ async function rotGerarDoSistema() {
       document.getElementById('rot-equipes-grid').innerHTML = '';
       renderCustomerRemindersPanel(daySvcs, data);
       renderMapaRoteiros(data);
+      rotSetTab('mapa');
+      rotUpdateFlowStatus();
       return;
     }
 
@@ -18349,10 +18578,11 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-kpi-tempo').textContent    = formatarMinutosHM(tempoTotal);
     document.getElementById('rot-kpi-km').textContent       = `${kmTotal} km`;
 
-    rotRenderizarSugestoes(rotDados);
     renderCustomerRemindersPanel(daySvcs, data);
     renderMapaRoteiros(data);
     rotRenderizarLocal(rotDados, data);
+    rotSetTab('mapa');
+    rotUpdateFlowStatus();
   } catch (e) {
     console.error('Erro ao gerar roteiro do dia:', e);
     rotDados = [];
@@ -18364,6 +18594,8 @@ async function rotGerarDoSistema() {
     document.getElementById('rot-equipes-grid').innerHTML = '';
     renderCustomerRemindersPanel([], data);
     renderMapaRoteiros(data);
+    rotSetTab('mapa');
+    rotUpdateFlowStatus();
     toast(`Erro ao gerar roteiro: ${e.message || e}`, 'err');
   }
 }
@@ -18933,27 +19165,7 @@ function rotRenderizarLocal(equipes, data) {
         }).join('')}
       </div>
 
-      <!-- Texto gerado para WhatsApp -->
-      <div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--bg2)">
-        ${rotPortalDisponivel(eq) ? `
-          <div style="margin-bottom:10px;padding:10px;border:1px solid rgba(37,99,235,.18);border-radius:var(--r2);background:var(--blue-bg)">
-            <div style="font-family:var(--display);font-size:12px;font-weight:800;color:var(--blue2);margin-bottom:3px">Portal do Técnico</div>
-            <div style="font-size:10px;color:var(--text2);line-height:1.5;margin-bottom:8px">Envie o resumo com link para o técnico registrar chegada, início, finalização e checklist pelo celular.</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button style="flex:1;min-width:130px;padding:8px;background:#25D366;color:white;border:none;border-radius:var(--r2);cursor:pointer;font-size:11px;font-weight:700" onclick="rotWhatsAppPortal(${gi})">📱 Enviar Portal</button>
-              <button style="flex:1;min-width:110px;padding:8px;background:white;color:var(--blue2);border:1px solid rgba(37,99,235,.25);border-radius:var(--r2);cursor:pointer;font-size:11px;font-weight:700" onclick="rotCopiarLinkPortal(${gi})">🔗 Copiar link</button>
-            </div>
-          </div>
-        ` : `
-          <div style="margin-bottom:10px;padding:10px;border:1px solid rgba(245,158,11,.28);border-radius:var(--r2);background:var(--orange-bg);font-size:11px;color:var(--orange);font-weight:700">Defina equipe antes de enviar portal.</div>
-        `}
-        <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:6px">TEXTO PARA WHATSAPP:</div>
-        <textarea id="${textoId}" readonly style="width:100%;font-family:var(--mono);font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:8px;resize:vertical;min-height:80px;color:var(--text2);line-height:1.5">${texto}</textarea>
-        <div style="display:flex;gap:6px;margin-top:6px">
-          <button style="flex:1;padding:7px;background:${cor};color:white;border:none;border-radius:var(--r2);cursor:pointer;font-size:11px;font-weight:600" onclick="rotCopiarEquipe('${textoId}')">📋 Copiar</button>
-          <button style="flex:1;padding:7px;background:#25D366;color:white;border:none;border-radius:var(--r2);cursor:pointer;font-size:11px;font-weight:600" onclick="rotWhatsApp('${textoId}')">📱 WhatsApp</button>
-        </div>
-      </div>
+      <textarea id="${textoId}" readonly style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;opacity:0">${texto}</textarea>
     </div>`;
   }).join('');
 }
