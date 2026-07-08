@@ -11883,7 +11883,7 @@ function renderHoje() {
           const F = sf(s);
           const isExec  = F.status === 'executado';
           const isAgend = F.status === 'agendado';
-          const st      = ST_META[F.status] || { label: F.status, chip: 'chip-gray' };
+          const st      = hojeCardPrimaryStatusMeta(s, F);
 
           // Indicadores de alerta para este serviço
           const isAtras = idsAtrasados.has(s.id);
@@ -11914,7 +11914,7 @@ function renderHoje() {
             </div>
             ${badges ? `<div class="team-svc-alerts">${badges}</div>` : ''}
             ${F.endereco ? `<div class="team-svc-address">📍 ${sanitize(F.endereco)}</div>` : ''}
-            ${renderExecutionMini(s, { hideDurations: true })}
+            ${renderExecutionMini(s, { hideDurations: true, hideStatusChip: true })}
             <div class="team-svc-actions" onclick="event.stopPropagation()">
               ${renderServiceCardActions(s, { afterStatusChange: ';renderHoje()', primaryLabel: 'Marcar executado' })}
             </div>
@@ -18604,12 +18604,27 @@ function execStatusMeta(s) {
   const raw = String(s?.exec_status || '').trim() || ((s?.status || s?.st) === 'executado' ? 'finalizado' : 'agendado');
   const map = {
     agendado: { label:'Agendado', chip:'chip-blue', color:'var(--blue2)' },
+    em_deslocamento: { label:'Em deslocamento', chip:'chip-blue', color:'var(--blue2)' },
     cheguei: { label:'Cheguei', chip:'chip-blue', color:'var(--blue2)' },
     em_execucao: { label:'Em execução', chip:'chip-yellow', color:'var(--orange)' },
     finalizado: { label:'Finalizado', chip:'chip-green', color:'var(--green)' },
     problema: { label:'Problema', chip:'chip-red', color:'var(--red)' }
   };
   return { key: raw, ...(map[raw] || map.agendado) };
+}
+
+function hojeCardPrimaryStatusMeta(s, F = null) {
+  const adminStatus = F?.status || s?.status || s?.st || 'agendado';
+  const adminMeta = ST_META[adminStatus] || { label: adminStatus || 'Agendado', chip: 'chip-gray', color: 'var(--text3)' };
+  const execKey = String(s?.exec_status || '').trim().toLowerCase();
+  const fieldMeta = {
+    em_deslocamento: { label:'Em deslocamento', chip:'chip-blue', color:'var(--blue2)' },
+    cheguei: { label:'Chegou no local', chip:'chip-blue', color:'var(--blue2)' },
+    em_execucao: { label:'Em atendimento', chip:'chip-yellow', color:'var(--orange)' },
+    finalizado: { label:'Finalizado', chip:'chip-green', color:'var(--green)' },
+    problema: { label:'Problema', chip:'chip-red', color:'var(--red)' }
+  };
+  return fieldMeta[execKey] || adminMeta;
 }
 
 function fmtPortalDateTime(value) {
@@ -18624,7 +18639,7 @@ function renderExecutionMini(s, options = {}) {
     ? `<a href="https://maps.google.com/?q=${encodeURIComponent(`${s.chegada_lat},${s.chegada_lng}`)}" target="_blank" onclick="event.stopPropagation()" style="color:var(--blue2);font-weight:700;text-decoration:none">Ver localização</a>`
     : '';
   const parts = [
-    `<span class="chip ${meta.chip}">${meta.label}</span>`,
+    !options.hideStatusChip ? `<span class="chip ${meta.chip}">${meta.label}</span>` : '',
     s.chegada_hora ? `<span>Chegada: ${fmtPortalDateTime(s.chegada_hora)}</span>` : '',
     s.inicio_hora ? `<span>Início: ${fmtPortalDateTime(s.inicio_hora)}</span>` : '',
     s.fim_hora ? `<span>Fim: ${fmtPortalDateTime(s.fim_hora)}</span>` : '',
@@ -18633,6 +18648,7 @@ function renderExecutionMini(s, options = {}) {
     maps,
     s.problema_descricao ? `<span style="color:var(--red);font-weight:700">Problema: ${sanitize(s.problema_descricao)}</span>` : ''
   ].filter(Boolean).join(' · ');
+  if (!parts) return '';
   return `<div style="margin-top:8px;font-size:10px;color:var(--text2);line-height:1.7">${parts}</div>`;
 }
 
