@@ -11886,7 +11886,9 @@ function renderHoje() {
           const st      = hojeCardPrimaryStatusMeta(s, F);
 
           // Indicadores de alerta para este serviço
-          const isAtras = idsAtrasados.has(s.id);
+          const execKey = String(s?.exec_status || '').trim().toLowerCase();
+          const chegouAoLocal = !!s.chegada_hora || ['cheguei', 'em_execucao', 'finalizado', 'problema'].includes(execKey);
+          const isAtras = idsAtrasados.has(s.id) && !chegouAoLocal;
           const isConfl = idsConflito.has(s.id);
           const isJorn  = idsJornada.has(s.id);
 
