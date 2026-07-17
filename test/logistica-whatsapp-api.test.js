@@ -25,6 +25,7 @@ function makeState(overrides = {}) {
       { id: 'cust-2', nome: 'Cliente B', telefone: '11977777777', ativo: true },
       { id: 'cust-3', nome: 'Cliente C', telefone: '11966666666', ativo: true },
     ],
+    app_users: [{ id: 'app-user-1', auth_user_id: 'user-1', email: 'operador@example.test', role: 'operador', active: true }],
     logistica_whatsapp_mensagens: [],
     ...overrides
   };
@@ -100,6 +101,7 @@ function makeBuilder(state, table) {
 function makeMockSupabase(state) {
   return {
     state,
+    auth: { async getUser() { return { data: { user: { id: 'user-1', email: 'operador@example.test' } }, error: null }; } },
     from(table) {
       assert.ok(state[table], `unexpected table ${table}`);
       return makeBuilder(state, table);
@@ -124,11 +126,79 @@ async function withServer({ state = makeState(), evolutionFetch } = {}, fn) {
 async function post(baseUrl, path, body) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-user-token' },
     body: JSON.stringify(body)
   });
   return { response, payload: await response.json().catch(() => ({})) };
 }
+
+async function patchJson(baseUrl, path, body) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-user-token' },
+    body: JSON.stringify(body)
+  });
+  return { response, payload: await response.json().catch(() => ({})) };
+}
+
+test('Central de Recados cria e atualiza por reference_key sem chamar Evolution', async () => {
+  let evolutionCalled = false;
+  await withServer({ evolutionFetch: async () => { evolutionCalled = true; return new Response('{}'); } }, async (baseUrl, state) => {
+    const body = {
+      reference_key: 'cliente:svc-1:lembrete_cliente',
+      data_referencia: '2026-05-14',
+      destinatario_tipo: 'cliente',
+      destinatario_nome: 'Cliente A',
+      telefone: '5511988888888',
+      agendamento_id: 'svc-1',
+      tipo: 'lembrete_cliente',
+      mensagem: 'Lembrete manual',
+      status: 'pronto_envio',
+      metadata: { equipe: 'Equipe 1' }
+    };
+    const created = await post(baseUrl, '/api/central-recados', body);
+    assert.equal(created.response.status, 201);
+    assert.equal(created.payload.canal, 'whatsapp_manual');
+    const updated = await post(baseUrl, '/api/central-recados', { ...body, mensagem: 'Texto editado' });
+    assert.equal(updated.response.status, 200);
+    assert.equal(state.logistica_whatsapp_mensagens.length, 1);
+    assert.equal(state.logistica_whatsapp_mensagens[0].mensagem, 'Texto editado');
+    assert.equal(evolutionCalled, false);
+  });
+});
+
+test('Central de Recados filtra periodo e persiste envio manual', async () => {
+  const state = makeState({ logistica_whatsapp_mensagens: [{
+    id: 'manual-1', reference_key: 'grupo:2026-05-14', data_referencia: '2026-05-14',
+    canal: 'whatsapp_manual', destinatario_tipo: 'grupo', destinatario_nome: 'Grupo operacional',
+    tipo: 'roteiro_operacional', mensagem: 'Roteiro', status: 'pronto_envio', metadata: {}
+  }, {
+    id: 'manual-2', reference_key: 'grupo:2026-06-01', data_referencia: '2026-06-01',
+    canal: 'whatsapp_manual', destinatario_tipo: 'grupo', tipo: 'roteiro_operacional',
+    mensagem: 'Outro roteiro', status: 'pronto_envio', metadata: {}
+  }] });
+  await withServer({ state }, async (baseUrl) => {
+    const listed = await fetch(`${baseUrl}/api/central-recados?inicio=2026-05-14&fim=2026-05-14`, { headers: { Authorization: 'Bearer test-user-token' } });
+    const rows = await listed.json();
+    assert.equal(listed.status, 200);
+    assert.deepEqual(rows.map(row => row.id), ['manual-1']);
+    const changed = await patchJson(baseUrl, '/api/central-recados/manual-1', { status: 'enviado_manual' });
+    assert.equal(changed.response.status, 200);
+    assert.equal(changed.payload.status, 'enviado_manual');
+    assert.ok(changed.payload.enviado_em);
+  });
+});
+
+test('Central de Recados rejeita status fora do fluxo manual', async () => {
+  await withServer({}, async (baseUrl) => {
+    const result = await post(baseUrl, '/api/central-recados', {
+      reference_key: 'cliente:svc-1:teste', data_referencia: '2026-05-14',
+      destinatario_tipo: 'cliente', tipo: 'teste', mensagem: 'Teste', status: 'enviado'
+    });
+    assert.equal(result.response.status, 400);
+    assert.match(result.payload.error, /Status/);
+  });
+});
 
 test('POST /api/logistica/whatsapp/enviar-agenda-tecnico envia agenda para técnico com WhatsApp válido', async () => {
   let called = false;
