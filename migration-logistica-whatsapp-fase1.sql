@@ -31,6 +31,14 @@ CREATE TABLE IF NOT EXISTS logistica_whatsapp_mensagens (
   recebido_em TIMESTAMP WITH TIME ZONE
 );
 
+-- Central de Recados (envio assistido/manual). Campos aditivos para manter
+-- compatibilidade com o historico da integracao automatica existente.
+ALTER TABLE logistica_whatsapp_mensagens ADD COLUMN IF NOT EXISTS reference_key TEXT;
+ALTER TABLE logistica_whatsapp_mensagens ADD COLUMN IF NOT EXISTS data_referencia DATE;
+ALTER TABLE logistica_whatsapp_mensagens ADD COLUMN IF NOT EXISTS canal TEXT DEFAULT 'whatsapp_manual';
+ALTER TABLE logistica_whatsapp_mensagens ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE logistica_whatsapp_mensagens ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_agendamento ON logistica_whatsapp_mensagens(agendamento_id);
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_tecnico ON logistica_whatsapp_mensagens(tecnico_id);
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_cliente ON logistica_whatsapp_mensagens(cliente_id);
@@ -38,3 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_tipo ON logistica_wh
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_status ON logistica_whatsapp_mensagens(status);
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_destinatario ON logistica_whatsapp_mensagens(destinatario_tipo);
 CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_created_at ON logistica_whatsapp_mensagens(created_at);
+CREATE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_data_referencia ON logistica_whatsapp_mensagens(data_referencia);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_logistica_whatsapp_mensagens_reference_key
+  ON logistica_whatsapp_mensagens(reference_key)
+  WHERE reference_key IS NOT NULL;

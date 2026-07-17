@@ -7144,6 +7144,100 @@ app.get('/api/logistica/whatsapp/mensagens', async (req, res) => {
   }
 });
 
+const CENTRAL_RECADOS_STATUS = new Set(['pendente', 'pronto_envio', 'enviado_manual', 'ignorado', 'sem_telefone', 'falhou']);
+const CENTRAL_RECADOS_DESTINATARIOS = new Set(['cliente', 'tecnico', 'grupo']);
+
+function centralRecadoPayload(input = {}, current = {}) {
+  const referenceKey = cleanText(input.reference_key ?? current.reference_key, 300);
+  const dataReferencia = cleanDateText(input.data_referencia ?? current.data_referencia);
+  const status = cleanText(input.status ?? current.status, 40) || 'pendente';
+  const destinatarioTipo = cleanText(input.destinatario_tipo ?? current.destinatario_tipo, 40);
+  if (!referenceKey) throw Object.assign(new Error('reference_key obrigatoria'), { status: 400 });
+  if (!dataReferencia) throw Object.assign(new Error('data_referencia YYYY-MM-DD obrigatoria'), { status: 400 });
+  if (!CENTRAL_RECADOS_STATUS.has(status)) throw Object.assign(new Error('Status de recado invalido'), { status: 400 });
+  if (!CENTRAL_RECADOS_DESTINATARIOS.has(destinatarioTipo)) throw Object.assign(new Error('Destinatario de recado invalido'), { status: 400 });
+  const mensagem = cleanText(input.mensagem ?? current.mensagem, 12000);
+  if (!mensagem) throw Object.assign(new Error('mensagem obrigatoria'), { status: 400 });
+  return {
+    reference_key: referenceKey,
+    data_referencia: dataReferencia,
+    canal: 'whatsapp_manual',
+    direcao: 'enviada',
+    destinatario_tipo: destinatarioTipo,
+    destinatario_nome: cleanNullableText(input.destinatario_nome ?? current.destinatario_nome, 240),
+    telefone: cleanNullableText(input.telefone ?? current.telefone, 30),
+    agendamento_id: cleanNullableText(input.agendamento_id ?? current.agendamento_id, 120),
+    tecnico_id: cleanNullableText(input.tecnico_id ?? current.tecnico_id, 120),
+    cliente_id: cleanNullableText(input.cliente_id ?? current.cliente_id, 120),
+    tipo: cleanText(input.tipo ?? current.tipo, 100) || 'recado_operacional',
+    mensagem,
+    status,
+    erro: status === 'falhou' ? cleanNullableText(input.erro ?? current.erro, 2000) : null,
+    metadata: cleanObject(input.metadata ?? current.metadata, {}),
+    enviado_em: status === 'enviado_manual' ? (current.enviado_em || new Date().toISOString()) : null,
+    updated_at: new Date().toISOString()
+  };
+}
+
+app.get('/api/central-recados', async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    if (!await requireAdminOrOperator(req, res)) return;
+    let query = db.from('logistica_whatsapp_mensagens').select('*').eq('canal', 'whatsapp_manual');
+    const inicio = cleanDateText(req.query.inicio);
+    const fim = cleanDateText(req.query.fim);
+    const status = cleanText(req.query.status, 40);
+    const tipo = cleanText(req.query.tipo, 100);
+    const destinatario = cleanText(req.query.destinatario_tipo, 40);
+    if (inicio) query = query.gte('data_referencia', inicio);
+    if (fim) {
+      const exclusive = new Date(`${fim}T12:00:00Z`);
+      exclusive.setUTCDate(exclusive.getUTCDate() + 1);
+      query = query.lt('data_referencia', exclusive.toISOString().slice(0, 10));
+    }
+    if (status) query = query.eq('status', status);
+    if (tipo) query = query.eq('tipo', tipo);
+    if (destinatario) query = query.eq('destinatario_tipo', destinatario);
+    const { data, error } = await query.order('data_referencia', { ascending: true }).limit(1000);
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    res.status(500).json({ error: 'Falha ao listar recados', detail: error.message });
+  }
+});
+
+app.post('/api/central-recados', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    if (!await requireAdminOrOperator(req, res)) return;
+    const referenceKey = cleanText(req.body?.reference_key, 300);
+    const current = referenceKey
+      ? await maybeSingle(db.from('logistica_whatsapp_mensagens').select('*').eq('reference_key', referenceKey).limit(1))
+      : null;
+    const payload = centralRecadoPayload(req.body, current || {});
+    const saved = current
+      ? await updateLogisticsWhatsappMessage(db, current.id, payload)
+      : await insertLogisticsWhatsappMessage(db, { ...payload, created_at: new Date().toISOString() });
+    res.status(current ? 200 : 201).json(saved);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || 'Falha ao salvar recado' });
+  }
+});
+
+app.patch('/api/central-recados/:id', strictLimiter, async (req, res) => {
+  const db = getSupabaseClient();
+  try {
+    if (!await requireAdminOrOperator(req, res)) return;
+    const current = await maybeSingle(db.from('logistica_whatsapp_mensagens').select('*').eq('id', req.params.id).eq('canal', 'whatsapp_manual').limit(1));
+    if (!current) return res.status(404).json({ error: 'Recado nao encontrado' });
+    const payload = centralRecadoPayload(req.body, current);
+    const saved = await updateLogisticsWhatsappMessage(db, current.id, payload);
+    res.json(saved);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || 'Falha ao atualizar recado' });
+  }
+});
+
 app.post('/api/logistica/whatsapp/mensagens/:id/reenviar', strictLimiter, async (req, res) => {
   const db = getSupabaseClient();
   try {

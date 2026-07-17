@@ -2474,6 +2474,20 @@ td.bold { color: var(--text); font-weight: 600; }
 .com-msg-dest strong { display:block; color:var(--text); margin-bottom:2px; }
 .com-msg-preview { max-width:420px; font-size:12px; color:var(--text2); line-height:1.45; }
 .com-msg-error { margin-top:5px; color:var(--red); font-size:11px; font-weight:700; }
+.central-filter-panel { grid-template-columns:repeat(4,minmax(150px,1fr)); }
+.central-tabs { margin-bottom:14px; overflow-x:auto; }
+.central-list { display:grid; gap:12px; }
+.central-message-card { padding:15px; border:1px solid var(--border); border-radius:var(--r); background:var(--card); }
+.central-message-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.central-message-title { font-weight:850; color:var(--text); }
+.central-message-meta { margin-top:3px; color:var(--text3); font-size:11px; line-height:1.5; }
+.central-message-text { width:100%; min-height:120px; resize:vertical; border:1px solid var(--border); border-radius:var(--r2); background:var(--surface); padding:10px; color:var(--text); font:11px/1.5 var(--mono); }
+.central-message-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+.central-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-bottom:12px; }
+.central-summary > div { padding:10px; border-radius:var(--r2); background:var(--bg2); border:1px solid var(--border); font-size:11px; }
+.central-model-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+.central-model-vars { font:10px/1.5 var(--mono); color:var(--text3); margin-top:8px; }
+@media(max-width:800px){ .central-filter-panel{grid-template-columns:1fr 1fr}.central-message-head{flex-direction:column}.central-message-actions .btn{flex:1 1 46%} }
 .fleet-section-card,
 .fleet-detail-card,
 .fleet-history-card {
@@ -3706,7 +3720,7 @@ async function carregarVeiculos(){
   <button class="nav-item active" onclick="nav('hoje',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg><span>Hoje</span><span class="nav-badge orange" id="nb-hoje">0</span></button>
   <button class="nav-item" onclick="nav('agenda',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg><span>Agenda</span><span class="nav-badge" id="nb-agenda">0</span></button>
   <button class="nav-item" onclick="nav('roteiro',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg><span>Mapa & Roteiros</span><span class="nav-badge" id="nb-roteiro" style="display:none">0</span></button>
-  <button class="nav-item" onclick="nav('comunicacao',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>WhatsApp</span></button>
+  <button class="nav-item" onclick="nav('comunicacao',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>Central de Recados</span><span class="nav-badge orange" id="nb-recados" style="display:none">0</span></button>
 
   <div class="nav-section-label">Cadastros</div>
   <button class="nav-item" onclick="nav('clientes',this)"><svg class="ico shrink-0" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v8h20v-8a2 2 0 0 0-2-2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg><span>Clientes</span></button>
@@ -3783,7 +3797,7 @@ async function carregarVeiculos(){
     <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg></span><span class="mob-label">Mapa</span>
   </button>
   <button class="mob-nav-item" id="mn-comunicacao" onclick="mobNav('comunicacao',this)">
-    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span><span class="mob-label">WhatsApp</span>
+    <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span><span class="mob-label">Recados</span>
   </button>
   <button class="mob-nav-item" id="mn-rotas" onclick="mobNav('rotas',this)">
     <span class="mob-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon><path d="M9 3v15"></path><path d="M15 6v15"></path></svg></span><span class="mob-label">Rotas</span>
@@ -4119,63 +4133,34 @@ async function carregarVeiculos(){
       </div>
     </div>
 
-    <!-- ═══ COMUNICAÇÃO LOGÍSTICA ═══ -->
+    <!-- ═══ CENTRAL DE RECADOS ═══ -->
     <div id="page-comunicacao" class="page">
       <div class="ui-page-head com-v2-head">
         <div>
-          <div class="ui-page-kicker">WhatsApp operacional</div>
-          <div class="section-title">WhatsApp e Confirmações</div>
-          <div class="section-sub">Confirmações, lembretes e mensagens enviadas.</div>
+          <div class="ui-page-kicker">Comunicação operacional assistida</div>
+          <div class="section-title">Central de Recados</div>
+          <div class="section-sub">Gerencie confirmações, lembretes, roteiros e mensagens operacionais.</div>
         </div>
         <div class="ui-page-actions">
-          <input type="date" class="fsel" id="com-data" onchange="renderComunicacaoLogistica(true)">
-          <button class="btn btn-primary btn-sm" onclick="comEnviarAgendaTodos()">Enviar agenda aos técnicos</button>
-          <button class="btn btn-green btn-sm" onclick="comEnviarLembretes24h()">Enviar lembretes 24h</button>
-          <button class="btn btn-ghost btn-sm" onclick="renderComunicacaoLogistica(true)">Atualizar</button>
+          <button class="btn btn-ghost btn-sm" onclick="centralSetPeriodo('hoje')">Hoje</button>
+          <button class="btn btn-ghost btn-sm" onclick="centralSetPeriodo('amanha')">Amanhã</button>
+          <button class="btn btn-ghost btn-sm" onclick="centralSetPeriodo('semana')">Semana</button>
+          <input type="date" class="fsel" id="com-data" onchange="centralSetPeriodo('data')">
+          <button class="btn btn-primary btn-sm" onclick="renderComunicacaoLogistica(true)">Atualizar</button>
         </div>
       </div>
-
-      <div id="com-evolution-status" class="com-status-slot"></div>
-
-      <div class="flow-guide">
-        <div class="flow-guide-step"><span class="flow-guide-num">1</span><div><div class="flow-guide-title">Ver status</div><div class="flow-guide-text">Confirme se o WhatsApp está conectado antes dos envios.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">2</span><div><div class="flow-guide-title">Enviar mensagens</div><div class="flow-guide-text">Use agenda aos técnicos ou lembretes 24h para clientes.</div></div></div>
-        <div class="flow-guide-step"><span class="flow-guide-num">3</span><div><div class="flow-guide-title">Corrigir erros</div><div class="flow-guide-text">Mensagens com erro podem ser reenviadas ou copiadas manualmente.</div></div></div>
-      </div>
-
       <div class="grid-kpi com-kpis" id="com-kpis" style="margin-bottom:16px"></div>
-
-      <div class="filter-bar ui-filter-panel com-filter-panel">
-        <select class="fsel" id="com-filter-tipo" onchange="renderComunicacaoLogistica(true)">
-          <option value="">Todos os tipos</option>
-          <option value="agenda_tecnico">Agenda técnico</option>
-          <option value="confirmacao_cliente">Confirmação cliente</option>
-          <option value="lembrete_24h">Lembrete 24h</option>
-        </select>
-        <select class="fsel" id="com-filter-status" onchange="renderComunicacaoLogistica(true)">
-          <option value="">Todos os status</option>
-          <option value="pendente">Pendente</option>
-          <option value="enviado">Enviado</option>
-          <option value="erro">Erro</option>
-          <option value="recebido">Recebido</option>
-        </select>
-        <select class="fsel" id="com-filter-dest" onchange="renderComunicacaoLogistica(true)">
-          <option value="">Todos os destinatários</option>
-          <option value="tecnico">Técnico</option>
-          <option value="cliente">Cliente</option>
-          <option value="gestor">Gestor</option>
-          <option value="grupo">Grupo</option>
-        </select>
+      <div class="filter-bar ui-filter-panel central-filter-panel">
+        <select class="fsel" id="com-filter-tipo" onchange="renderComunicacaoLogistica()"><option value="">Todos os tipos</option><option value="confirmacao_cliente">Confirmação cliente</option><option value="lembrete_cliente">Lembrete cliente</option><option value="roteiro_tecnico">Roteiro individual</option><option value="roteiro_operacional">Roteiro operacional</option></select>
+        <select class="fsel" id="com-filter-status" onchange="renderComunicacaoLogistica()"><option value="">Todos os status</option><option value="pendente">Pendente</option><option value="pronto_envio">Pronto para envio</option><option value="enviado_manual">Enviado manualmente</option><option value="ignorado">Ignorado</option><option value="sem_telefone">Sem telefone</option><option value="falhou">Falhou</option></select>
+        <select class="fsel" id="com-filter-equipe" onchange="renderComunicacaoLogistica()"><option value="">Todas as equipes</option></select>
+        <select class="fsel" id="com-filter-veiculo" onchange="renderComunicacaoLogistica()"><option value="">Todos os veículos</option></select>
       </div>
-
-      <div class="tbl-wrap ui-table-card">
-        <table>
-          <thead>
-            <tr><th>Data</th><th>Tipo</th><th>Destino</th><th>Status</th><th>Mensagem</th><th>Ações</th></tr>
-          </thead>
-          <tbody id="com-msg-tbody"></tbody>
-        </table>
+      <div class="rot-tabs central-tabs" role="tablist" aria-label="Áreas da Central de Recados">
+        <button class="active" data-central-tab="clientes" onclick="centralSetTab('clientes')">Clientes</button><button data-central-tab="tecnicos" onclick="centralSetTab('tecnicos')">Técnicos</button><button data-central-tab="grupo" onclick="centralSetTab('grupo')">Grupo operacional</button><button data-central-tab="modelos" onclick="centralSetTab('modelos')">Modelos</button><button data-central-tab="historico" onclick="centralSetTab('historico')">Histórico legado</button>
       </div>
+      <div id="central-alert" class="com-status-slot"></div>
+      <div id="central-content"></div>
     </div>
 
     <!-- ═══ ROTAS & KM ═══ -->
@@ -8640,7 +8625,7 @@ const PAGE_META = {
   dashboard:  { title:'Dashboard / Gestão', sub:'Resumo gerencial e indicadores' },
   agenda:     { title:'Agenda de Serviços', sub:'Planeje, cadastre e acompanhe os serviços' },
   roteiro:    { title:'Mapa & Roteiros',    sub:'Visualize serviços, equipes, veículos e sequência operacional' },
-  comunicacao:{ title:'WhatsApp e Confirmações', sub:'Confirmações, lembretes e mensagens enviadas' },
+  comunicacao:{ title:'Central de Recados', sub:'Confirmações, lembretes e roteiros operacionais' },
   rotas:      { title:'Rotas & KM',          sub:'Eficiência de deslocamento e KM rodados' },
   checklist:  { title:'Checklist Diário',   sub:'Registro de saída, retorno e conferência' },
   frota:      { title:'Controle de Frota',  sub:'Veículos, alertas e manutenção' },
@@ -8715,6 +8700,9 @@ const MODULE_LOADERS = {
   comunicacao: {
     label: 'comunicação',
     load: async () => {
+      await carregarCatalogosServico();
+      await carregarServicesDoSupabase();
+      await carregarClientesParaLembretes();
       await renderComunicacaoLogistica(true);
     }
   },
@@ -8856,6 +8844,7 @@ function updateBadges() {
   document.getElementById('nb-hoje').textContent    = todaySvcs.length;
   document.getElementById('nb-agenda').textContent  = filteredSvcs().length;
   document.getElementById('nb-frota').textContent   = clRecords.length;
+  centralRefreshBadge();
 }
 
 function applyMesFilter() {
@@ -18301,7 +18290,7 @@ async function carregarMensagensLogistica() {
   return logisticaWhatsappMensagens;
 }
 
-async function renderComunicacaoLogistica(force = false) {
+async function renderComunicacaoLegado(force = false) {
   const tbody = document.getElementById('com-msg-tbody');
   if (!tbody) return;
   comDataValue();
@@ -18416,6 +18405,45 @@ async function comEnviarLembreteServico(id) {
     toast('Falha ao enviar lembrete: ' + (e.message || e), 'err');
   }
 }
+
+// ═══ CENTRAL DE RECADOS — envio assistido/manual ═══
+let centralTab='clientes', centralPeriodo='hoje', centralRegistros=[], centralItens=[];
+const CENTRAL_MODELOS={
+  confirmacao_cliente:{nome:'Confirmação de agendamento',texto:'Olá, {cliente}. Tudo bem?\n\nSeu atendimento com a {empresa} está agendado para {data}, às {horario}.\n\nServiço: {servico}\nEndereço: {endereco}\n\nPor favor, confirme o recebimento.'},
+  lembrete_cliente:{nome:'Lembrete de serviço',texto:'Olá, {cliente}. Tudo bem?\n\nLembramos que seu atendimento com a {empresa} será hoje, às {horario}.\n\nServiço: {servico}\nEndereço: {endereco}\nEquipe: {equipe}\n\nEstamos à disposição.'},
+  reagendamento_cliente:{nome:'Aviso de reagendamento',texto:'Olá, {cliente}. Precisamos ajustar seu atendimento de {servico}, previsto para {data} às {horario}. Entre em contato para combinarmos o melhor novo horário.'},
+  atraso_cliente:{nome:'Aviso de atraso',texto:'Olá, {cliente}. Nossa equipe teve um imprevisto no roteiro e poderá atrasar para o atendimento de hoje. Pedimos desculpas e agradecemos a compreensão.'},
+  roteiro_tecnico:{nome:'Roteiro individual do técnico',texto:'ROTEIRO — {data}\n\nTécnico/equipe: {tecnico}\nVeículo: {veiculo}\n\n{servicos}\n\nPortal/rota: {link_rota}'},
+  roteiro_operacional:{nome:'Roteiro completo do grupo',texto:'ROTEIRO OPERACIONAL — {data}\n\n{servicos}\n\nResumo:\nTotal de serviços: {total}\nEquipes: {equipes}\nVeículos: {veiculos}\nPendentes: {pendentes}\nAtrasados: {atrasados}'}
+};
+function centralBuildFromTemplate(t,v={}){return String(t||'').replace(/\{([a-z_]+)\}/gi,(_,k)=>v[k]??`{${k}}`)}
+function centralStatusChip(s){const m={pendente:['Pendente','chip-orange'],pronto_envio:['Pronto para envio','chip-blue'],enviado_manual:['Enviado manualmente','chip-green'],ignorado:['Ignorado','chip-gray'],sem_telefone:['Sem telefone','chip-orange'],falhou:['Falhou','chip-red']}[s]||[s||'Pendente','chip-gray'];return `<span class="chip ${m[1]}">${sanitize(m[0])}</span>`}
+function centralBounds(){const h=reminderTodayKey(),d=document.getElementById('com-data')?.value||h;if(centralPeriodo==='amanha'){const a=reminderShiftDateKey(h,1);return{inicio:a,fim:a}}if(centralPeriodo==='semana')return{inicio:h,fim:reminderShiftDateKey(h,6)};if(centralPeriodo==='data')return{inicio:d,fim:d};return{inicio:h,fim:h}}
+function centralSetPeriodo(p){centralPeriodo=p;const e=document.getElementById('com-data');if(e&&p!=='data')e.value=p==='amanha'?reminderShiftDateKey(reminderTodayKey(),1):reminderTodayKey();renderComunicacaoLogistica(true)}
+function centralSetTab(t){centralTab=t;document.querySelectorAll('[data-central-tab]').forEach(b=>b.classList.toggle('active',b.dataset.centralTab===t));centralRenderContent()}
+function centralServiceActive(s){return !['cancelado','executado','concluido','finalizado'].includes(String(sf(s).status||'').toLowerCase())}
+function centralValues(s){const f=sf(s);return{cliente:f.cliente||'Cliente',servico:f.tipo||f.tipoLabel||'Serviço',data:reminderFmtDate(getServiceDateValue(s)),horario:f.horario==='—'?'Horário não informado':f.horario,endereco:f.endereco||'Endereço não informado',tecnico:getServiceEquipeLabel(s)||'Sem equipe',equipe:getServiceEquipeLabel(s)||'Sem equipe',veiculo:f.veiculo||'Sem veículo',observacao:f.obs||'',empresa:'Letec',link_rota:''}}
+function centralClienteItem(s){const d=getServiceDateValue(s),tipo=d===reminderTodayKey()?'lembrete_cliente':'confirmacao_cliente',ci=resolverClienteParaLembrete(s),ct=resolverContatoLembrete(ci.customer),v=centralValues(s);return{reference_key:`cliente:${reminderServiceId(s)}:${tipo}`,data_referencia:d,destinatario_tipo:'cliente',destinatario_nome:v.cliente,telefone:ct.numero||null,agendamento_id:reminderServiceId(s),cliente_id:ci.customer?.id?String(ci.customer.id):null,tipo,mensagem:centralBuildFromTemplate(CENTRAL_MODELOS[tipo].texto,v),status:ct.numero?'pronto_envio':'sem_telefone',metadata:{...v}}}
+function centralTechnicianItems(list){const g=new Map();list.forEach(s=>{const k=getServiceEquipeGroupKey(s);if(!g.has(k))g.set(k,[]);g.get(k).push(s)});return[...g.values()].map(sv=>{sv.sort((a,b)=>String(sf(a).horario).localeCompare(String(sf(b).horario)));const equipe=getServiceEquipeLabel(sv[0])||'Sem equipe',ids=getServiceTecnicosIds(sv[0]),tech=(window._tecnicos||[]).find(t=>ids.some(id=>String(id)===String(t.id)))||(window._tecnicos||[]).find(t=>normalizeReminderText(t.nome)===normalizeReminderText(equipe)),telefone=normalizarTelefoneWhatsApp(tech?.whatsapp||tech?.telefone||''),veiculo=sf(sv[0]).veiculo||'Sem veículo',b=centralBounds(),servicos=sv.map((s,i)=>{const v=centralValues(s);return`${i+1}. ${v.horario} — ${v.cliente}\n   Serviço: ${v.servico}\n   Endereço: ${v.endereco}${v.observacao?`\n   Observação: ${v.observacao}`:''}`}).join('\n\n'),data=b.inicio===b.fim?reminderFmtDate(b.inicio):`${reminderFmtDate(b.inicio)} a ${reminderFmtDate(b.fim)}`;return{reference_key:`tecnico:${b.inicio}:${b.fim}:${ids.join('-')||normalizeReminderText(equipe)}`,data_referencia:b.inicio,destinatario_tipo:'tecnico',destinatario_nome:equipe,telefone:telefone||null,tecnico_id:tech?.id?String(tech.id):null,tipo:'roteiro_tecnico',mensagem:centralBuildFromTemplate(CENTRAL_MODELOS.roteiro_tecnico.texto,{data,tecnico:equipe,veiculo,servicos,link_rota:'Disponível no Portal do Técnico'}),status:telefone?'pronto_envio':'sem_telefone',metadata:{equipe,veiculo,total:sv.length,periodo_fim:b.fim}}})}
+function centralGroupItem(list){const b=centralBounds(),g=new Map();list.forEach(s=>{const k=getServiceEquipeLabel(s)||'Sem equipe';if(!g.has(k))g.set(k,[]);g.get(k).push(s)});const sections=[...g.entries()].map(([e,sv])=>{sv.sort((a,b)=>String(sf(a).horario).localeCompare(String(sf(b).horario)));return`Equipe: ${e}\nVeículo: ${sf(sv[0]).veiculo||'Sem veículo'}\n\n${sv.map((s,i)=>{const v=centralValues(s);return`${i+1}. ${v.horario} — ${v.cliente}\n   Serviço: ${v.servico}\n   Endereço: ${v.endereco}${v.observacao?`\n   Observação: ${v.observacao}`:''}`}).join('\n\n')}`}).join('\n\n──────────\n\n'),equipes=[...g.keys()].filter(x=>x!=='Sem equipe'),veiculos=[...new Set(list.map(s=>sf(s).veiculo).filter(Boolean))],atrasados=list.filter(s=>String(sf(s).status).toLowerCase()==='atrasado').length,data=b.inicio===b.fim?reminderFmtDate(b.inicio):`${reminderFmtDate(b.inicio)} a ${reminderFmtDate(b.fim)}`;return{reference_key:`grupo:${b.inicio}:${b.fim}:roteiro_operacional`,data_referencia:b.inicio,destinatario_tipo:'grupo',destinatario_nome:'Grupo operacional',telefone:null,tipo:'roteiro_operacional',mensagem:centralBuildFromTemplate(CENTRAL_MODELOS.roteiro_operacional.texto,{data,servicos:sections||'Nenhum serviço no período.',total:list.length,equipes:equipes.length,veiculos:veiculos.length,pendentes:list.filter(s=>String(sf(s).status).toLowerCase()==='agendado').length,atrasados}),status:'pronto_envio',metadata:{total:list.length,equipes:equipes.length,veiculos:veiculos.length,sem_equipe:list.filter(s=>!getServiceEquipeLabel(s)).length,sem_veiculo:list.filter(s=>!sf(s).veiculo).length,atrasados,periodo_fim:b.fim}}}
+async function centralLoadRecords(){const b=centralBounds(),r=await fetch(`${API_BASE_URL}/api/central-recados?inicio=${b.inicio}&fim=${b.fim}`,{cache:'no-store',headers:await getBackendAuthHeaders()}),p=await r.json().catch(()=>[]);if(!r.ok)throw new Error(p.error||'Falha ao carregar recados');centralRegistros=Array.isArray(p)?p:[]}
+function centralMerge(g){const m=new Map(centralRegistros.map(r=>[r.reference_key,r]));return g.map(i=>({...i,...(m.get(i.reference_key)||{}),metadata:{...i.metadata,...(m.get(i.reference_key)?.metadata||{})}}))}
+async function centralSave(i,p={}){const body={...i,...p,metadata:{...(i.metadata||{}),...(p.metadata||{})}},path=i.id?`/api/central-recados/${encodeURIComponent(i.id)}`:'/api/central-recados',r=await fetch(`${API_BASE_URL}${path}`,{method:i.id?'PATCH':'POST',headers:{'Content-Type':'application/json',...(await getBackendAuthHeaders())},body:JSON.stringify(body)}),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Falha ao salvar recado');return d}
+async function centralAction(n,a){const i=centralItens[n];if(!i)return;const msg=String(document.getElementById(`central-msg-${n}`)?.value||i.mensagem||'').trim();try{if(a==='copiar'){await copyTextToClipboard(msg);return toast('Mensagem copiada','ok')}if(a==='whatsapp'){if(!i.telefone)return toast('Sem telefone para abrir o WhatsApp','warn');Object.assign(i,await centralSave(i,{mensagem:msg,metadata:{aberto_em:new Date().toISOString()}}));window.open(`https://wa.me/${normalizarTelefoneWhatsApp(i.telefone)}?text=${encodeURIComponent(msg)}`,'_blank');return toast('WhatsApp aberto. Marque como enviado após concluir.','ok')}Object.assign(i,await centralSave(i,{mensagem:msg,status:a==='enviado'?'enviado_manual':'ignorado'}));toast(a==='enviado'?'Marcado como enviado':'Recado ignorado','ok');centralRenderAll()}catch(e){toast(e.message||'Falha na ação','err')}}
+async function centralSaveEdit(n){const i=centralItens[n],mensagem=document.getElementById(`central-msg-${n}`)?.value.trim();if(!i||!mensagem)return;try{Object.assign(i,await centralSave(i,{mensagem}));toast('Texto salvo','ok');centralRenderAll()}catch(e){toast(e.message,'err')}}
+function centralCard(i,n){const m=i.metadata||{},can=!!normalizarTelefoneWhatsApp(i.telefone),copyLabel=i.tipo==='roteiro_operacional'?'Copiar roteiro completo':i.tipo==='roteiro_tecnico'?'Copiar roteiro':'Copiar mensagem';return`<article class="central-message-card"><div class="central-message-head"><div><div class="central-message-title">${sanitize(i.destinatario_nome||'Destinatário')}</div><div class="central-message-meta">${sanitize(reminderFmtDate(i.data_referencia))} · ${sanitize(m.servico||`${m.total||0} serviço(s)`)}${m.endereco?` · ${sanitize(m.endereco)}`:''}<br>${sanitize(i.telefone?`WhatsApp: +${i.telefone}`:'Sem telefone')}</div></div>${centralStatusChip(i.status)}</div><textarea class="central-message-text" id="central-msg-${n}">${sanitize(i.mensagem)}</textarea><div class="central-message-actions"><button class="btn btn-primary btn-sm" onclick="centralAction(${n},'copiar')">${copyLabel}</button><button class="btn btn-green btn-sm" onclick="centralAction(${n},'whatsapp')" ${can?'':'disabled'}>Abrir WhatsApp</button><button class="btn btn-ghost btn-sm" onclick="centralSaveEdit(${n})">Salvar edição</button><button class="btn btn-ghost btn-sm" onclick="centralAction(${n},'enviado')">Marcar enviado</button><button class="btn btn-ghost btn-sm" onclick="centralAction(${n},'ignorar')">Ignorar</button></div></article>`}
+function centralFiltered(k){const st=document.getElementById('com-filter-status')?.value||'',tp=document.getElementById('com-filter-tipo')?.value||'',eq=document.getElementById('com-filter-equipe')?.value||'',ve=document.getElementById('com-filter-veiculo')?.value||'';return centralItens.filter(i=>(!k||i.destinatario_tipo===k)&&(!st||i.status===st)&&(!tp||i.tipo===tp)&&(!eq||i.metadata?.equipe===eq)&&(!ve||i.metadata?.veiculo===ve))}
+function centralRenderFilters(){const fill=(id,vals,label)=>{const e=document.getElementById(id);if(!e)return;const c=e.value;e.innerHTML=`<option value="">${label}</option>`+[...new Set(vals.filter(Boolean))].sort().map(v=>`<option value="${escapeHtmlAttr(v)}">${sanitize(v)}</option>`).join('');e.value=c};fill('com-filter-equipe',centralItens.map(i=>i.metadata?.equipe),'Todas as equipes');fill('com-filter-veiculo',centralItens.map(i=>i.metadata?.veiculo),'Todos os veículos')}
+function centralPending(){return centralItens.filter(i=>['pendente','pronto_envio','sem_telefone','falhou'].includes(i.status)).length}
+function centralRenderKpis(){const c=s=>centralItens.filter(i=>s.includes(i.status)).length,h=reminderTodayKey(),v=[['Pendentes',centralPending(),'cv-orange'],['Prontos para envio',c(['pronto_envio']),'cv-blue'],['Enviados hoje',centralItens.filter(i=>i.status==='enviado_manual'&&String(i.enviado_em||'').slice(0,10)===h).length,'cv-green'],['Sem telefone',c(['sem_telefone']),'cv-orange'],['Falharam',c(['falhou']),''],['Roteiro pendente',centralItens.filter(i=>i.tipo==='roteiro_operacional'&&['pendente','pronto_envio','falhou'].includes(i.status)).length,'cv-blue']],e=document.getElementById('com-kpis');if(e)e.innerHTML=v.map(x=>`<div class="card"><div class="card-label">${x[0]}</div><div class="card-value ${x[2]}">${x[1]}</div></div>`).join('');centralGlobalAlert(centralPending())}
+function centralModelsHtml(){return`<div class="central-model-grid">${Object.values(CENTRAL_MODELOS).map(m=>`<div class="central-message-card"><div class="central-message-title">${sanitize(m.nome)}</div><pre class="central-message-text" style="white-space:pre-wrap;height:auto">${sanitize(m.texto)}</pre><div class="central-model-vars">Variáveis: ${(m.texto.match(/\{[a-z_]+\}/g)||[]).join(' · ')}</div></div>`).join('')}</div>`}
+async function centralHistory(){const e=document.getElementById('central-content'),b=centralBounds();e.innerHTML='<div class="ui-empty-state">Carregando histórico...</div>';try{const r=await fetch(`${API_BASE_URL}/api/logistica/whatsapp/mensagens?data=${b.inicio}&limit=120`,{cache:'no-store'}),rows=await r.json();e.innerHTML=rows.length?`<div class="tbl-wrap ui-table-card"><table><thead><tr><th>Data</th><th>Tipo</th><th>Destino</th><th>Status</th><th>Mensagem</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${comFormatDate(x.created_at)}</td><td>${sanitize(comTipoLabel(x.tipo))}</td><td>${sanitize(x.destinatario_nome||x.telefone||'—')}</td><td>${comStatusChip(x.status)}</td><td>${sanitize(String(x.mensagem||'').slice(0,180))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="ui-empty-state">Nenhum registro legado no período.</div>'}catch(x){e.innerHTML=`<div class="ui-empty-state">${sanitize(x.message)}</div>`}}
+function centralRenderContent(){const e=document.getElementById('central-content');if(!e)return;if(centralTab==='modelos'){e.innerHTML=centralModelsHtml();return}if(centralTab==='historico'){centralHistory();return}const k=centralTab==='clientes'?'cliente':centralTab==='tecnicos'?'tecnico':'grupo',it=centralFiltered(k),summary=k==='grupo'&&it[0]?`<div class="central-summary"><div>Sem equipe: <strong>${it[0].metadata?.sem_equipe||0}</strong></div><div>Sem veículo: <strong>${it[0].metadata?.sem_veiculo||0}</strong></div><div>Com alerta: <strong>${it[0].metadata?.atrasados||0}</strong></div><div>Link do grupo operacional não configurado.</div></div>`:'';e.innerHTML=summary+(it.length?`<div class="central-list">${it.map(i=>centralCard(i,centralItens.indexOf(i))).join('')}</div>`:'<div class="ui-empty-state"><div class="ui-empty-title">Nenhum recado encontrado</div><div>Ajuste o período ou os filtros.</div></div>')}
+function centralRenderAll(){centralRenderFilters();centralRenderKpis();centralRenderContent();const n=centralPending(),e=document.getElementById('central-alert');if(e)e.innerHTML=n?`<div class="com-status-card warn"><div><div class="com-status-title">Existem ${n} recado(s) pendente(s) no período.</div><div class="com-status-text">Revise, copie ou abra o WhatsApp e registre o resultado manualmente.</div></div></div>`:''}
+function centralGlobalAlert(n){const b=document.getElementById('nb-recados');if(b){b.textContent=n;b.style.display=n?'':'none'}const p=document.getElementById('page-hoje');if(!p)return;let a=document.getElementById('hoje-central-recados-alert');if(!a){a=document.createElement('div');a.id='hoje-central-recados-alert';p.insertBefore(a,p.firstChild)}a.innerHTML=n?`<div class="com-status-card warn" style="margin-bottom:14px"><div><div class="com-status-title">Existem ${n} recado(s) pendente(s) para revisão.</div><div class="com-status-text"><button class="btn btn-ghost btn-xs" onclick="nav('comunicacao',null)">Ver Central de Recados</button></div></div></div>`:''}
+let centralBadgeLoading=false,centralBadgeCheckedAt=0;
+async function centralRefreshBadge(){if(centralBadgeLoading||Date.now()-centralBadgeCheckedAt<30000)return;centralBadgeLoading=true;try{const h=reminderTodayKey(),r=await fetch(`${API_BASE_URL}/api/central-recados?inicio=${h}&fim=${h}`,{cache:'no-store',headers:await getBackendAuthHeaders()}),rows=r.ok?await r.json():[],active=(services||[]).filter(s=>getServiceDateValue(s)===h&&centralServiceActive(s)),resolved=new Set((rows||[]).filter(x=>['enviado_manual','ignorado'].includes(x.status)).map(x=>x.reference_key)),keys=[...active.map(s=>`cliente:${reminderServiceId(s)}:lembrete_cliente`),...centralTechnicianItems(active).map(x=>x.reference_key),`grupo:${h}:${h}:roteiro_operacional`];centralGlobalAlert(keys.filter(k=>!resolved.has(k)).length);centralBadgeCheckedAt=Date.now()}catch(e){}finally{centralBadgeLoading=false}}
+async function renderComunicacaoLogistica(force=false){const input=document.getElementById('com-data');if(input&&!input.value)input.value=reminderTodayKey();const e=document.getElementById('central-content');if(e)e.innerHTML='<div class="ui-empty-state">Preparando recados do período...</div>';try{if(force)await Promise.all([carregarServicesDoSupabase(),carregarClientesParaLembretes(),centralLoadRecords()]);else if(!centralRegistros.length)await centralLoadRecords();const b=centralBounds(),sv=(services||[]).filter(s=>{const d=getServiceDateValue(s);return d>=b.inicio&&d<=b.fim&&centralServiceActive(s)});centralItens=centralMerge([...sv.map(centralClienteItem),...centralTechnicianItems(sv),centralGroupItem(sv)]);centralRenderAll()}catch(x){if(e)e.innerHTML=`<div class="ui-empty-state"><div class="ui-empty-title">Não foi possível carregar a Central</div><div>${sanitize(x.message||x)}</div></div>`}}
 
 function renderMapaRoteiros(dateOverride = '') {
   const date = dateOverride || document.getElementById('rot-data')?.value || new Date().toISOString().split('T')[0];
