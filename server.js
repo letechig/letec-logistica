@@ -18,6 +18,9 @@ const PORT = process.env.PORT || 8000;
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
 const EVOLUTION_SEND_DELAY_MS = Number(process.env.EVOLUTION_SEND_DELAY_MS || 1200);
 const CEP_CACHE_TTL_MS = Number(process.env.CEP_CACHE_TTL_MS || 24 * 60 * 60 * 1000);
+const NOMINATIM_BASE_URL = String(process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org').replace(/\/$/, '');
+const NOMINATIM_USER_AGENT = String(process.env.NOMINATIM_USER_AGENT || 'LetecLog/1.0 (operacao@leteclog.local)');
+const GEOCODE_MIN_INTERVAL_MS = Math.max(1000, Number(process.env.GEOCODE_MIN_INTERVAL_MS || 1100));
 const CHECKLIST_PHOTO_BUCKET = process.env.CHECKLIST_PHOTO_BUCKET || 'checklist-photos';
 const CHECKLIST_PHOTO_MAX_BYTES = Number(process.env.CHECKLIST_PHOTO_MAX_BYTES || 5 * 1024 * 1024);
 const CLIENT_IMPORT_WORKBOOK = process.env.CLIENT_IMPORT_WORKBOOK ||
@@ -39,6 +42,9 @@ const corsOptions = {
 };
 
 const cepLookupCache = new Map();
+const geocodeCache = new Map();
+let geocodeQueue = Promise.resolve();
+let geocodeLastRequestAt = 0;
 
 function rateLimitJsonHandler(message, code) {
   return (req, res, next, options = {}) => {
@@ -2491,6 +2497,14 @@ function choosePrimaryAddress(addresses = []) {
     })[0] || null;
 }
 
+function resolvedServiceAddress(service = {}, customer = null, address = null) {
+  return String(
+    service.address_snapshot || service.endereco || service.endereco_completo
+    || address?.endereco_completo || address?.endereco
+    || customer?.endereco_completo || customer?.endereco || ''
+  ).trim();
+}
+
 async function enrichServicesWithCustomerLocations(db, rows = []) {
   const services = Array.isArray(rows) ? rows : [];
   if (!services.length) return services;
@@ -2525,6 +2539,7 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
     const serviceCoords = validCoordinatePair(service.latitude, service.longitude);
     const arrivalCoords = validCoordinatePair(service.chegada_lat, service.chegada_lng);
     const selected = addressCoords || customerCoords || serviceCoords || arrivalCoords;
+    const resolvedAddress = resolvedServiceAddress(service, customer, address);
     return {
       ...service,
       cliente_id: service.cliente_id || customer?.id || null,
@@ -2543,7 +2558,11 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
               : null,
       customer_cep: customer?.cep || address?.cep || null,
       address_cep: address?.cep || null,
-      address_numero: address?.numero || customer?.numero || null
+      address_numero: address?.numero || customer?.numero || null,
+      resolved_address: resolvedAddress || null,
+      resolved_address_source: (service.address_snapshot || service.endereco || service.endereco_completo) ? 'service'
+        : address ? (explicitAddress ? 'customer_address' : 'customer_primary_address')
+          : customer ? 'customer' : null
     };
   });
 }
@@ -3356,7 +3375,7 @@ function getMapProviderConfig() {
   return {
     provider: 'local_estimate',
     routingConfigured: false,
-    geocodingConfigured: false,
+    geocodingConfigured: true,
     cepLookupConfigured: true
   };
 }
@@ -5827,19 +5846,110 @@ app.post('/api/customers/:id/hard-delete', strictLimiter, async (req, res) => {
   }
 });
 
-app.get('/api/geocode', async (req, res) => {
+function geocodeComparable(value) {
+  return normalizeAddress(value).replace(/\s+/g, ' ').trim();
+}
+
+function geocodeNumber(value) {
+  return String(value || '').match(/\b\d+[A-Za-z]?\b/)?.[0]?.toLowerCase() || '';
+}
+
+function geocodeCandidateMatches(candidate = {}, context = {}) {
+  const details = candidate.address || {};
+  const expectedNumber = geocodeNumber(context.numero || context.address);
+  const actualNumber = geocodeNumber(details.house_number || candidate.display_name);
+  if (expectedNumber && actualNumber !== expectedNumber) return false;
+  const expectedCep = normalizeCep(context.cep);
+  const actualCep = normalizeCep(details.postcode);
+  if (expectedCep && actualCep && expectedCep !== actualCep) return false;
+  const expectedCity = geocodeComparable(context.cidade);
+  const actualCity = geocodeComparable(details.city || details.town || details.municipality || details.village || '');
+  if (expectedCity && actualCity && expectedCity !== actualCity) return false;
+  return !!validCoordinatePair(candidate.lat, candidate.lon);
+}
+
+function enqueueNominatimSearch(address, context = {}) {
+  const key = geocodeComparable(`${address}|${context.cep || ''}|${context.numero || ''}|${context.cidade || ''}`);
+  if (geocodeCache.has(key)) return Promise.resolve(geocodeCache.get(key));
+  const task = async () => {
+    const waitMs = Math.max(0, GEOCODE_MIN_INTERVAL_MS - (Date.now() - geocodeLastRequestAt));
+    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+    const url = new URL(`${NOMINATIM_BASE_URL}/search`);
+    url.searchParams.set('q', `${address}, Brasil`);
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('addressdetails', '1');
+    url.searchParams.set('countrycodes', 'br');
+    url.searchParams.set('limit', '3');
+    geocodeLastRequestAt = Date.now();
+    const { response, payload } = await fetchJsonWithTimeout(url.toString(), {
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9' }
+    });
+    if (!response.ok) throw new Error(`Nominatim respondeu ${response.status}`);
+    const match = (Array.isArray(payload) ? payload : []).find(item => geocodeCandidateMatches(item, { ...context, address }));
+    const result = match ? validCoordinatePair(match.lat, match.lon) : null;
+    geocodeCache.set(key, result);
+    return result;
+  };
+  const result = geocodeQueue.then(task, task);
+  geocodeQueue = result.catch(() => null);
+  return result;
+}
+
+app.get('/api/geocode', (req, res) => res.status(405).json({
+  error: 'Use a geocodificacao vinculada ao servico',
+  code: 'service_geocode_required'
+}));
+
+app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
   try {
-    return res.status(503).json({
-      error: 'Geocodificacao automatica desativada',
-      code: 'geocode_disabled',
-      details: 'Modo economico ativo: use CEP, ponto manual no mapa ou GPS de chegada do tecnico.'
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const service = await fetchServiceById(db, req.params.id);
+    if (!service) return res.status(404).json({ error: 'Servico nao encontrado', code: 'service_not_found' });
+    const customerId = serviceCustomerId(service);
+    if (!customerId) return res.status(422).json({ error: 'Servico sem cliente vinculado', code: 'customer_not_linked' });
+    const [customers, addresses] = await Promise.all([
+      safeSelectByIds(db, 'customers', 'id', [customerId]),
+      safeSelectByIds(db, 'customer_addresses', 'customer_id', [customerId])
+    ]);
+    const customer = customers[0] || null;
+    const explicit = service.customer_address_id
+      ? addresses.find(item => String(item.id) === String(service.customer_address_id)) : null;
+    const targetAddress = explicit || choosePrimaryAddress(addresses);
+    const existing = validCoordinatePair(targetAddress?.latitude, targetAddress?.longitude)
+      || validCoordinatePair(customer?.latitude, customer?.longitude);
+    const address = resolvedServiceAddress(service, customer, targetAddress);
+    if (!address) return res.status(422).json({ error: 'Cliente sem endereco utilizavel', code: 'address_missing' });
+    if (existing) return res.json({ location: existing, cached: true, target: targetAddress ? 'customer_address' : 'customer', address });
+
+    const usesServiceSnapshot = !!(service.address_snapshot || service.endereco || service.endereco_completo);
+    const serviceAddressDiffers = usesServiceSnapshot && targetAddress
+      && !areEquivalentCustomerAddresses({ endereco: address }, targetAddress);
+    const location = await enqueueNominatimSearch(address, {
+      cep: usesServiceSnapshot ? null : (targetAddress?.cep || customer?.cep),
+      numero: geocodeNumber(address),
+      cidade: targetAddress?.cidade || customer?.cidade
     });
+    if (!location) return res.status(404).json({ error: 'Localizacao nao encontrada com seguranca', code: 'location_not_found', address });
+
+    const timestamp = new Date().toISOString();
+    const write = serviceAddressDiffers
+      ? await runServiceWriteWithSchemaFallback(
+        payload => db.from('services').update(payload).eq('id', service.id).select(),
+        { ...location }, 'POST /api/services/:id/geocode service')
+      : targetAddress?.id
+      ? await runCustomerAddressWriteWithSchemaFallback(
+        payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', targetAddress.id).select(),
+        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode address')
+      : await runCustomerWriteWithSchemaFallback(
+        payload => db.from('customers').update(payload).eq('id', customerId).select(),
+        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode customer');
+    if (write.error) throw write.error;
+    res.json({ location, cached: false, target: serviceAddressDiffers ? 'service' : (targetAddress ? 'customer_address' : 'customer'), address });
   } catch (error) {
-    console.error('[GET /api/geocode] Error:', error.message);
-    return res.status(500).json({
-      error: 'Falha ao retornar status da geocodificacao',
-      details: error.message
-    });
+    console.error('[POST /api/services/:id/geocode] Error:', error.message);
+    res.status(503).json({ error: 'Falha temporaria ao localizar endereco', code: 'geocode_unavailable' });
   }
 });
 

@@ -9,15 +9,23 @@ const app = require('../server');
 const technicians = [{ id: 't1', nome: 'Ana' }];
 const serviceTypes = [{ sigla: 'DS', nome: 'Desinsetizacao', duracao_minutos: 60 }];
 const services = [
-  { id: 1, date: '2026-05-07', horario: '08:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua A, 1' },
+  { id: 1, date: '2026-05-07', horario: '08:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua A, 1', cliente_id: 10, customer_address_id: 'a10' },
   { id: 2, date: '2026-05-07', horario: '10:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua B, 2' },
   { id: 3, date: '2026-05-08', horario: '12:00', tipos: ['DS'], tecnicos_ids: ['t1'], endereco: 'Rua C, 3', latitude: 0, longitude: 0 },
 ];
 
 function makeMockSupabase() {
   return {
+    auth: { getUser: async () => ({ data: { user: { id: 'user-1', email: 'admin@letec.test' } }, error: null }) },
     from(table) {
-      const dataByTable = { service_types: serviceTypes, technicians, services, customers: [], customer_addresses: [] };
+      const dataByTable = {
+        service_types: serviceTypes,
+        technicians,
+        services,
+        customers: [{ id: 10, nome: 'Cliente Mapa', endereco: 'Rua Cadastro, 10', cidade: 'Sao Paulo' }],
+        customer_addresses: [{ id: 'a10', customer_id: 10, endereco: 'Rua A, 1', is_primary: true }],
+        app_users: [{ id: 1, auth_user_id: 'user-1', email: 'admin@letec.test', role: 'admin', active: true }]
+      };
       const builder = {
         _in: null,
         _filters: [],
@@ -105,14 +113,14 @@ test('GET /api/logistics/day-route calcula roteiro usando mock Supabase', async 
   });
 });
 
-test('GET /api/health anuncia modo economico de mapas', async () => {
+test('GET /api/health anuncia geocodificacao OpenStreetMap', async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/health`);
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.equal(payload.mapsProvider, 'local_estimate');
     assert.equal(payload.routingConfigured, false);
-    assert.equal(payload.geocodingConfigured, false);
+    assert.equal(payload.geocodingConfigured, true);
     assert.equal(payload.cepLookupConfigured, true);
     assert.equal(payload.mapsProxy, false);
   });
@@ -142,13 +150,52 @@ test('GET /api/maps/distance-matrix responde compativel sem Google configurado',
   });
 });
 
-test('GET /api/geocode fica desativado no modo economico', async () => {
+test('GET /api/geocode rejeita endereco arbitrario', async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/geocode?address=${encodeURIComponent('Rua Maria Jose Rangel, 135')}`);
-    assert.equal(response.status, 503);
+    assert.equal(response.status, 405);
     const payload = await response.json();
-    assert.equal(payload.code, 'geocode_disabled');
+    assert.equal(payload.code, 'service_geocode_required');
   });
+});
+
+test('GET /api/services resolve endereco do servico antes do cadastro', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/services`);
+    const payload = await response.json();
+    const service = payload.find(item => item.id === 1);
+    assert.equal(service.resolved_address, 'Rua A, 1');
+    assert.equal(service.resolved_address_source, 'service');
+  });
+});
+
+test('POST /api/services/:id/geocode localiza endereco vinculado e nao aceita payload arbitrario', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    if (String(url).startsWith('https://nominatim.openstreetmap.org/search')) {
+      return new Response(JSON.stringify([{
+        lat: '-23.55052', lon: '-46.63331', display_name: 'Rua A, 1, Sao Paulo, Brasil',
+        address: { house_number: '1', city: 'Sao Paulo' }
+      }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return originalFetch(url, options);
+  };
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/services/1/geocode`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: 'Endereco malicioso, 999' })
+      });
+      const payload = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(payload));
+      assert.equal(payload.address, 'Rua A, 1');
+      assert.equal(payload.location.latitude, -23.55052);
+      assert.equal(payload.target, 'customer_address');
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('GET /api/cep normaliza BrasilAPI v2 com coordenadas', async () => {
