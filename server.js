@@ -1326,20 +1326,91 @@ function vehicleDisplayName(vehicle = {}) {
 }
 
 function plateLastDigit(plate) {
-  const digits = String(plate || '').replace(/\D/g, '');
+  const normalized = normalizePlate(plate) || '';
+  if (normalized.length !== 7) return '';
+  const digits = normalized.replace(/\D/g, '');
   return digits ? digits[digits.length - 1] : '';
 }
 
-function rodizioInfo(plate, date = new Date()) {
+const RODIZIO_TIME_ZONE = 'America/Sao_Paulo';
+const RODIZIO_RESTRICTION_WINDOWS = Object.freeze([
+  Object.freeze({ inicio: '07:00', fim: '10:00' }),
+  Object.freeze({ inicio: '17:00', fim: '20:00' })
+]);
+const RODIZIO_WARNING_MINUTES = 60;
+
+function rodizioReferenceParts(reference = new Date()) {
+  if (reference && typeof reference === 'object' && !(reference instanceof Date) && reference.date) {
+    return { date: String(reference.date).slice(0, 10), time: reference.time ? String(reference.time).slice(0, 5) : '' };
+  }
+  const value = reference instanceof Date ? reference : new Date(reference);
+  const safeDate = Number.isNaN(value.getTime()) ? new Date() : value;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: RODIZIO_TIME_ZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(safeDate).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+function rodizioDayOfWeek(dateText) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateText || ''))) return null;
+  return new Date(`${dateText}T12:00:00Z`).getUTCDay();
+}
+
+function rodizioMinutes(timeText) {
+  if (!/^\d{2}:\d{2}$/.test(String(timeText || ''))) return null;
+  const [hours, minutes] = timeText.split(':').map(Number);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function rodizioInfo(plate, reference = new Date()) {
   const final = plateLastDigit(plate);
   const map = { '1': 1, '2': 1, '3': 2, '4': 2, '5': 3, '6': 3, '7': 4, '8': 4, '9': 5, '0': 5 };
   const labels = { 1: 'segunda-feira', 2: 'terca-feira', 3: 'quarta-feira', 4: 'quinta-feira', 5: 'sexta-feira' };
   const day = map[final] || null;
+  const ref = rodizioReferenceParts(reference);
+  const matchesDate = !!day && rodizioDayOfWeek(ref.date) === day;
+  const currentMinutes = rodizioMinutes(ref.time);
+  let situacao = matchesDate ? 'rodizio_no_dia' : 'sem_rodizio';
+  let proximaRestricao = null;
+  if (matchesDate && currentMinutes !== null) {
+    for (const range of RODIZIO_RESTRICTION_WINDOWS) {
+      const start = rodizioMinutes(range.inicio);
+      const end = rodizioMinutes(range.fim);
+      if (currentMinutes >= start && currentMinutes < end) {
+        situacao = 'restricao_ativa';
+        proximaRestricao = { ...range };
+        break;
+      }
+      if (currentMinutes >= start - RODIZIO_WARNING_MINUTES && currentMinutes < start) {
+        situacao = 'atencao';
+        proximaRestricao = { ...range };
+        break;
+      }
+      if (currentMinutes < start) {
+        situacao = 'livre_agora';
+        proximaRestricao = { ...range };
+        break;
+      }
+      situacao = 'livre_agora';
+    }
+  }
   return {
     final_placa: final || null,
     dia_rodizio: day ? labels[day] : null,
     horario_restricao: day ? '07:00-10:00 e 17:00-20:00' : null,
-    status_rodizio_hoje: !!day && date.getDay() === day
+    faixas_restricao: day ? RODIZIO_RESTRICTION_WINDOWS.map(range => ({ ...range })) : [],
+    margem_preventiva_minutos: RODIZIO_WARNING_MINUTES,
+    data_referencia: ref.date,
+    hora_referencia: ref.time || null,
+    status_rodizio_hoje: matchesDate,
+    situacao,
+    proxima_restricao: proximaRestricao
   };
 }
 
@@ -1394,7 +1465,9 @@ function buildVehicleAlerts({ vehicles = [], documents = [], maintenances = [] }
       addAlert(vehicle, 'quilometragem_nao_atualizada', 'Veiculo sem quilometragem atualizada', 'media');
     }
     const rodizio = rodizioInfo(vehicle.placa);
-    if (rodizio.status_rodizio_hoje) addAlert(vehicle, 'rodizio_hoje', 'Hoje e dia de rodizio deste veiculo', 'alta', rodizio);
+    if (active && rodizio.final_placa && rodizio.status_rodizio_hoje) {
+      addAlert(vehicle, 'rodizio_hoje', 'Hoje e dia de rodizio deste veiculo', 'alta', rodizio);
+    }
 
     (docsByVehicle.get(String(vehicle.id)) || []).forEach(doc => {
       const paid = ['pago', 'cancelado'].includes(String(doc.status || '').toLowerCase()) || doc.data_pagamento;
@@ -5052,7 +5125,10 @@ app.post('/api/veiculos/alertas/enviar-whatsapp', strictLimiter, async (req, res
       .eq('data_envio', today));
     if (duplicate && !force) return res.status(409).json({ error: 'Alerta ja enviado hoje', envio: duplicate });
 
-    const message = `Alerta de veiculo - Letec\n\nVeiculo: ${alert.veiculo}\nPlaca: ${alert.placa || '-'}\nAlerta: ${alert.mensagem || alert.tipo_alerta}\nPrazo: ${alert.data_limite || alert.proxima_quilometragem || '-'}\nPrioridade: ${alert.prioridade}\n\nVerifique no sistema.`;
+    const rodizioDetails = alert.tipo_alerta === 'rodizio_hoje'
+      ? `\nFaixas de restricao: ${alert.horario_restricao || '07:00-10:00 e 17:00-20:00'}\nOrientacao: confirme se o roteiro passa pela area de restricao. O veiculo pode circular fora da area e dos horarios restritos.`
+      : `\nPrazo: ${alert.data_limite || alert.proxima_quilometragem || '-'}`;
+    const message = `Alerta de veiculo - Letec\n\nVeiculo: ${alert.veiculo}\nPlaca: ${alert.placa || '-'}\nAlerta: ${alert.mensagem || alert.tipo_alerta}${rodizioDetails}\nPrioridade: ${alert.prioridade}\n\nVerifique no sistema.`;
     const sendResult = await sendEvolutionText({ number: destination || process.env.GRUPO_OPERACIONAL_JID, text: message });
     const { data, error } = await db.from('veiculo_alerta_envios').insert([{
       veiculo_id: alert.veiculo_id || null,
@@ -5083,13 +5159,37 @@ app.post('/api/veiculos/alertas/enviar-resumo-whatsapp', strictLimiter, async (r
     const alerts = await fetchVehicleAlerts(db);
     const destination = cleanNullableText(req.body.telefone, 30) || process.env.GESTOR_WHATSAPP_NUMBER || process.env.GRUPO_OPERACIONAL_JID;
     if (!destination) return res.status(503).json({ error: 'Configure GESTOR_WHATSAPP_NUMBER ou GRUPO_OPERACIONAL_JID para envio do resumo' });
+    const today = rodizioReferenceParts().date;
+    const summaryKey = `resumo_frota:${today}`;
+    const force = req.body.force === true || String(req.body.force) === 'true';
+    const duplicate = await maybeSingle(db
+      .from('veiculo_alerta_envios')
+      .select('*')
+      .eq('alerta_chave', summaryKey)
+      .eq('data_envio', today));
+    if (duplicate && !force) return res.status(409).json({ error: 'Resumo de alertas ja enviado hoje', envio: duplicate });
     const counts = alerts.reduce((acc, item) => {
       acc[item.prioridade] = (acc[item.prioridade] || 0) + 1;
       return acc;
     }, {});
-    const top = alerts.slice(0, 8).map((item, index) => `${index + 1}. ${item.veiculo} - ${item.placa || '-'} - ${item.mensagem || item.tipo_alerta}`).join('\n');
+    const top = alerts.slice(0, 8).map((item, index) => {
+      const detail = item.tipo_alerta === 'rodizio_hoje'
+        ? ` - ${item.horario_restricao || '07:00-10:00 e 17:00-20:00'} - confira a area do roteiro`
+        : '';
+      return `${index + 1}. ${item.veiculo} - ${item.placa || '-'} - ${item.mensagem || item.tipo_alerta}${detail}`;
+    }).join('\n');
     const message = `Resumo de alertas da frota - Letec\n\nCriticos: ${counts.critica || 0}\nAltos: ${counts.alta || 0}\nMedios: ${counts.media || 0}\nBaixos: ${counts.baixa || 0}\n\nPrincipais pendencias:\n${top || 'Sem pendencias no momento.'}`;
     const sendResult = await sendEvolutionText({ number: destination, text: message });
+    const { error: insertError } = await db.from('veiculo_alerta_envios').insert([{
+      veiculo_id: null,
+      alerta_chave: summaryKey,
+      tipo_alerta: 'resumo_frota',
+      destino: destination,
+      data_envio: today,
+      resposta_api: sendResult.providerResponse,
+      status: 'enviado'
+    }]);
+    if (insertError) throw insertError;
     await insertVehicleHistory(db, {
       tipo_evento: 'whatsapp',
       descricao: 'Resumo de alertas da frota enviado por WhatsApp',
@@ -7499,4 +7599,5 @@ if (require.main === module) {
   });
 }
 
+app.locals.rodizioInfo = rodizioInfo;
 module.exports = app;

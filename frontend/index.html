@@ -3174,6 +3174,18 @@ textarea { max-width:100%; }
 .day-service-card.exec { border-left-color:#16a34a; }
 .day-service-card.late { border-left-color:#dc2626; background:#fffafa; }
 .day-service-card.reag { border-left-color:#d97706; }
+.rodizio-panel { border:1px solid #fed7aa; border-left:4px solid #f97316; border-radius:12px; background:#fff7ed; padding:14px 16px; margin-bottom:14px; }
+.rodizio-panel-title { font-weight:800; color:#9a3412; margin-bottom:4px; }
+.rodizio-panel-sub { font-size:11px; color:#7c2d12; margin-bottom:10px; }
+.rodizio-panel-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:8px; }
+.rodizio-panel-item { background:#fff; border:1px solid #fed7aa; border-radius:9px; padding:9px 10px; font-size:11px; color:var(--text2); }
+.rodizio-panel-item strong { display:block; color:var(--text); margin-bottom:3px; }
+.rodizio-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; font-size:9px; font-weight:800; line-height:1.5; white-space:nowrap; }
+.rodizio-chip.restricao_ativa { color:#991b1b; background:#fee2e2; border:1px solid #fecaca; }
+.rodizio-chip.atencao { color:#9a3412; background:#ffedd5; border:1px solid #fed7aa; }
+.rodizio-chip.livre_agora { color:#166534; background:#dcfce7; border:1px solid #bbf7d0; }
+.rodizio-chip.rodizio_no_dia { color:#854d0e; background:#fef9c3; border:1px solid #fde68a; }
+.rodizio-inline-note { margin-top:7px; padding:7px 9px; border-radius:8px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; font-size:11px; font-weight:600; }
 .day-service-head { display:flex; align-items:flex-start; gap:10px; justify-content:space-between; margin-bottom:7px; }
 .day-service-name { font-size:14px; font-weight:850; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .day-service-badges { display:flex; align-items:center; gap:5px; flex-wrap:wrap; justify-content:flex-end; flex-shrink:0; }
@@ -8622,6 +8634,123 @@ function renderVeiculosSelect(selectId, selectedValue = '') {
   select.innerHTML = getVeiculosOptions(selectedValue);
 }
 
+const RODIZIO_DAY_INDEX = {
+  'segunda-feira': 1, 'terca-feira': 2, 'quarta-feira': 3,
+  'quinta-feira': 4, 'sexta-feira': 5
+};
+
+function rodizioVehicleByName(name) {
+  const key = normalizarNome(String(name || ''));
+  if (!key) return null;
+  return (window._veiculos || []).find(vehicle =>
+    vehicle && vehicle.ativo !== false && normalizarNome(vehicle.nome || '') === key
+  ) || null;
+}
+
+function rodizioTimeMinutes(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null;
+}
+
+function saoPauloNowParts() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone:'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', hourCycle:'h23'
+  }).formatToParts(new Date()).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return { date:`${parts.year}-${parts.month}-${parts.day}`, time:`${parts.hour}:${parts.minute}` };
+}
+
+function rodizioAssessment(vehicleName, date, time = '', options = {}) {
+  const vehicle = rodizioVehicleByName(vehicleName);
+  const info = vehicle?.rodizio;
+  if (!vehicle || !info?.final_placa || !date) return null;
+  const dateValue = String(date).slice(0, 10);
+  const day = new Date(`${dateValue}T12:00:00Z`).getUTCDay();
+  if (RODIZIO_DAY_INDEX[info.dia_rodizio] !== day) return null;
+
+  const ranges = Array.isArray(info.faixas_restricao) && info.faixas_restricao.length
+    ? info.faixas_restricao
+    : [{ inicio:'07:00', fim:'10:00' }, { inicio:'17:00', fim:'20:00' }];
+  const margin = Number(info.margem_preventiva_minutos || 60);
+  const now = saoPauloNowParts();
+  const contextualTime = time || (options.useCurrentTime && now.date === dateValue ? now.time : '');
+  const minutes = rodizioTimeMinutes(contextualTime);
+  let situation = 'rodizio_no_dia';
+  let nextRange = null;
+
+  if (minutes !== null) {
+    situation = 'livre_agora';
+    for (const range of ranges) {
+      const start = rodizioTimeMinutes(range.inicio);
+      const end = rodizioTimeMinutes(range.fim);
+      if (minutes >= start && minutes < end) { situation = 'restricao_ativa'; nextRange = range; break; }
+      if (minutes >= start - margin && minutes < start) { situation = 'atencao'; nextRange = range; break; }
+      if (minutes < start) { nextRange = range; break; }
+    }
+  }
+
+  const labels = {
+    restricao_ativa: `Restrição ativa até ${nextRange?.fim || 'o fim da faixa'}`,
+    atencao: `Atenção: restrição às ${nextRange?.inicio || '07:00'}`,
+    livre_agora: nextRange ? `Livre agora · próxima restrição ${nextRange.inicio}` : 'Livre agora · restrições encerradas',
+    rodizio_no_dia: 'Rodízio nesta data — confira o roteiro'
+  };
+  return { vehicle, info, situation, nextRange, label:labels[situation], ranges };
+}
+
+function rodizioChipHtml(assessment) {
+  if (!assessment) return '';
+  return `<span class="rodizio-chip ${assessment.situation}" title="Rodízio: ${sanitize(assessment.info.horario_restricao || '07:00-10:00 e 17:00-20:00')}">🚘 ${sanitize(assessment.label)}</span>`;
+}
+
+function serviceRodizioAssessment(service, options = {}) {
+  return rodizioAssessment(
+    service?.veiculo || service?.vehicle || '',
+    getServiceDateValue(service),
+    options.useCurrentTime ? '' : (service?.horario || service?.hr || ''),
+    options
+  );
+}
+
+function rodizioFormNoteHtml(vehicle, date, time) {
+  const assessment = rodizioAssessment(vehicle, date, time);
+  return assessment
+    ? `<div class="rodizio-inline-note">${rodizioChipHtml(assessment)} <span style="margin-left:5px">Confirme se o roteiro passa pela área de restrição. O veículo continua disponível.</span></div>`
+    : '';
+}
+
+function rodizioTodayPanelHtml(dayServices, date) {
+  const grouped = new Map();
+  (dayServices || []).forEach(service => {
+    const vehicleName = String(service?.veiculo || '').trim();
+    const assessment = rodizioAssessment(vehicleName, date, '', { useCurrentTime:true });
+    if (!assessment) return;
+    const key = normalizarNome(vehicleName);
+    if (!grouped.has(key)) grouped.set(key, { assessment, teams:new Set() });
+    const team = getServiceEquipeLabel(service);
+    if (team) grouped.get(key).teams.add(team);
+  });
+  const items = [...grouped.values()];
+  if (!items.length) return '';
+  return `<div class="rodizio-panel">
+    <div class="rodizio-panel-title">Rodízio e veículos desta data</div>
+    <div class="rodizio-panel-sub">Alerta informativo: confirme se o roteiro passa pela área de restrição. Nenhum veículo será bloqueado.</div>
+    <div class="rodizio-panel-list">${items.map(({ assessment, teams }) => `
+      <div class="rodizio-panel-item">
+        <strong>${sanitize(assessment.vehicle.nome || 'Veículo')} · <span class="mono">${sanitize(assessment.vehicle.placa || 'sem placa')}</span></strong>
+        ${rodizioChipHtml(assessment)}
+        <div style="margin-top:4px">Faixas: ${sanitize(assessment.info.horario_restricao || '07:00-10:00 e 17:00-20:00')}</div>
+        <div>Equipe: ${sanitize([...teams].join(' / ') || 'não definida')}</div>
+      </div>`).join('')}</div>
+  </div>`;
+}
+
 // ════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════
@@ -9363,6 +9492,7 @@ function renderAgenda() {
     const vencido = stKey==='agendado' && dtValue < today2;
     const rowBg   = vencido ? 'background:rgba(220,38,38,.04)' : semEq ? 'background:rgba(234,88,12,.04)' : '';
     const equipeHtml = semEq ? '<span style="color:var(--orange);font-size:10px;font-weight:600">Definir técnico</span>' : sanitize(equipeLabel).slice(0,24);
+    const rodizio = serviceRodizioAssessment(s);
     return `<tr onclick="openEditSvc(${jsArg(s.id)})" style="cursor:pointer;${rowBg}">
       <td class="mono" style="color:var(--text3)">${s.id}</td>
       <td class="mono bold" style="color:${vencido?'var(--red)':'inherit'}">${dtValue?.slice(8,10)}/${dtValue?.slice(5,7)}</td>
@@ -9372,7 +9502,7 @@ function renderAgenda() {
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text3)" title="${end}">${endTrunc}</td>
       <td class="mono">${s.horario||s.hr||'—'}</td>
       <td style="font-size:11px;color:var(--text2)">${equipeHtml}</td>
-      <td><span class="chip ${st.chip}">${st.label}</span>${vencido?'<span style="font-size:9px;color:var(--red);margin-left:3px">⏰</span>':''}</td>
+      <td><span class="chip ${st.chip}">${st.label}</span>${vencido?'<span style="font-size:9px;color:var(--red);margin-left:3px">⏰</span>':''}${rodizio ? `<div style="margin-top:4px">${rodizioChipHtml(rodizio)}</div>` : ''}</td>
       <td onclick="event.stopPropagation()">
         ${renderServiceCardActions(s)}
       </td>
@@ -9437,6 +9567,7 @@ function renderAgendaKanban(svcs) {
       const semEq     = !F.equipe.trim();
       const dtValue   = getServiceDateValue(s);
       const vencido   = stKey==='agendado' && dtValue < today;
+      const rodizio   = serviceRodizioAssessment(s);
       // Cor da borda esquerda: prioriza alerta > tipo
       const bordaCor  = vencido ? 'var(--red)' : semEq ? 'var(--orange)' : tipoCor;
       const bgCard    = vencido ? 'rgba(220,38,38,.04)' : semEq ? 'rgba(234,88,12,.04)' : 'var(--bg2)';
@@ -9444,6 +9575,7 @@ function renderAgendaKanban(svcs) {
       const badges = [
         vencido ? `<span style="font-size:9px;background:rgba(220,38,38,.12);color:var(--red);padding:1px 5px;border-radius:3px;font-family:var(--mono)">⏰ vencido</span>` : '',
         semEq   ? `<span style="font-size:9px;background:rgba(234,88,12,.12);color:var(--orange);padding:1px 5px;border-radius:3px;font-family:var(--mono)">definir técnico</span>` : '',
+        rodizio ? rodizioChipHtml(rodizio) : '',
       ].filter(Boolean).join('');
 
       return `<div
@@ -9617,7 +9749,8 @@ function compactServiceMonthLine(s, today) {
   const hora = (s.horario || s.hr || '').slice(0,5);
   const tipo = tipoComboLabel(s) || s.tipoServico || s.sc || '';
   const cliente = sanitize(s.cliente || s.cl || '—');
-  return `<div class="cal-mini-svc ${cls}">${hora ? sanitize(hora) + ' ' : ''}${sanitize(tipo).slice(0,8)} ${cliente.slice(0,18)}</div>`;
+  const rodizio = serviceRodizioAssessment(s);
+  return `<div class="cal-mini-svc ${cls}">${rodizio ? '🚘 ' : ''}${hora ? sanitize(hora) + ' ' : ''}${sanitize(tipo).slice(0,8)} ${cliente.slice(0,18)}</div>`;
 }
 
 // ── Vista Calendário Mensal ───────────────────────────────
@@ -10058,6 +10191,7 @@ function showDayDetail(dt) {
       const isLate = stKey === 'agendado' && dt < today;
       const semEquipe = !F.equipe.trim();
       const cardClass = isLate ? 'late' : stKey === 'executado' ? 'exec' : stKey === 'reagendado' ? 'reag' : '';
+      const rodizio = serviceRodizioAssessment(s);
       return `<div class="day-service-card ${cardClass}" onclick="closeModal();setTimeout(()=>openEditSvc(${jsArg(s.id)}),100)">
         <div class="day-service-head">
           <div class="day-service-name">${sanitize(F.cliente || 'Cliente não informado')}</div>
@@ -10065,6 +10199,7 @@ function showDayDetail(dt) {
             ${F.horario&&F.horario!=='—'?`<span class="day-badge">${sanitize(F.horario)}</span>`:''}
             <span class="day-badge status">${sanitize(stMeta.label)}</span>
             ${isLate?`<span class="day-badge" style="color:#b91c1c;background:#fef2f2;border-color:#fecaca">Atrasado</span>`:''}
+            ${rodizioChipHtml(rodizio)}
           </div>
         </div>
         <div class="day-service-meta">
@@ -10420,11 +10555,11 @@ function openEditSvc(id) {
             <div class="svc-edit-grid-3">
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-dt">Data</label>
-                <input type="date" id="ed-dt" value="${escapeHtmlAttr(dtValue)}" onchange="updateEditServiceStatusBadge()">
+                <input type="date" id="ed-dt" value="${escapeHtmlAttr(dtValue)}" onchange="updateEditServiceStatusBadge();updateEditRodizioAlert()">
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-hr">Horário</label>
-                <input type="time" id="ed-hr" value="${escapeHtmlAttr(hrValue)}">
+                <input type="time" id="ed-hr" value="${escapeHtmlAttr(hrValue)}" onchange="updateEditRodizioAlert()">
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-st">Status</label>
@@ -10487,7 +10622,8 @@ function openEditSvc(id) {
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-vei">Veículo</label>
-                <select id="ed-vei">${getVeiculosOptions(s.veiculo || '')}</select>
+                <select id="ed-vei" onchange="updateEditRodizioAlert()">${getVeiculosOptions(s.veiculo || '')}</select>
+                <div id="ed-rodizio-alert"></div>
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-os">OS (Ordem de Serviço)</label>
@@ -10515,11 +10651,22 @@ function openEditSvc(id) {
   modal.classList.add('open');
   renderTecnicos(tecnicosSelecionados, 'ed-tecnicos-container');
   carregarTecnicos().then(() => renderTecnicos(getServiceTecnicosIds(s), 'ed-tecnicos-container'));
-  carregarVeiculos().then(() => renderVeiculosSelect('ed-vei', s.veiculo || ''));
+  carregarVeiculos().then(() => { renderVeiculosSelect('ed-vei', s.veiculo || ''); updateEditRodizioAlert(); });
   renderTiposCheckbox(tiposSelecionados, 'ed-tipos-container');
   bindTiposPreview('ed-tipos-preview', 'ed-tipos-container');
   initServicoClienteSelect('ed', clienteIdSelecionado, s.cliente || s.cl || '');
   updateEditServiceStatusBadge();
+  updateEditRodizioAlert();
+}
+
+function updateEditRodizioAlert() {
+  const box = document.getElementById('ed-rodizio-alert');
+  if (!box) return;
+  box.innerHTML = rodizioFormNoteHtml(
+    document.getElementById('ed-vei')?.value || '',
+    document.getElementById('ed-dt')?.value || '',
+    document.getElementById('ed-hr')?.value || ''
+  );
 }
 
 async function salvarEdicaoSvc(id) {
@@ -11847,6 +11994,7 @@ function renderHoje() {
   // Ordem: prioridades → execução → capacidade → detalhes
   // ════════════════════════════════════════════
   let html = '<div class="today-summary-stack">';
+  html += rodizioTodayPanelHtml(daySvcs, d);
   html += hojePrioridadesHtml(A, d);
   html += `<div class="today-compact-overview">${hojeResumoExecucaoHtml(A)}${hojeCapacidadeCompactaHtml(A.capacidade)}</div>`;
   html += hojeConflitosDetalhesHtml(A);
@@ -11881,6 +12029,7 @@ function renderHoje() {
     const pendIds      = g.svcs.filter(s => (s.status||s.st) === 'agendado').map(s => s.id);
     const temSobrecarga= A.sobrecarga.some(s => getEquipeTexto(s) === g.equipe);
     const execTodosIds = jsArg(pendIds.map(id => normId(id)).filter(Boolean));
+    const rodizioGrupo = rodizioAssessment(g.veiculo, d, '', { useCurrentTime:true });
 
     return `<div class="team-board" style="--team-accent:${cor};--team-progress:${gPct}%;--team-progress-color:${gPctColor}">
 
@@ -11890,6 +12039,7 @@ function renderHoje() {
             <div class="team-board-title" title="${sanitize(g.equipe)}">${sanitize(g.equipe)}</div>
             <div class="team-board-sub">
               ${g.veiculo ? `<span class="team-board-meta">🚗 ${sanitize(g.veiculo)}</span>` : ''}
+              ${rodizioChipHtml(rodizioGrupo)}
               ${temSobrecarga ? `<span class="chip chip-yellow">Sobrecarga</span>` : ''}
               ${g.semEquipe ? `<span class="chip chip-orange">Definir técnico</span>` : ''}
             </div>
@@ -12540,13 +12690,14 @@ function renderFrotaV1() {
         <thead><tr><th>Placa</th><th>Veículo</th><th>Técnico</th><th>KM atual</th><th>Status</th><th>Rodízio</th><th>Próximo alerta</th><th>Ações</th></tr></thead>
         <tbody>${filteredVehicles.length ? filteredVehicles.map(v => {
           const alert = fleetVehicleAlert(v.id);
+          const rodizioAtual = rodizioAssessment(v.nome, saoPauloNowParts().date, '', { useCurrentTime:true });
           return `<tr>
             <td class="mono">${sanitize(v.placa || '—')}</td>
             <td class="fleet-vehicle-name"><strong>${sanitize(v.nome || [v.marca, v.modelo].filter(Boolean).join(' ') || '—')}</strong><span>${sanitize([v.marca, v.modelo, v.ano].filter(Boolean).join(' · ') || 'Dados gerais pendentes')}</span></td>
             <td>${sanitize((window._tecnicos || []).find(t => String(t.id) === String(v.tecnico_responsavel_id))?.nome || '—')}</td>
             <td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td>
             <td><span class="chip ${v.status === 'manutencao' ? 'chip-orange' : v.status === 'inativo' || v.ativo === false ? 'chip-gray' : 'chip-green'}">${sanitize(v.status || (v.ativo === false ? 'inativo' : 'ativo'))}</span></td>
-            <td>${v.rodizio?.status_rodizio_hoje ? '<span class="chip chip-orange">Hoje</span>' : sanitize(v.rodizio?.dia_rodizio || '—')}</td>
+            <td>${rodizioAtual ? rodizioChipHtml(rodizioAtual) : sanitize(v.rodizio?.dia_rodizio || '—')}</td>
             <td>${alert ? `<div class="fleet-alert-summary">${fleetPriorityChip(alert.prioridade)}<span>${sanitize(alert.mensagem || '')}</span></div>` : '<span class="chip chip-green">Em dia</span>'}</td>
             <td><div class="fleet-actions">
               <button class="btn btn-ghost btn-xs" onclick="abrirDetalheVeiculo(${jsArg(v.id)})">Ver</button>
@@ -16856,12 +17007,13 @@ function updateNewSvcGuideSummary(){
     ['Veículo', veiculo],
     ['OS', os]
   ];
+  const rodizioNote = rodizioFormNoteHtml(veiculo === 'Sem veículo' ? '' : veiculo, dt === 'Sem data' ? '' : dt, hr === 'Sem horário' ? '' : hr);
   el.innerHTML = `<div class="svc-confirm-grid">${items.map(([k,v]) => `
     <div class="svc-confirm-item">
       <div class="svc-confirm-k">${sanitize(k)}</div>
       <div class="svc-confirm-v" title="${escapeHtmlAttr(v)}">${sanitize(v)}</div>
     </div>
-  `).join('')}</div>${obs ? `<div class="svc-confirm-note"><strong>Observações:</strong> ${sanitize(obs)}</div>` : ''}`;
+  `).join('')}</div>${rodizioNote}${obs ? `<div class="svc-confirm-note"><strong>Observações:</strong> ${sanitize(obs)}</div>` : ''}`;
 }
 
 function bindNewSvcGuideSummary(){
