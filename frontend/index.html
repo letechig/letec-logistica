@@ -4020,11 +4020,6 @@ async function carregarVeiculos(){
         </div>
       </div>
 
-      <!-- Vista kanban (quadro por status) -->
-      <div id="ag-kanban-view" style="display:none">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px" id="ag-kanban-cols"></div>
-      </div>
-
       <!-- Vista por data (grupos temporais) -->
       <div id="ag-data-view">
         <div style="display:flex;flex-direction:column;gap:16px" id="ag-data-grupos"></div>
@@ -9403,15 +9398,16 @@ function calRenderMonth() { renderAgenda(); }
 function renderRoteiro() { rotGerarDoSistema(); }
 
 function agSetView(v) {
-  agView = v;
+  // A antiga visão por status foi removida; links/caches legados abrem a lista.
+  agView = v === 'data' ? 'data' : 'lista';
+  v = agView;
   document.getElementById('ag-lista-view').style.display  = v==='lista'  ? 'block' : 'none';
-  document.getElementById('ag-kanban-view').style.display = v==='kanban' ? 'block' : 'none';
   document.getElementById('ag-data-view').style.display   = v==='data'   ? 'block' : 'none';
   // Na vista calendário, o filtro de mês é redundante (calendário tem navegação própria)
   const mesFiltEl = document.getElementById('ag-mes');
   if (mesFiltEl) mesFiltEl.style.display = v === 'data' ? 'none' : '';
-  const map = { lista:'ag-view-list', kanban:'ag-view-board', data:'ag-view-data' };
-  ['ag-view-list','ag-view-board','ag-view-data'].forEach(id => {
+  const map = { lista:'ag-view-list', data:'ag-view-data' };
+  ['ag-view-list','ag-view-data'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const active = id === map[v];
@@ -9518,7 +9514,6 @@ function renderAgenda() {
     subtitle.textContent = `${svcs.length} de ${services.length} serviços · ${periodo}`;
   }
 
-  if (agView==='kanban') { renderAgendaKanban(svcs); return; }
   if (agView==='data')   { renderAgendaData(svcs, today); return; }
 
   // ── Lista ──────────────────────────────────────────────────
@@ -9593,92 +9588,6 @@ function renderServiceCardActions(s, options = {}) {
       </div>
     </details>
   </div>`;
-}
-
-// ── Kanban por Status (com DnD) ───────────────────────────
-function renderAgendaKanban(svcs) {
-  const today = new Date().toISOString().split('T')[0];
-  const colunas = [
-    { key:'agendado',   label:'📋 Agendados',   color:'var(--blue)',   chip:'chip-blue'   },
-    { key:'executado',  label:'✅ Executados',  color:'var(--green)',  chip:'chip-green'  },
-    { key:'reagendado', label:'🔄 Reagendados', color:'var(--orange)', chip:'chip-orange' },
-    { key:'cancelado',  label:'❌ Cancelados',  color:'var(--red)',    chip:'chip-red'    },
-  ];
-  const grid = document.getElementById('ag-kanban-cols');
-  if (!grid) return;
-
-  grid.innerHTML = colunas.map(col => {
-    const colSvcs = svcs
-      .filter(s=>(s.status||s.st||'agendado')===col.key)
-      .sort((a,b)=>(getServiceDateValue(a)||'').localeCompare(getServiceDateValue(b)||'')||(a.horario||a.hr||'').localeCompare(b.horario||b.hr||''));
-
-    const cards = colSvcs.slice(0,50).map(s => {
-      const F         = sf(s);
-      const stKey     = F.status;
-      const tipoMeta  = TIPO_SERVICO[F.tipoRaw];
-      const tipoCor   = tipoMeta ? tipoMeta.cor : '#94a3b8';
-      const semEq     = !F.equipe.trim();
-      const dtValue   = getServiceDateValue(s);
-      const vencido   = stKey==='agendado' && dtValue < today;
-      const rodizio   = serviceRodizioAssessment(s);
-      // Cor da borda esquerda: prioriza alerta > tipo
-      const bordaCor  = vencido ? 'var(--red)' : semEq ? 'var(--orange)' : tipoCor;
-      const bgCard    = vencido ? 'rgba(220,38,38,.04)' : semEq ? 'rgba(234,88,12,.04)' : 'var(--bg2)';
-
-      const badges = [
-        vencido ? `<span style="font-size:9px;background:rgba(220,38,38,.12);color:var(--red);padding:1px 5px;border-radius:3px;font-family:var(--mono)">⏰ vencido</span>` : '',
-        semEq   ? `<span style="font-size:9px;background:rgba(234,88,12,.12);color:var(--orange);padding:1px 5px;border-radius:3px;font-family:var(--mono)">definir técnico</span>` : '',
-        rodizio ? rodizioChipHtml(rodizio) : '',
-      ].filter(Boolean).join('');
-
-      return `<div
-          draggable="true"
-          data-svc-id="${escapeHtmlAttr(s.id)}"
-          onclick="openEditSvc(${jsArg(s.id)})"
-          ondragstart="agDragStart(event,${jsArg(s.id)})"
-          ondragend="agDragEnd(event)"
-          style="background:${bgCard};border:1px solid var(--border);border-left:3px solid ${bordaCor};border-radius:var(--r2);padding:10px 12px;cursor:grab;user-select:none;transition:opacity .12s">
-        <!-- Linha 1: cliente + hora -->
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:5px">
-          <div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${F.cliente}</div>
-          ${F.horario&&F.horario!=='—'?`<span style="font-family:var(--mono);font-size:10px;background:var(--surface);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;flex-shrink:0;white-space:nowrap;color:${vencido?'var(--red)':'inherit'}">${F.horario}</span>`:''}
-        </div>
-        <!-- Linha 2: tipo(s) + data -->
-        <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:4px;align-items:center">
-          ${tipoChipsHtml(s,{compact:true,fontSize:'9px'})}
-          <span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:2px">· ${dtValue?.slice(8,10)}/${dtValue?.slice(5,7)}</span>
-        </div>
-        <!-- Linha 3: endereço -->
-        ${F.endereco?`<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px">📍 ${F.endereco.slice(0,45)}</div>`:''}
-        <!-- Linha 4: equipe + veículo -->
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-          ${F.equipe.trim()
-            ? `<span style="font-size:10px;color:var(--text3);font-family:var(--mono)">👷 ${F.equipe.slice(0,28)}</span>`
-            : `<span style="font-size:10px;color:var(--orange);font-weight:600">Definir técnico</span>`}
-          ${F.veiculo?`<span style="font-size:10px;color:var(--text3);font-family:var(--mono)">🚗 ${F.veiculo}</span>`:''}
-        </div>
-        <!-- Linha 5: badges de alerta -->
-        ${badges?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px">${badges}</div>`:''}
-        <!-- Ações rápidas -->
-        ${renderServiceCardActions(s)}
-      </div>`;
-    }).join('');
-
-    const extra = colSvcs.length > 50 ? `<div style="text-align:center;font-size:11px;color:var(--text3);padding:8px">+ ${colSvcs.length-50} ocultos — filtre para ver</div>` : '';
-
-    return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;min-height:200px">
-      <div style="padding:12px 14px;border-bottom:1px solid var(--border);border-top:3px solid ${col.color};display:flex;align-items:center;justify-content:space-between">
-        <div style="font-family:var(--display);font-size:13px;font-weight:800;color:${col.color}">${col.label}</div>
-        <span class="chip ${col.chip}">${colSvcs.length}</span>
-      </div>
-      <div id="ag-drop-${col.key}" data-status="${col.key}"
-        ondragover="agDragOver(event)" ondragleave="agDragLeave(event)" ondrop="agDrop(event,'${col.key}')"
-        style="padding:8px;display:flex;flex-direction:column;gap:6px;max-height:620px;overflow-y:auto;flex:1;min-height:60px;transition:background .15s">
-        ${cards||`<div style="text-align:center;padding:28px 16px;color:var(--text3);font-size:12px;border:2px dashed var(--border);border-radius:var(--r2);margin:4px">Solte serviços aqui</div>`}
-        ${extra}
-      </div>
-    </div>`;
-  }).join('');
 }
 
 function agSetQuickFilter(filter) {
@@ -10446,37 +10355,6 @@ function irParaRoteiro(dt) {
   nav('roteiro', document.querySelector('[onclick*="roteiro"]'));
   setTimeout(() => rotGerarDoSistema(), 50);
 }
-
-// ── Drag-and-Drop ─────────────────────────────────────────
-let agDragId = null;
-function agDragStart(e, id) {
-  agDragId = id;
-  e.currentTarget.style.opacity = '0.45';
-  e.dataTransfer.effectAllowed = 'move';
-}
-function agDragEnd(e) {
-  e.currentTarget.style.opacity = '1';
-  agDragId = null;
-}
-function agDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.style.background = 'rgba(37,99,235,.08)';
-  e.currentTarget.style.outline = '2px dashed var(--blue)';
-  e.currentTarget.style.borderRadius = 'var(--r2)';
-}
-function agDragLeave(e) {
-  e.currentTarget.style.background = '';
-  e.currentTarget.style.outline = '';
-}
-async function agDrop(e, novoStatus) {
-  e.preventDefault();
-  e.currentTarget.style.background = '';
-  e.currentTarget.style.outline = '';
-  if (!agDragId) return;
-  toast('Alterações de status usam ações com motivo e confirmação.', 'warn');
-}
-
 
 async function setSt(id, st) {
   if (st === 'executado') return transitionServiceOperational(id, 'complete_manual');
