@@ -227,5 +227,14 @@ test('tecnico nao altera servico de outro tecnico, mas altera equipe compartilha
     });
     assert.equal(allowed.status, 200);
     assert.equal(state.services.find(service => service.id === 12).exec_status, 'em_deslocamento');
+
+    const finished = await fetch(`${baseUrl}/api/services/12`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ status:'executado', exec_status:'finalizado', fim_hora:'2026-06-17T15:00:00.000Z' })
+    });
+    assert.equal(finished.status, 200);
+    const finishedPayload = await finished.json();
+    assert.equal(finishedPayload.completion_source, 'portal_tecnico');
+    assert.ok(finishedPayload.status_changed_at);
   });
 });

@@ -3487,6 +3487,10 @@ async function carregarVeiculos(){
       tempo_execucao: s.tempo_execucao ?? null,
       checklist_servico: s.checklist_servico || null,
       problema_descricao: s.problema_descricao || '',
+      completion_source: s.completion_source || null,
+      status_reason: s.status_reason || null,
+      status_changed_at: s.status_changed_at || null,
+      rescheduled_from_id: s.rescheduled_from_id || null,
     };
     if (!omitId && s.id !== undefined) {
       payload.id = s.id;
@@ -3942,10 +3946,9 @@ async function carregarVeiculos(){
           <div class="section-sub" id="ag-subtitle">Ano inteiro 2026 · dados da planilha Cronograma</div>
         </div>
         <div class="ui-page-actions">
-          <!-- Toggle lista/kanban/data -->
+          <!-- Alternância entre consulta em lista e planejamento no calendário -->
           <div class="ui-segmented">
             <button id="ag-view-list"  class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('lista')">Lista</button>
-            <button id="ag-view-board" class="topbar-btn" style="border:none;border-radius:0" onclick="agSetView('kanban')">Status</button>
             <button id="ag-view-data"  class="topbar-btn" style="border:none;border-radius:0;background:var(--blue);color:white" onclick="agSetView('data')">Calendário</button>
           </div>
           <button class="btn btn-primary btn-sm" onclick="openNewSvc()">+ Novo Serviço</button>
@@ -6995,7 +6998,9 @@ function normalizarStatusTempoOperacional(servico) {
   const finalizadoComFim = (executado || finalizado) && !!servico?.fim_hora;
   const finalizadoSemFim = (executado || finalizado) && !servico?.fim_hora;
   const problemaSemEncerramento = (problema || naoExecutado) && !servico?.fim_hora;
-  const ignorarConflito = cancelado || reagendado || finalizadoComFim;
+  // Estados administrativos finais encerram a visita mesmo quando registros
+  // legados não possuem telemetria de fim.
+  const ignorarConflito = cancelado || reagendado || executado || finalizado;
   const ativo = !ignorarConflito && (ativosStatus.has(status) || ativosExec.has(execStatus));
 
   return {
@@ -8695,6 +8700,56 @@ function rodizioAssessment(vehicleName, date, time = '', options = {}) {
     }
   }
 
+  async function transitionServiceViaBackend(id, payload) {
+    return await requestBackendJson(`/api/services/${encodeURIComponent(id)}/transition`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  window.transitionServiceOperational = async function(id, action) {
+    const service = services.find(item => sameId(item.id, id));
+    if (!service) return false;
+    if (!navigator.onLine) {
+      toast('Esta ação exige conexão para preservar o histórico.', 'warn');
+      return false;
+    }
+    const labels = {
+      complete_manual: 'conclusão manual',
+      resolve_problem_complete: 'conclusão com ressalva',
+      reschedule: 'reagendamento',
+      cancel: 'cancelamento'
+    };
+    const execKey = String(service.exec_status || 'agendado').toLowerCase();
+    if (action === 'complete_manual' && ['em_deslocamento','cheguei','em_execucao'].includes(execKey)) {
+      if (!confirmAction('A equipe ainda aparece em atendimento. Encerrar administrativamente mesmo assim?')) return false;
+    }
+    const reason = window.prompt(`Informe o motivo da ${labels[action] || 'alteração'}:`, '')?.trim() || '';
+    if (reason.length < 3) {
+      toast('Informe um motivo com pelo menos 3 caracteres.', 'err');
+      return false;
+    }
+    const payload = { action, reason };
+    if (action === 'reschedule') {
+      const newDate = window.prompt('Nova data (AAAA-MM-DD):', getServiceDateValue(service) || '')?.trim() || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { toast('Informe uma nova data válida.', 'err'); return false; }
+      const newTime = window.prompt('Novo horário (HH:MM):', service.horario || service.hr || '')?.trim() || '';
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(newTime)) { toast('Informe um novo horário válido.', 'err'); return false; }
+      Object.assign(payload, { new_date:newDate, new_time:newTime });
+    }
+    try {
+      const result = await transitionServiceViaBackend(id, payload);
+      if (result?.service) mergeServiceFromBackend(result.service, service);
+      if (result?.new_service) mergeServiceFromBackend(result.new_service, result.new_service);
+      toast(action === 'reschedule' ? 'Serviço reagendado e nova visita criada.' : 'Estado do serviço atualizado.', 'ok');
+      refreshPages();
+      return true;
+    } catch (error) {
+      toast(error?.payload?.error || error.message || 'Falha ao alterar o serviço.', 'err');
+      return false;
+    }
+  };
+
   const labels = {
     restricao_ativa: `Restrição ativa até ${nextRange?.fim || 'o fim da faixa'}`,
     atencao: `Atenção: restrição às ${nextRange?.inicio || '07:00'}`,
@@ -9513,30 +9568,28 @@ function renderAgenda() {
 function renderServiceCardActions(s, options = {}) {
   const id = jsArg(s.id);
   const stKey = s.status || s.st || 'agendado';
-  const after = options.afterStatusChange || '';
-  const primaryLabel = options.primaryLabel || 'Marcar executado';
   const doneLabel = options.doneLabel || 'Concluído';
-  const canExecute = stKey !== 'executado';
-  const canReagendar = stKey === 'agendado';
-  const canCancel = stKey !== 'cancelado' && stKey !== 'executado';
+  const execKey = String(s.exec_status || 'agendado').toLowerCase();
+  const isProblem = execKey === 'problema' && stKey === 'agendado';
+  const isTerminal = ['executado','cancelado','reagendado'].includes(stKey);
   const hasClient = !!(s.cliente || s.cl);
   const canSendCustomerLogistics = hasClient && stKey !== 'cancelado';
-  const canSendReminder = canSendCustomerLogistics && stKey !== 'executado';
+  const canSendReminder = canSendCustomerLogistics && !isTerminal;
   const detailsLabel = options.detailsLabel || 'Ver detalhes';
   const detailAction = options.detailAction || `openEditSvc(${id})`;
 
   return `<div class="svc-card-actions" onclick="event.stopPropagation()">
-    ${canExecute
-      ? `<button class="svc-btn exec" onclick="setSt(${id},'executado')${after}">${primaryLabel}</button>`
-      : `<span class="team-svc-done">✓ ${doneLabel}</span>`}
+    ${stKey === 'executado' ? `<span class="team-svc-done">✓ ${doneLabel}</span>` : ''}
     <details class="svc-action-menu" onclick="event.stopPropagation()">
       <summary title="Mais ações">⋮</summary>
       <div class="svc-action-menu-panel">
         <button type="button" onclick="${detailAction}">${detailsLabel}</button>
         ${canSendCustomerLogistics ? `<button type="button" onclick="comEnviarConfirmacaoServico(${id})">Enviar confirmação</button>` : ''}
         ${canSendReminder ? `<button type="button" onclick="comEnviarLembreteServico(${id})">Reenviar lembrete</button>` : ''}
-        ${canReagendar ? `<button type="button" onclick="setSt(${id},'reagendado')${after}">Reagendar</button>` : ''}
-        ${canCancel ? `<button type="button" class="danger" onclick="setSt(${id},'cancelado')${after}">Cancelar</button>` : ''}
+        ${!isTerminal && !isProblem ? `<button type="button" onclick="transitionServiceOperational(${id},'complete_manual')">Concluir manualmente</button>` : ''}
+        ${isProblem ? `<button type="button" onclick="transitionServiceOperational(${id},'resolve_problem_complete')">Concluir com ressalva</button>` : ''}
+        ${!isTerminal ? `<button type="button" onclick="transitionServiceOperational(${id},'reschedule')">Reagendar</button>` : ''}
+        ${!isTerminal ? `<button type="button" class="danger" onclick="transitionServiceOperational(${id},'cancel')">Cancelar</button>` : ''}
       </div>
     </details>
   </div>`;
@@ -10421,25 +10474,14 @@ async function agDrop(e, novoStatus) {
   e.currentTarget.style.background = '';
   e.currentTarget.style.outline = '';
   if (!agDragId) return;
-  const s = services.find(x => sameId(x.id, agDragId));
-  if (!s || (s.status||s.st) === novoStatus) return;
-
-  const previousService = cloneServiceState(s);
-
-  s.status = novoStatus;
-  s.st     = novoStatus;
-  saveSvcs();
-  renderDash();
-  renderAgenda();
-  toast(`✓ Movido para "${ST_META[novoStatus]?.label||novoStatus}"`, 'ok');
-
-  if (USAR_SUPABASE) {
-    await atualizarServicoSupabase(s, previousService);
-  }
+  toast('Alterações de status usam ações com motivo e confirmação.', 'warn');
 }
 
 
 async function setSt(id, st) {
+  if (st === 'executado') return transitionServiceOperational(id, 'complete_manual');
+  if (st === 'reagendado') return transitionServiceOperational(id, 'reschedule');
+  if (st === 'cancelado') return transitionServiceOperational(id, 'cancel');
   const s = services.find(x=>sameId(x.id, id));
   if(s) {
     const previousService = cloneServiceState(s);
@@ -10555,7 +10597,7 @@ function openEditSvc(id) {
             <div class="svc-edit-grid-3">
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-dt">Data</label>
-                <input type="date" id="ed-dt" value="${escapeHtmlAttr(dtValue)}" onchange="updateEditServiceStatusBadge();updateEditRodizioAlert()">
+                <input type="date" id="ed-dt" value="${escapeHtmlAttr(dtValue)}" disabled title="Use Reagendar para mudar a data preservando o histórico">
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-hr">Horário</label>
@@ -10564,7 +10606,7 @@ function openEditSvc(id) {
               <div class="svc-edit-field">
                 <label class="svc-edit-label" for="ed-st">Status</label>
                 <div class="svc-edit-status-wrap">
-                  <select id="ed-st" onchange="updateEditServiceStatusBadge()">
+                  <select id="ed-st" disabled title="Use as ações operacionais para alterar o status">
                     ${Object.entries(ST_META).map(([k,m])=>`<option value="${k}" ${stKey===k?'selected':''}>${m.label}</option>`).join('')}
                   </select>
                   <span id="ed-status-inline-badge" class="svc-status-badge st-${sanitize(visualStatus)}">${sanitize(editServiceStatusLabel(visualStatus))}</span>
@@ -10641,6 +10683,11 @@ function openEditSvc(id) {
       <footer class="svc-edit-footer">
         <button class="svc-edit-btn secondary" onclick="closeModal()">Cancelar</button>
         <button class="svc-edit-btn danger-outline" onclick="delRecord()">Excluir</button>
+        ${!['executado','cancelado','reagendado'].includes(stKey) ? `
+          ${String(s.exec_status||'').toLowerCase()==='problema' ? `<button class="svc-edit-btn secondary" onclick="closeModal();transitionServiceOperational(${jsArg(s.id)},'resolve_problem_complete')">Concluir com ressalva</button>` : `<button class="svc-edit-btn secondary" onclick="closeModal();transitionServiceOperational(${jsArg(s.id)},'complete_manual')">Concluir manualmente</button>`}
+          <button class="svc-edit-btn secondary" onclick="closeModal();transitionServiceOperational(${jsArg(s.id)},'reschedule')">Reagendar</button>
+          <button class="svc-edit-btn danger-outline" onclick="closeModal();transitionServiceOperational(${jsArg(s.id)},'cancel')">Cancelar serviço</button>
+        ` : ''}
         <div class="svc-edit-footer-spacer"></div>
         <button class="svc-edit-btn primary" id="ed-save-btn" onclick="salvarEdicaoSvc(${jsArg(s.id)})">Salvar alterações</button>
       </footer>
@@ -10826,14 +10873,18 @@ function hojeAnalisarDia(daySvcs, d) {
   const cancel  = daySvcs.filter(s => (s.status||s.st) === 'cancelado').length;
   const pend    = total - exec - reagend - cancel;
   const pct     = total ? Math.round(exec / total * 100) : 0;
+  const execKey = s => String(s.exec_status || 'agendado').trim().toLowerCase();
+  const adminKey = s => String(s.status || s.st || 'agendado').trim().toLowerCase();
+  const problemas = daySvcs.filter(s => adminKey(s) === 'agendado' && execKey(s) === 'problema');
+  const operacionaisAtivos = daySvcs.filter(s => adminKey(s) === 'agendado' && !['problema','finalizado','cancelado','reagendado'].includes(execKey(s)));
 
   // ── PROBLEMA 1: Sem equipe ──
-  const semEquipe = daySvcs.filter(s => !serviceTemEquipe(s));
+  const semEquipe = operacionaisAtivos.filter(s => !serviceTemEquipe(s));
 
   // ── PROBLEMA 2: Atrasados (só para "hoje") ──
   // Lógica: horário do serviço já passou há mais de TOLERANCIA_ATRASO min + ainda "agendado"
-  const atrasados = !isToday ? [] : daySvcs.filter(s => {
-    if ((s.status||s.st) !== 'agendado') return false;
+  const atrasados = !isToday ? [] : operacionaisAtivos.filter(s => {
+    if (execKey(s) !== 'agendado') return false;
     const min = hojeParseMin(s.horario||s.hr||'');
     return min !== null && agoraMin !== null && (agoraMin - min) > OP.TOLERANCIA_ATRASO;
   });
@@ -10854,14 +10905,16 @@ function hojeAnalisarDia(daySvcs, d) {
 
   // ── ALERTA 1: Sobrecarga por equipe ──
   const sobrecarga = grupos
-    .filter(g => !g.semEquipe && g.svcs.length >= OP.SOBRECARGA_LIM)
-    .map(g => ({ equipe: g.equipe, count: g.svcs.length }));
+    .map(g => ({ ...g, svcsAtivos: g.svcs.filter(s => normalizarStatusTempoOperacional(s).ativo) }))
+    .filter(g => !g.semEquipe && g.svcsAtivos.length >= OP.SOBRECARGA_LIM)
+    .map(g => ({ equipe: g.equipe, count: g.svcsAtivos.length }));
 
   // ── ALERTA 2: Conflitos de horário (gap < GAP_MINIMO_MIN entre serviços consecutivos) ──
   const conflitosHorario = [];
   grupos.forEach(g => {
     if (g.semEquipe) return;
     const sorted = g.svcs
+      .filter(s => normalizarStatusTempoOperacional(s).ativo)
       .map(s => ({ s, min: hojeParseMin(s.horario||s.hr||'') }))
       .filter(x => x.min !== null)
       .sort((a,b) => a.min - b.min);
@@ -10937,7 +10990,7 @@ function hojeAnalisarDia(daySvcs, d) {
 
   return {
     isToday, total, exec, pend, reagend, cancel, pct,
-    semEquipe, atrasados, reagendados,
+    semEquipe, atrasados, reagendados, problemas,
     sobrecarga, conflitosHorario, conflitosJornada,
     capacidade: { nTecnicos, capPorTecnico, capTotal, slotsLivres, minOcupados, minDisponiveis, pctCap, statusCap,
                   hConsumido: capDia.hConsumido, hLivre: capDia.hLivre, hDisponivel: capDia.hDisponivel,
@@ -11008,6 +11061,19 @@ function hojeBuildPrioridades(A, data) {
     priorities.push(item);
   };
 
+  A.problemas.forEach(s => {
+    const F = sf(s);
+    addService(s, {
+      level: 'critical',
+      chip: 'chip-red',
+      type: 'Problema em campo',
+      time: F.horario,
+      main: F.cliente,
+      meta: s.problema_descricao || F.equipe || 'decisão do operador pendente',
+      action: `<button class="svc-btn reagend" onclick="showSvcDetail(${jsArg(s.id)})">Resolver problema</button>`
+    });
+  });
+
   A.atrasados.forEach(s => {
     const F = sf(s);
     const min = hojeParseMin(F.horario) || 0;
@@ -11018,7 +11084,7 @@ function hojeBuildPrioridades(A, data) {
       time: F.horario,
       main: F.cliente,
       meta: `${F.equipe || 'sem técnico'}${nowMin > min ? ` · +${nowMin - min}min` : ''}`,
-      action: `<button class="svc-btn exec" onclick="setSt(${jsArg(s.id)},'executado');renderHoje()">Marcar executado</button>`
+      action: `<button class="svc-btn exec" onclick="transitionServiceOperational(${jsArg(s.id)},'complete_manual')">Concluir manualmente</button>`
     });
   });
 
@@ -11500,8 +11566,8 @@ function opMapPopupHtml(item, options = {}) {
   const shortAddress = opMapShortAddress(item.endereco);
   const secondaryActions = compact ? '' : `
       <button onclick="comEnviarConfirmacaoServico(${id})">Enviar WhatsApp</button>
-      ${item.statusKey !== 'executado' ? `<button class="green" onclick="setSt(${id},'executado');${renderAfter}">Marcar executado</button>` : ''}
-      ${item.statusKey !== 'executado' ? `<button class="orange" onclick="setSt(${id},'reagendado');${renderAfter}">Reagendar</button>` : ''}`;
+      ${item.statusKey !== 'executado' ? `<button class="green" onclick="transitionServiceOperational(${id},'complete_manual')">Concluir manualmente</button>` : ''}
+      ${item.statusKey !== 'executado' ? `<button class="orange" onclick="transitionServiceOperational(${id},'reschedule')">Reagendar</button>` : ''}`;
   return `<div class="op-map-popup">
     <div class="op-map-popup-title">${sanitize(item.cliente)}</div>
     <div class="op-map-popup-line"><strong>Horário:</strong> ${sanitize(item.horario || '—')}</div>
@@ -12026,9 +12092,7 @@ function renderHoje() {
     const gTotal       = g.svcs.length;
     const gPct         = gTotal ? Math.round(gExec / gTotal * 100) : 0;
     const gPctColor    = gPct >= 80 ? 'var(--green)' : gPct >= 50 ? 'var(--orange)' : 'var(--red)';
-    const pendIds      = g.svcs.filter(s => (s.status||s.st) === 'agendado').map(s => s.id);
     const temSobrecarga= A.sobrecarga.some(s => getEquipeTexto(s) === g.equipe);
-    const execTodosIds = jsArg(pendIds.map(id => normId(id)).filter(Boolean));
     const rodizioGrupo = rodizioAssessment(g.veiculo, d, '', { useCurrentTime:true });
 
     return `<div class="team-board" style="--team-accent:${cor};--team-progress:${gPct}%;--team-progress-color:${gPctColor}">
@@ -12052,9 +12116,6 @@ function renderHoje() {
         <div class="team-board-bar">
           <div class="team-board-bar-fill"></div>
         </div>
-        ${pendIds.length ? `<div class="team-board-actions">
-          <button class="svc-btn exec" onclick="hojeExecTodos(${execTodosIds})">Marcar executados (${pendIds.length})</button>
-        </div>` : ''}
       </div>
 
       <div class="team-board-list">
@@ -12097,7 +12158,7 @@ function renderHoje() {
             ${F.endereco ? `<div class="team-svc-address">📍 ${sanitize(F.endereco)}</div>` : ''}
             ${renderExecutionMini(s, { hideDurations: true, hideStatusChip: true })}
             <div class="team-svc-actions" onclick="event.stopPropagation()">
-              ${renderServiceCardActions(s, { afterStatusChange: ';renderHoje()', primaryLabel: 'Marcar executado' })}
+              ${renderServiceCardActions(s)}
             </div>
           </div>`;
         }).join('')}
@@ -12107,37 +12168,7 @@ function renderHoje() {
 }
 
 async function hojeExecTodos(ids) {
-  if (!ids || !ids.length) return;
-  if (!confirmAction(`Marcar ${ids.length} serviço(s) como executado(s)?`)) return;
-  const previousById = new Map();
-  ids.forEach(id => {
-    const s = services.find(x => sameId(x.id, id));
-    if (s) {
-      previousById.set(normId(id), cloneServiceState(s));
-      s.st = 'executado';
-      s.status = 'executado';
-    }
-  });
-  saveSvcs(); renderHoje(); renderDash();
-      toast(`✓ ${ids.length} serviço(s) marcados como executados`, 'ok');
-  // Sincronizar cada serviço atualizado com Supabase
-  if (USAR_SUPABASE) {
-    const results = await Promise.allSettled(ids.map(async id => {
-      const s = services.find(x => sameId(x.id, id));
-      const previousService = previousById.get(normId(id));
-      if (!s) return true;
-      return await atualizarServicoSupabase(s, previousService);
-    }));
-    const failed = results.filter(r => r.status === 'rejected' || r.value === false);
-    failed.forEach(r => {
-      if (r.status === 'rejected') {
-        console.error('[Supabase] Falha ao sincronizar update em lote:', r.reason);
-      }
-    });
-    if (failed.length) {
-      toast(`⚠️ ${failed.length} serviço(s) não sincronizaram no Supabase`, 'warn');
-    }
-  }
+  toast('Conclusão em lote foi desativada. Conclua cada serviço com seu respectivo motivo.', 'warn');
 }
 
 // ════════════════════════════════════════════════
@@ -18857,6 +18888,16 @@ function fmtPortalDateTime(value) {
 
 function renderExecutionMini(s, options = {}) {
   const meta = execStatusMeta(s);
+  const adminStatus = String(s.status || s.st || '').trim().toLowerCase();
+  const execStatus = String(s.exec_status || '').trim().toLowerCase();
+  const origemConclusao = String(s.completion_source || '').trim().toLowerCase();
+  const classificacaoConclusao = adminStatus === 'executado' && origemConclusao === 'admin_manual'
+    ? '<span>Conclusão manual</span>'
+    : adminStatus === 'executado' && origemConclusao === 'admin_problem_resolution'
+      ? '<span>Concluído com ressalva</span>'
+      : adminStatus === 'executado' && !origemConclusao && execStatus !== 'finalizado'
+        ? '<span>Conclusão legada</span>'
+        : '';
   const maps = s.chegada_lat && s.chegada_lng
     ? `<a href="https://maps.google.com/?q=${encodeURIComponent(`${s.chegada_lat},${s.chegada_lng}`)}" target="_blank" onclick="event.stopPropagation()" style="color:var(--blue2);font-weight:700;text-decoration:none">Ver localização</a>`
     : '';
@@ -18867,6 +18908,7 @@ function renderExecutionMini(s, options = {}) {
     s.fim_hora ? `<span>Fim: ${fmtPortalDateTime(s.fim_hora)}</span>` : '',
     !options.hideDurations && Number.isFinite(Number(s.tempo_espera)) ? `<span>Espera: ${s.tempo_espera}min</span>` : '',
     !options.hideDurations && Number.isFinite(Number(s.tempo_execucao)) ? `<span>Execução: ${s.tempo_execucao}min</span>` : '',
+    classificacaoConclusao,
     maps,
     s.problema_descricao ? `<span style="color:var(--red);font-weight:700">Problema: ${sanitize(s.problema_descricao)}</span>` : ''
   ].filter(Boolean).join(' · ');
@@ -19826,7 +19868,7 @@ function abrirEdicaoEquipe(id) {
         <select id="eq-edit-vei">${getVeiculosOptions(s.veiculo || '')}</select>
       </div>
       <div class="field"><label>Status do serviço</label>
-        <select id="eq-edit-st">
+        <select id="eq-edit-st" disabled title="Use as ações operacionais do serviço para alterar o status">
           ${Object.entries(ST_META).map(([k,m])=>`<option value="${k}" ${(s.status||s.st||'agendado')===k?'selected':''}>${m.label}</option>`).join('')}
         </select>
       </div>

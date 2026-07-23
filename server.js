@@ -434,6 +434,10 @@ const SERVICE_OPTIONAL_WRITE_COLUMNS = new Set([
   'tempo_execucao',
   'checklist_servico',
   'problema_descricao',
+  'completion_source',
+  'status_reason',
+  'status_changed_at',
+  'rescheduled_from_id',
   'confirmado_cliente',
   'confirmado_cliente_em',
   'agenda_confirmada_tecnico',
@@ -848,6 +852,10 @@ function normalizeServicePayload(input = {}, options = {}) {
   set('tempo_execucao', 'tempo_execucao', cleanNumber);
   set('checklist_servico', 'checklist_servico', value => value || null);
   set('problema_descricao', 'problema_descricao', value => cleanText(value, 1000), '');
+  set('completion_source', 'completion_source', value => cleanNullableText(value, 80));
+  set('status_reason', 'status_reason', value => cleanNullableText(value, 1000));
+  set('status_changed_at', 'status_changed_at', value => cleanNullableText(value, 80));
+  set('rescheduled_from_id', 'rescheduled_from_id', cleanNumber);
   set('confirmado_cliente', 'confirmado_cliente', value => value === true || String(value) === 'true');
   set('confirmado_cliente_em', 'confirmado_cliente_em', value => cleanNullableText(value, 80));
   set('agenda_confirmada_tecnico', 'agenda_confirmada_tecnico', value => value === true || String(value) === 'true');
@@ -4418,18 +4426,145 @@ app.post('/api/services', async (req, res) => {
   }
 });
 
+const SERVICE_TRANSITION_ACTIONS = new Set(['complete_manual', 'resolve_problem_complete', 'reschedule', 'cancel']);
+const SERVICE_TERMINAL_STATUSES = new Set(['executado', 'cancelado', 'reagendado']);
+
+function serviceTransitionError(message, code, status = 400) {
+  return { message, code, status };
+}
+
+function normalizeServiceTransitionInput(input = {}) {
+  return {
+    action: String(input.action || '').trim().toLowerCase(),
+    reason: cleanText(input.reason, 1000),
+    newDate: cleanDateText(input.new_date || input.date),
+    newTime: cleanText(input.new_time || input.horario, 20),
+    equipe: input.equipe === undefined ? undefined : cleanText(input.equipe, 300),
+    veiculo: input.veiculo === undefined ? undefined : cleanText(input.veiculo, 120),
+    tecnicosIds: input.tecnicos_ids === undefined ? undefined : cleanArray(input.tecnicos_ids)
+  };
+}
+
+async function updateServiceTransition(db, service, transition, now) {
+  const currentStatus = String(service.status || 'agendado').toLowerCase();
+  const currentExec = String(service.exec_status || 'agendado').toLowerCase();
+  let payload;
+  if (transition.action === 'complete_manual') {
+    if (currentStatus === 'executado' && service.completion_source === 'admin_manual') return { service, idempotent: true };
+    if (SERVICE_TERMINAL_STATUSES.has(currentStatus)) throw serviceTransitionError('Servico em estado terminal nao pode ser concluido manualmente', 'service_terminal');
+    payload = { status:'executado', exec_status:'finalizado', completion_source:'admin_manual', status_reason:transition.reason, status_changed_at:now, updated_at:now };
+  } else if (transition.action === 'resolve_problem_complete') {
+    if (currentStatus === 'executado' && currentExec === 'problema') return { service, idempotent: true };
+    if (currentExec !== 'problema' || SERVICE_TERMINAL_STATUSES.has(currentStatus)) throw serviceTransitionError('Somente um problema pendente pode ser concluido com ressalva', 'problem_not_pending');
+    payload = { status:'executado', completion_source:'admin_problem_resolution', status_reason:transition.reason, status_changed_at:now, updated_at:now };
+  } else if (transition.action === 'cancel') {
+    if (currentStatus === 'cancelado') return { service, idempotent: true };
+    if (['executado','reagendado'].includes(currentStatus)) throw serviceTransitionError('Servico em estado terminal nao pode ser cancelado', 'service_terminal');
+    payload = { status:'cancelado', exec_status:'cancelado', completion_source:null, status_reason:transition.reason, status_changed_at:now, updated_at:now };
+  }
+  const { data, error } = await db.from('services').update(payload).eq('id', service.id).select();
+  if (error) {
+    const missing = getMissingSchemaColumn(error);
+    if (missing && ['completion_source','status_reason','status_changed_at'].includes(missing)) throw serviceTransitionError('Migration da Fase 2 ainda nao foi aplicada', 'service_transition_migration_required', 503);
+    throw error;
+  }
+  const updated = data?.[0];
+  if (!updated) throw serviceTransitionError('Servico nao encontrado', 'service_not_found', 404);
+  return { service: updated, idempotent: false };
+}
+
+async function resolveProblemEventsForService(db, serviceId, actor, reason, now) {
+  try {
+    const { error } = await db.from('technician_events').update({
+      status:'resolvido', resolvido_em:now,
+      operador_responsavel:actor?.appUser?.name || actor?.appUser?.email || actor?.user?.email || null,
+      observacao_resolucao:reason
+    }).eq('service_id', serviceId).eq('tipo', 'problema').select();
+    if (error && !isMissingRelationError(error) && !getMissingSchemaColumn(error)) throw error;
+  } catch (error) {
+    if (!isMissingRelationError(error) && !getMissingSchemaColumn(error)) console.warn('[service transition] Falha ao resolver evento de problema:', error.message);
+  }
+}
+
+app.post('/api/services/:id/transition', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const transition = normalizeServiceTransitionInput(req.body || {});
+    if (!SERVICE_TRANSITION_ACTIONS.has(transition.action)) return res.status(400).json({ error:'Transicao de servico invalida', code:'invalid_service_transition' });
+    if (transition.reason.length < 3) return res.status(400).json({ error:'Informe um motivo com pelo menos 3 caracteres', code:'transition_reason_required' });
+    const db = getSupabaseClient();
+    const service = await fetchServiceById(db, req.params.id);
+    if (!service) return res.status(404).json({ error:'Servico nao encontrado', code:'service_not_found' });
+
+    if (transition.action === 'reschedule') {
+      if (!transition.newDate || !/^([01]\d|2[0-3]):[0-5]\d$/.test(transition.newTime)) return res.status(400).json({ error:'Nova data e horario valido sao obrigatorios', code:'reschedule_date_time_required' });
+      if (typeof db.rpc !== 'function') return res.status(503).json({ error:'Migration da Fase 2 ainda nao foi aplicada', code:'service_transition_migration_required' });
+      const { data, error } = await db.rpc('transition_service_reschedule', {
+        p_service_id:Number(req.params.id), p_new_id:Date.now(), p_new_date:transition.newDate,
+        p_new_time:transition.newTime, p_reason:transition.reason,
+        p_equipe:transition.equipe === undefined ? null : transition.equipe,
+        p_veiculo:transition.veiculo === undefined ? null : transition.veiculo,
+        p_tecnicos_ids:transition.tecnicosIds === undefined ? null : transition.tecnicosIds
+      });
+      if (error) {
+        if (isMissingRelationError(error) || ['PGRST202','42883'].includes(error.code)) return res.status(503).json({ error:'Migration da Fase 2 ainda nao foi aplicada', code:'service_transition_migration_required' });
+        throw error;
+      }
+      const result = Array.isArray(data) ? data[0] : data;
+      if (String(service.exec_status || '').toLowerCase() === 'problema') await resolveProblemEventsForService(db, service.id, actor, transition.reason, new Date().toISOString());
+      return res.json(result);
+    }
+    const now = new Date().toISOString();
+    const result = await updateServiceTransition(db, service, transition, now);
+    if (String(service.exec_status || '').toLowerCase() === 'problema') await resolveProblemEventsForService(db, service.id, actor, transition.reason, now);
+    res.json(result);
+  } catch (error) {
+    const status = error.status || error.statusCode || 500;
+    console.error('[POST /api/services/:id/transition] Error:', error.message);
+    res.status(status).json({ error:status >= 500 ? 'Falha ao alterar estado do servico' : error.message, code:error.code || 'service_transition_failed', details:status >= 500 ? publicDbErrorDetails(error) : undefined });
+  }
+});
+
 app.put('/api/services/:id', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const id = req.params.id;
     const technicianAuth = await requireTechnicianForPortal(req, res);
     if (technicianAuth === false) return;
+    const current = await fetchServiceById(db, id);
+    if (!current) return res.status(404).json({ code: 'service_not_found', error: 'Servico nao encontrado' });
     if (technicianAuth) {
-      const current = await fetchServiceById(db, id);
-      if (!current) return res.status(404).json({ code: 'service_not_found', error: 'ServiÃ§o nÃ£o encontrado' });
       if (!technicianHasService(technicianAuth.technician.id, current)) {
         return res.status(403).json({ code: 'technician_service_forbidden', error: 'Este servico nao pertence ao tecnico logado' });
       }
+      const technicianStatus = String(req.body?.status || '').toLowerCase();
+      const technicianExecStatus = String(req.body?.exec_status || '').toLowerCase();
+      if (['cancelado','reagendado'].includes(technicianStatus) || ['cancelado','reagendado'].includes(technicianExecStatus)) {
+        return res.status(409).json({ error:'Cancelamento e reagendamento exigem decisao administrativa', code:'service_transition_required' });
+      }
+      delete req.body.status_reason;
+      delete req.body.rescheduled_from_id;
+      if (technicianExecStatus === 'finalizado') {
+        req.body.completion_source = 'portal_tecnico';
+        req.body.status_changed_at = req.body.status_changed_at || new Date().toISOString();
+      } else {
+        delete req.body.completion_source;
+        delete req.body.status_changed_at;
+      }
+    } else {
+      const nextStatus = String(req.body?.status ?? req.body?.st ?? current.status ?? '').toLowerCase();
+      const nextExec = String(req.body?.exec_status ?? current.exec_status ?? '').toLowerCase();
+      const statusChanged = nextStatus && nextStatus !== String(current.status || 'agendado').toLowerCase();
+      const execChanged = nextExec && nextExec !== String(current.exec_status || 'agendado').toLowerCase();
+      const sensitiveExecChange = execChanged && ['finalizado','problema','cancelado','reagendado'].includes(nextExec);
+      if ((statusChanged && SERVICE_TERMINAL_STATUSES.has(nextStatus)) || sensitiveExecChange) {
+        return res.status(409).json({ error:'Use a acao operacional apropriada para alterar o estado do servico', code:'service_transition_required' });
+      }
+      delete req.body.completion_source;
+      delete req.body.status_reason;
+      delete req.body.status_changed_at;
+      delete req.body.rescheduled_from_id;
     }
     const result = await getAppointmentDomainService().updateAppointment(db, id, req.body || {});
     if (result.error) {

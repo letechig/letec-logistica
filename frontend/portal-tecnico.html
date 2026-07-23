@@ -2401,7 +2401,11 @@
         },
         problema_descricao: problemText,
       };
-      if (state.finishState === 'ok') payload.status = 'executado';
+      if (state.finishState === 'ok') {
+        payload.status = 'executado';
+        payload.completion_source = 'portal_tecnico';
+        payload.status_changed_at = fim;
+      }
       updateLocalService(id, payload);
       closeFinishModal();
       const persisted = await persistService(id, payload, state.finishState === 'ok' ? 'Servico finalizado.' : 'Problema registrado.');
