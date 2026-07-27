@@ -597,7 +597,7 @@ textarea:focus-visible,
   position:absolute;
   right:0;
   top:calc(100% + 5px);
-  min-width:138px;
+  min-width:184px;
   background:var(--card);
   border:1px solid var(--border);
   border-radius:var(--r2);
@@ -620,17 +620,25 @@ textarea:focus-visible,
 }
 .svc-action-menu-panel button:hover { background:var(--bg2); color:var(--text); }
 .svc-action-menu-panel button.danger { color:var(--red); }
+.svc-action-menu.open-upward .svc-action-menu-panel {
+  top:auto;
+  bottom:calc(100% + 5px);
+}
 
 /* ─── HOJE / EQUIPE KANBAN ───────────────────── */
 .team-board {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--r);
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   min-height: 0;
   box-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+}
+.team-board:has(.svc-action-menu[open]) {
+  position: relative;
+  z-index: 80;
 }
 .team-board-header {
   padding: 16px 18px 14px;
@@ -713,8 +721,7 @@ textarea:focus-visible,
   flex-direction: column;
   gap: 10px;
   flex: 1;
-  overflow-y: auto;
-  max-height: 440px;
+  overflow: visible;
 }
 .team-svc-card {
   background: var(--card2);
@@ -732,7 +739,8 @@ textarea:focus-visible,
   box-shadow: 0 8px 20px rgba(15, 23, 42, .10);
 }
 .team-svc-card.is-executed {
-  opacity: .72;
+  opacity: .9;
+  background: linear-gradient(90deg, rgba(22,163,74,.035), var(--card2) 34%);
 }
 .team-svc-card.is-late {
   border-left-color: var(--red);
@@ -9575,9 +9583,9 @@ function renderServiceCardActions(s, options = {}) {
 
   return `<div class="svc-card-actions" onclick="event.stopPropagation()">
     ${stKey === 'executado' ? `<span class="team-svc-done">✓ ${doneLabel}</span>` : ''}
-    <details class="svc-action-menu" onclick="event.stopPropagation()">
+    <details class="svc-action-menu" onclick="event.stopPropagation()" ontoggle="handleServiceActionMenuToggle(this)">
       <summary title="Mais ações">⋮</summary>
-      <div class="svc-action-menu-panel">
+      <div class="svc-action-menu-panel" onclick="handleServiceActionPanelClick(event,this)">
         <button type="button" onclick="${detailAction}">${detailsLabel}</button>
         ${canSendCustomerLogistics ? `<button type="button" onclick="comEnviarConfirmacaoServico(${id})">Enviar confirmação</button>` : ''}
         ${canSendReminder ? `<button type="button" onclick="comEnviarLembreteServico(${id})">Reenviar lembrete</button>` : ''}
@@ -9589,6 +9597,34 @@ function renderServiceCardActions(s, options = {}) {
     </details>
   </div>`;
 }
+
+function closeServiceActionMenus(except = null) {
+  document.querySelectorAll('.svc-action-menu[open]').forEach(menu => {
+    if (menu !== except) menu.removeAttribute('open');
+  });
+}
+
+function handleServiceActionMenuToggle(menu) {
+  if (!menu?.open) {
+    menu?.classList.remove('open-upward');
+    return;
+  }
+  closeServiceActionMenus(menu);
+  requestAnimationFrame(() => {
+    const panel = menu.querySelector('.svc-action-menu-panel');
+    if (!panel) return;
+    menu.classList.toggle('open-upward', panel.getBoundingClientRect().bottom > window.innerHeight - 12);
+  });
+}
+
+function handleServiceActionPanelClick(event, panel) {
+  if (!event.target.closest('button')) return;
+  panel.closest('.svc-action-menu')?.removeAttribute('open');
+}
+
+document.addEventListener('click', event => {
+  if (!event.target.closest('.svc-action-menu')) closeServiceActionMenus();
+});
 
 function agSetQuickFilter(filter) {
   agQuickFilter = filter || 'todos';
