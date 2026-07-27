@@ -18,6 +18,9 @@ const PORT = process.env.PORT || 8000;
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
 const EVOLUTION_SEND_DELAY_MS = Number(process.env.EVOLUTION_SEND_DELAY_MS || 1200);
 const CEP_CACHE_TTL_MS = Number(process.env.CEP_CACHE_TTL_MS || 24 * 60 * 60 * 1000);
+const NOMINATIM_BASE_URL = String(process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org').replace(/\/$/, '');
+const NOMINATIM_USER_AGENT = String(process.env.NOMINATIM_USER_AGENT || 'LetecLog/1.0 (operacao@leteclog.local)');
+const GEOCODE_MIN_INTERVAL_MS = Math.max(1000, Number(process.env.GEOCODE_MIN_INTERVAL_MS || 1100));
 const CHECKLIST_PHOTO_BUCKET = process.env.CHECKLIST_PHOTO_BUCKET || 'checklist-photos';
 const CHECKLIST_PHOTO_MAX_BYTES = Number(process.env.CHECKLIST_PHOTO_MAX_BYTES || 5 * 1024 * 1024);
 const CLIENT_IMPORT_WORKBOOK = process.env.CLIENT_IMPORT_WORKBOOK ||
@@ -39,6 +42,9 @@ const corsOptions = {
 };
 
 const cepLookupCache = new Map();
+const geocodeCache = new Map();
+let geocodeQueue = Promise.resolve();
+let geocodeLastRequestAt = 0;
 
 function rateLimitJsonHandler(message, code) {
   return (req, res, next, options = {}) => {
@@ -428,6 +434,10 @@ const SERVICE_OPTIONAL_WRITE_COLUMNS = new Set([
   'tempo_execucao',
   'checklist_servico',
   'problema_descricao',
+  'completion_source',
+  'status_reason',
+  'status_changed_at',
+  'rescheduled_from_id',
   'confirmado_cliente',
   'confirmado_cliente_em',
   'agenda_confirmada_tecnico',
@@ -842,6 +852,10 @@ function normalizeServicePayload(input = {}, options = {}) {
   set('tempo_execucao', 'tempo_execucao', cleanNumber);
   set('checklist_servico', 'checklist_servico', value => value || null);
   set('problema_descricao', 'problema_descricao', value => cleanText(value, 1000), '');
+  set('completion_source', 'completion_source', value => cleanNullableText(value, 80));
+  set('status_reason', 'status_reason', value => cleanNullableText(value, 1000));
+  set('status_changed_at', 'status_changed_at', value => cleanNullableText(value, 80));
+  set('rescheduled_from_id', 'rescheduled_from_id', cleanNumber);
   set('confirmado_cliente', 'confirmado_cliente', value => value === true || String(value) === 'true');
   set('confirmado_cliente_em', 'confirmado_cliente_em', value => cleanNullableText(value, 80));
   set('agenda_confirmada_tecnico', 'agenda_confirmada_tecnico', value => value === true || String(value) === 'true');
@@ -1320,20 +1334,91 @@ function vehicleDisplayName(vehicle = {}) {
 }
 
 function plateLastDigit(plate) {
-  const digits = String(plate || '').replace(/\D/g, '');
+  const normalized = normalizePlate(plate) || '';
+  if (normalized.length !== 7) return '';
+  const digits = normalized.replace(/\D/g, '');
   return digits ? digits[digits.length - 1] : '';
 }
 
-function rodizioInfo(plate, date = new Date()) {
+const RODIZIO_TIME_ZONE = 'America/Sao_Paulo';
+const RODIZIO_RESTRICTION_WINDOWS = Object.freeze([
+  Object.freeze({ inicio: '07:00', fim: '10:00' }),
+  Object.freeze({ inicio: '17:00', fim: '20:00' })
+]);
+const RODIZIO_WARNING_MINUTES = 60;
+
+function rodizioReferenceParts(reference = new Date()) {
+  if (reference && typeof reference === 'object' && !(reference instanceof Date) && reference.date) {
+    return { date: String(reference.date).slice(0, 10), time: reference.time ? String(reference.time).slice(0, 5) : '' };
+  }
+  const value = reference instanceof Date ? reference : new Date(reference);
+  const safeDate = Number.isNaN(value.getTime()) ? new Date() : value;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: RODIZIO_TIME_ZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(safeDate).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+function rodizioDayOfWeek(dateText) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateText || ''))) return null;
+  return new Date(`${dateText}T12:00:00Z`).getUTCDay();
+}
+
+function rodizioMinutes(timeText) {
+  if (!/^\d{2}:\d{2}$/.test(String(timeText || ''))) return null;
+  const [hours, minutes] = timeText.split(':').map(Number);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function rodizioInfo(plate, reference = new Date()) {
   const final = plateLastDigit(plate);
   const map = { '1': 1, '2': 1, '3': 2, '4': 2, '5': 3, '6': 3, '7': 4, '8': 4, '9': 5, '0': 5 };
   const labels = { 1: 'segunda-feira', 2: 'terca-feira', 3: 'quarta-feira', 4: 'quinta-feira', 5: 'sexta-feira' };
   const day = map[final] || null;
+  const ref = rodizioReferenceParts(reference);
+  const matchesDate = !!day && rodizioDayOfWeek(ref.date) === day;
+  const currentMinutes = rodizioMinutes(ref.time);
+  let situacao = matchesDate ? 'rodizio_no_dia' : 'sem_rodizio';
+  let proximaRestricao = null;
+  if (matchesDate && currentMinutes !== null) {
+    for (const range of RODIZIO_RESTRICTION_WINDOWS) {
+      const start = rodizioMinutes(range.inicio);
+      const end = rodizioMinutes(range.fim);
+      if (currentMinutes >= start && currentMinutes < end) {
+        situacao = 'restricao_ativa';
+        proximaRestricao = { ...range };
+        break;
+      }
+      if (currentMinutes >= start - RODIZIO_WARNING_MINUTES && currentMinutes < start) {
+        situacao = 'atencao';
+        proximaRestricao = { ...range };
+        break;
+      }
+      if (currentMinutes < start) {
+        situacao = 'livre_agora';
+        proximaRestricao = { ...range };
+        break;
+      }
+      situacao = 'livre_agora';
+    }
+  }
   return {
     final_placa: final || null,
     dia_rodizio: day ? labels[day] : null,
     horario_restricao: day ? '07:00-10:00 e 17:00-20:00' : null,
-    status_rodizio_hoje: !!day && date.getDay() === day
+    faixas_restricao: day ? RODIZIO_RESTRICTION_WINDOWS.map(range => ({ ...range })) : [],
+    margem_preventiva_minutos: RODIZIO_WARNING_MINUTES,
+    data_referencia: ref.date,
+    hora_referencia: ref.time || null,
+    status_rodizio_hoje: matchesDate,
+    situacao,
+    proxima_restricao: proximaRestricao
   };
 }
 
@@ -1388,7 +1473,9 @@ function buildVehicleAlerts({ vehicles = [], documents = [], maintenances = [] }
       addAlert(vehicle, 'quilometragem_nao_atualizada', 'Veiculo sem quilometragem atualizada', 'media');
     }
     const rodizio = rodizioInfo(vehicle.placa);
-    if (rodizio.status_rodizio_hoje) addAlert(vehicle, 'rodizio_hoje', 'Hoje e dia de rodizio deste veiculo', 'alta', rodizio);
+    if (active && rodizio.final_placa && rodizio.status_rodizio_hoje) {
+      addAlert(vehicle, 'rodizio_hoje', 'Hoje e dia de rodizio deste veiculo', 'alta', rodizio);
+    }
 
     (docsByVehicle.get(String(vehicle.id)) || []).forEach(doc => {
       const paid = ['pago', 'cancelado'].includes(String(doc.status || '').toLowerCase()) || doc.data_pagamento;
@@ -2491,6 +2578,14 @@ function choosePrimaryAddress(addresses = []) {
     })[0] || null;
 }
 
+function resolvedServiceAddress(service = {}, customer = null, address = null) {
+  return String(
+    service.address_snapshot || service.endereco || service.endereco_completo
+    || address?.endereco_completo || address?.endereco
+    || customer?.endereco_completo || customer?.endereco || ''
+  ).trim();
+}
+
 async function enrichServicesWithCustomerLocations(db, rows = []) {
   const services = Array.isArray(rows) ? rows : [];
   if (!services.length) return services;
@@ -2525,6 +2620,7 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
     const serviceCoords = validCoordinatePair(service.latitude, service.longitude);
     const arrivalCoords = validCoordinatePair(service.chegada_lat, service.chegada_lng);
     const selected = addressCoords || customerCoords || serviceCoords || arrivalCoords;
+    const resolvedAddress = resolvedServiceAddress(service, customer, address);
     return {
       ...service,
       cliente_id: service.cliente_id || customer?.id || null,
@@ -2543,7 +2639,11 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
               : null,
       customer_cep: customer?.cep || address?.cep || null,
       address_cep: address?.cep || null,
-      address_numero: address?.numero || customer?.numero || null
+      address_numero: address?.numero || customer?.numero || null,
+      resolved_address: resolvedAddress || null,
+      resolved_address_source: (service.address_snapshot || service.endereco || service.endereco_completo) ? 'service'
+        : address ? (explicitAddress ? 'customer_address' : 'customer_primary_address')
+          : customer ? 'customer' : null
     };
   });
 }
@@ -3356,7 +3456,7 @@ function getMapProviderConfig() {
   return {
     provider: 'local_estimate',
     routingConfigured: false,
-    geocodingConfigured: false,
+    geocodingConfigured: true,
     cepLookupConfigured: true
   };
 }
@@ -4326,18 +4426,145 @@ app.post('/api/services', async (req, res) => {
   }
 });
 
+const SERVICE_TRANSITION_ACTIONS = new Set(['complete_manual', 'resolve_problem_complete', 'reschedule', 'cancel']);
+const SERVICE_TERMINAL_STATUSES = new Set(['executado', 'cancelado', 'reagendado']);
+
+function serviceTransitionError(message, code, status = 400) {
+  return { message, code, status };
+}
+
+function normalizeServiceTransitionInput(input = {}) {
+  return {
+    action: String(input.action || '').trim().toLowerCase(),
+    reason: cleanText(input.reason, 1000),
+    newDate: cleanDateText(input.new_date || input.date),
+    newTime: cleanText(input.new_time || input.horario, 20),
+    equipe: input.equipe === undefined ? undefined : cleanText(input.equipe, 300),
+    veiculo: input.veiculo === undefined ? undefined : cleanText(input.veiculo, 120),
+    tecnicosIds: input.tecnicos_ids === undefined ? undefined : cleanArray(input.tecnicos_ids)
+  };
+}
+
+async function updateServiceTransition(db, service, transition, now) {
+  const currentStatus = String(service.status || 'agendado').toLowerCase();
+  const currentExec = String(service.exec_status || 'agendado').toLowerCase();
+  let payload;
+  if (transition.action === 'complete_manual') {
+    if (currentStatus === 'executado' && service.completion_source === 'admin_manual') return { service, idempotent: true };
+    if (SERVICE_TERMINAL_STATUSES.has(currentStatus)) throw serviceTransitionError('Servico em estado terminal nao pode ser concluido manualmente', 'service_terminal');
+    payload = { status:'executado', exec_status:'finalizado', completion_source:'admin_manual', status_reason:transition.reason, status_changed_at:now, updated_at:now };
+  } else if (transition.action === 'resolve_problem_complete') {
+    if (currentStatus === 'executado' && currentExec === 'problema') return { service, idempotent: true };
+    if (currentExec !== 'problema' || SERVICE_TERMINAL_STATUSES.has(currentStatus)) throw serviceTransitionError('Somente um problema pendente pode ser concluido com ressalva', 'problem_not_pending');
+    payload = { status:'executado', completion_source:'admin_problem_resolution', status_reason:transition.reason, status_changed_at:now, updated_at:now };
+  } else if (transition.action === 'cancel') {
+    if (currentStatus === 'cancelado') return { service, idempotent: true };
+    if (['executado','reagendado'].includes(currentStatus)) throw serviceTransitionError('Servico em estado terminal nao pode ser cancelado', 'service_terminal');
+    payload = { status:'cancelado', exec_status:'cancelado', completion_source:null, status_reason:transition.reason, status_changed_at:now, updated_at:now };
+  }
+  const { data, error } = await db.from('services').update(payload).eq('id', service.id).select();
+  if (error) {
+    const missing = getMissingSchemaColumn(error);
+    if (missing && ['completion_source','status_reason','status_changed_at'].includes(missing)) throw serviceTransitionError('Migration da Fase 2 ainda nao foi aplicada', 'service_transition_migration_required', 503);
+    throw error;
+  }
+  const updated = data?.[0];
+  if (!updated) throw serviceTransitionError('Servico nao encontrado', 'service_not_found', 404);
+  return { service: updated, idempotent: false };
+}
+
+async function resolveProblemEventsForService(db, serviceId, actor, reason, now) {
+  try {
+    const { error } = await db.from('technician_events').update({
+      status:'resolvido', resolvido_em:now,
+      operador_responsavel:actor?.appUser?.name || actor?.appUser?.email || actor?.user?.email || null,
+      observacao_resolucao:reason
+    }).eq('service_id', serviceId).eq('tipo', 'problema').select();
+    if (error && !isMissingRelationError(error) && !getMissingSchemaColumn(error)) throw error;
+  } catch (error) {
+    if (!isMissingRelationError(error) && !getMissingSchemaColumn(error)) console.warn('[service transition] Falha ao resolver evento de problema:', error.message);
+  }
+}
+
+app.post('/api/services/:id/transition', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const transition = normalizeServiceTransitionInput(req.body || {});
+    if (!SERVICE_TRANSITION_ACTIONS.has(transition.action)) return res.status(400).json({ error:'Transicao de servico invalida', code:'invalid_service_transition' });
+    if (transition.reason.length < 3) return res.status(400).json({ error:'Informe um motivo com pelo menos 3 caracteres', code:'transition_reason_required' });
+    const db = getSupabaseClient();
+    const service = await fetchServiceById(db, req.params.id);
+    if (!service) return res.status(404).json({ error:'Servico nao encontrado', code:'service_not_found' });
+
+    if (transition.action === 'reschedule') {
+      if (!transition.newDate || !/^([01]\d|2[0-3]):[0-5]\d$/.test(transition.newTime)) return res.status(400).json({ error:'Nova data e horario valido sao obrigatorios', code:'reschedule_date_time_required' });
+      if (typeof db.rpc !== 'function') return res.status(503).json({ error:'Migration da Fase 2 ainda nao foi aplicada', code:'service_transition_migration_required' });
+      const { data, error } = await db.rpc('transition_service_reschedule', {
+        p_service_id:Number(req.params.id), p_new_id:Date.now(), p_new_date:transition.newDate,
+        p_new_time:transition.newTime, p_reason:transition.reason,
+        p_equipe:transition.equipe === undefined ? null : transition.equipe,
+        p_veiculo:transition.veiculo === undefined ? null : transition.veiculo,
+        p_tecnicos_ids:transition.tecnicosIds === undefined ? null : transition.tecnicosIds
+      });
+      if (error) {
+        if (isMissingRelationError(error) || ['PGRST202','42883'].includes(error.code)) return res.status(503).json({ error:'Migration da Fase 2 ainda nao foi aplicada', code:'service_transition_migration_required' });
+        throw error;
+      }
+      const result = Array.isArray(data) ? data[0] : data;
+      if (String(service.exec_status || '').toLowerCase() === 'problema') await resolveProblemEventsForService(db, service.id, actor, transition.reason, new Date().toISOString());
+      return res.json(result);
+    }
+    const now = new Date().toISOString();
+    const result = await updateServiceTransition(db, service, transition, now);
+    if (String(service.exec_status || '').toLowerCase() === 'problema') await resolveProblemEventsForService(db, service.id, actor, transition.reason, now);
+    res.json(result);
+  } catch (error) {
+    const status = error.status || error.statusCode || 500;
+    console.error('[POST /api/services/:id/transition] Error:', error.message);
+    res.status(status).json({ error:status >= 500 ? 'Falha ao alterar estado do servico' : error.message, code:error.code || 'service_transition_failed', details:status >= 500 ? publicDbErrorDetails(error) : undefined });
+  }
+});
+
 app.put('/api/services/:id', async (req, res) => {
   try {
     const db = getSupabaseClient();
     const id = req.params.id;
     const technicianAuth = await requireTechnicianForPortal(req, res);
     if (technicianAuth === false) return;
+    const current = await fetchServiceById(db, id);
+    if (!current) return res.status(404).json({ code: 'service_not_found', error: 'Servico nao encontrado' });
     if (technicianAuth) {
-      const current = await fetchServiceById(db, id);
-      if (!current) return res.status(404).json({ code: 'service_not_found', error: 'ServiÃ§o nÃ£o encontrado' });
       if (!technicianHasService(technicianAuth.technician.id, current)) {
         return res.status(403).json({ code: 'technician_service_forbidden', error: 'Este servico nao pertence ao tecnico logado' });
       }
+      const technicianStatus = String(req.body?.status || '').toLowerCase();
+      const technicianExecStatus = String(req.body?.exec_status || '').toLowerCase();
+      if (['cancelado','reagendado'].includes(technicianStatus) || ['cancelado','reagendado'].includes(technicianExecStatus)) {
+        return res.status(409).json({ error:'Cancelamento e reagendamento exigem decisao administrativa', code:'service_transition_required' });
+      }
+      delete req.body.status_reason;
+      delete req.body.rescheduled_from_id;
+      if (technicianExecStatus === 'finalizado') {
+        req.body.completion_source = 'portal_tecnico';
+        req.body.status_changed_at = req.body.status_changed_at || new Date().toISOString();
+      } else {
+        delete req.body.completion_source;
+        delete req.body.status_changed_at;
+      }
+    } else {
+      const nextStatus = String(req.body?.status ?? req.body?.st ?? current.status ?? '').toLowerCase();
+      const nextExec = String(req.body?.exec_status ?? current.exec_status ?? '').toLowerCase();
+      const statusChanged = nextStatus && nextStatus !== String(current.status || 'agendado').toLowerCase();
+      const execChanged = nextExec && nextExec !== String(current.exec_status || 'agendado').toLowerCase();
+      const sensitiveExecChange = execChanged && ['finalizado','problema','cancelado','reagendado'].includes(nextExec);
+      if ((statusChanged && SERVICE_TERMINAL_STATUSES.has(nextStatus)) || sensitiveExecChange) {
+        return res.status(409).json({ error:'Use a acao operacional apropriada para alterar o estado do servico', code:'service_transition_required' });
+      }
+      delete req.body.completion_source;
+      delete req.body.status_reason;
+      delete req.body.status_changed_at;
+      delete req.body.rescheduled_from_id;
     }
     const result = await getAppointmentDomainService().updateAppointment(db, id, req.body || {});
     if (result.error) {
@@ -5033,7 +5260,10 @@ app.post('/api/veiculos/alertas/enviar-whatsapp', strictLimiter, async (req, res
       .eq('data_envio', today));
     if (duplicate && !force) return res.status(409).json({ error: 'Alerta ja enviado hoje', envio: duplicate });
 
-    const message = `Alerta de veiculo - Letec\n\nVeiculo: ${alert.veiculo}\nPlaca: ${alert.placa || '-'}\nAlerta: ${alert.mensagem || alert.tipo_alerta}\nPrazo: ${alert.data_limite || alert.proxima_quilometragem || '-'}\nPrioridade: ${alert.prioridade}\n\nVerifique no sistema.`;
+    const rodizioDetails = alert.tipo_alerta === 'rodizio_hoje'
+      ? `\nFaixas de restricao: ${alert.horario_restricao || '07:00-10:00 e 17:00-20:00'}\nOrientacao: confirme se o roteiro passa pela area de restricao. O veiculo pode circular fora da area e dos horarios restritos.`
+      : `\nPrazo: ${alert.data_limite || alert.proxima_quilometragem || '-'}`;
+    const message = `Alerta de veiculo - Letec\n\nVeiculo: ${alert.veiculo}\nPlaca: ${alert.placa || '-'}\nAlerta: ${alert.mensagem || alert.tipo_alerta}${rodizioDetails}\nPrioridade: ${alert.prioridade}\n\nVerifique no sistema.`;
     const sendResult = await sendEvolutionText({ number: destination || process.env.GRUPO_OPERACIONAL_JID, text: message });
     const { data, error } = await db.from('veiculo_alerta_envios').insert([{
       veiculo_id: alert.veiculo_id || null,
@@ -5064,13 +5294,37 @@ app.post('/api/veiculos/alertas/enviar-resumo-whatsapp', strictLimiter, async (r
     const alerts = await fetchVehicleAlerts(db);
     const destination = cleanNullableText(req.body.telefone, 30) || process.env.GESTOR_WHATSAPP_NUMBER || process.env.GRUPO_OPERACIONAL_JID;
     if (!destination) return res.status(503).json({ error: 'Configure GESTOR_WHATSAPP_NUMBER ou GRUPO_OPERACIONAL_JID para envio do resumo' });
+    const today = rodizioReferenceParts().date;
+    const summaryKey = `resumo_frota:${today}`;
+    const force = req.body.force === true || String(req.body.force) === 'true';
+    const duplicate = await maybeSingle(db
+      .from('veiculo_alerta_envios')
+      .select('*')
+      .eq('alerta_chave', summaryKey)
+      .eq('data_envio', today));
+    if (duplicate && !force) return res.status(409).json({ error: 'Resumo de alertas ja enviado hoje', envio: duplicate });
     const counts = alerts.reduce((acc, item) => {
       acc[item.prioridade] = (acc[item.prioridade] || 0) + 1;
       return acc;
     }, {});
-    const top = alerts.slice(0, 8).map((item, index) => `${index + 1}. ${item.veiculo} - ${item.placa || '-'} - ${item.mensagem || item.tipo_alerta}`).join('\n');
+    const top = alerts.slice(0, 8).map((item, index) => {
+      const detail = item.tipo_alerta === 'rodizio_hoje'
+        ? ` - ${item.horario_restricao || '07:00-10:00 e 17:00-20:00'} - confira a area do roteiro`
+        : '';
+      return `${index + 1}. ${item.veiculo} - ${item.placa || '-'} - ${item.mensagem || item.tipo_alerta}${detail}`;
+    }).join('\n');
     const message = `Resumo de alertas da frota - Letec\n\nCriticos: ${counts.critica || 0}\nAltos: ${counts.alta || 0}\nMedios: ${counts.media || 0}\nBaixos: ${counts.baixa || 0}\n\nPrincipais pendencias:\n${top || 'Sem pendencias no momento.'}`;
     const sendResult = await sendEvolutionText({ number: destination, text: message });
+    const { error: insertError } = await db.from('veiculo_alerta_envios').insert([{
+      veiculo_id: null,
+      alerta_chave: summaryKey,
+      tipo_alerta: 'resumo_frota',
+      destino: destination,
+      data_envio: today,
+      resposta_api: sendResult.providerResponse,
+      status: 'enviado'
+    }]);
+    if (insertError) throw insertError;
     await insertVehicleHistory(db, {
       tipo_evento: 'whatsapp',
       descricao: 'Resumo de alertas da frota enviado por WhatsApp',
@@ -5827,19 +6081,110 @@ app.post('/api/customers/:id/hard-delete', strictLimiter, async (req, res) => {
   }
 });
 
-app.get('/api/geocode', async (req, res) => {
+function geocodeComparable(value) {
+  return normalizeAddress(value).replace(/\s+/g, ' ').trim();
+}
+
+function geocodeNumber(value) {
+  return String(value || '').match(/\b\d+[A-Za-z]?\b/)?.[0]?.toLowerCase() || '';
+}
+
+function geocodeCandidateMatches(candidate = {}, context = {}) {
+  const details = candidate.address || {};
+  const expectedNumber = geocodeNumber(context.numero || context.address);
+  const actualNumber = geocodeNumber(details.house_number || candidate.display_name);
+  if (expectedNumber && actualNumber !== expectedNumber) return false;
+  const expectedCep = normalizeCep(context.cep);
+  const actualCep = normalizeCep(details.postcode);
+  if (expectedCep && actualCep && expectedCep !== actualCep) return false;
+  const expectedCity = geocodeComparable(context.cidade);
+  const actualCity = geocodeComparable(details.city || details.town || details.municipality || details.village || '');
+  if (expectedCity && actualCity && expectedCity !== actualCity) return false;
+  return !!validCoordinatePair(candidate.lat, candidate.lon);
+}
+
+function enqueueNominatimSearch(address, context = {}) {
+  const key = geocodeComparable(`${address}|${context.cep || ''}|${context.numero || ''}|${context.cidade || ''}`);
+  if (geocodeCache.has(key)) return Promise.resolve(geocodeCache.get(key));
+  const task = async () => {
+    const waitMs = Math.max(0, GEOCODE_MIN_INTERVAL_MS - (Date.now() - geocodeLastRequestAt));
+    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+    const url = new URL(`${NOMINATIM_BASE_URL}/search`);
+    url.searchParams.set('q', `${address}, Brasil`);
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('addressdetails', '1');
+    url.searchParams.set('countrycodes', 'br');
+    url.searchParams.set('limit', '3');
+    geocodeLastRequestAt = Date.now();
+    const { response, payload } = await fetchJsonWithTimeout(url.toString(), {
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9' }
+    });
+    if (!response.ok) throw new Error(`Nominatim respondeu ${response.status}`);
+    const match = (Array.isArray(payload) ? payload : []).find(item => geocodeCandidateMatches(item, { ...context, address }));
+    const result = match ? validCoordinatePair(match.lat, match.lon) : null;
+    geocodeCache.set(key, result);
+    return result;
+  };
+  const result = geocodeQueue.then(task, task);
+  geocodeQueue = result.catch(() => null);
+  return result;
+}
+
+app.get('/api/geocode', (req, res) => res.status(405).json({
+  error: 'Use a geocodificacao vinculada ao servico',
+  code: 'service_geocode_required'
+}));
+
+app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
   try {
-    return res.status(503).json({
-      error: 'Geocodificacao automatica desativada',
-      code: 'geocode_disabled',
-      details: 'Modo economico ativo: use CEP, ponto manual no mapa ou GPS de chegada do tecnico.'
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const service = await fetchServiceById(db, req.params.id);
+    if (!service) return res.status(404).json({ error: 'Servico nao encontrado', code: 'service_not_found' });
+    const customerId = serviceCustomerId(service);
+    if (!customerId) return res.status(422).json({ error: 'Servico sem cliente vinculado', code: 'customer_not_linked' });
+    const [customers, addresses] = await Promise.all([
+      safeSelectByIds(db, 'customers', 'id', [customerId]),
+      safeSelectByIds(db, 'customer_addresses', 'customer_id', [customerId])
+    ]);
+    const customer = customers[0] || null;
+    const explicit = service.customer_address_id
+      ? addresses.find(item => String(item.id) === String(service.customer_address_id)) : null;
+    const targetAddress = explicit || choosePrimaryAddress(addresses);
+    const existing = validCoordinatePair(targetAddress?.latitude, targetAddress?.longitude)
+      || validCoordinatePair(customer?.latitude, customer?.longitude);
+    const address = resolvedServiceAddress(service, customer, targetAddress);
+    if (!address) return res.status(422).json({ error: 'Cliente sem endereco utilizavel', code: 'address_missing' });
+    if (existing) return res.json({ location: existing, cached: true, target: targetAddress ? 'customer_address' : 'customer', address });
+
+    const usesServiceSnapshot = !!(service.address_snapshot || service.endereco || service.endereco_completo);
+    const serviceAddressDiffers = usesServiceSnapshot && targetAddress
+      && !areEquivalentCustomerAddresses({ endereco: address }, targetAddress);
+    const location = await enqueueNominatimSearch(address, {
+      cep: usesServiceSnapshot ? null : (targetAddress?.cep || customer?.cep),
+      numero: geocodeNumber(address),
+      cidade: targetAddress?.cidade || customer?.cidade
     });
+    if (!location) return res.status(404).json({ error: 'Localizacao nao encontrada com seguranca', code: 'location_not_found', address });
+
+    const timestamp = new Date().toISOString();
+    const write = serviceAddressDiffers
+      ? await runServiceWriteWithSchemaFallback(
+        payload => db.from('services').update(payload).eq('id', service.id).select(),
+        { ...location }, 'POST /api/services/:id/geocode service')
+      : targetAddress?.id
+      ? await runCustomerAddressWriteWithSchemaFallback(
+        payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', targetAddress.id).select(),
+        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode address')
+      : await runCustomerWriteWithSchemaFallback(
+        payload => db.from('customers').update(payload).eq('id', customerId).select(),
+        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode customer');
+    if (write.error) throw write.error;
+    res.json({ location, cached: false, target: serviceAddressDiffers ? 'service' : (targetAddress ? 'customer_address' : 'customer'), address });
   } catch (error) {
-    console.error('[GET /api/geocode] Error:', error.message);
-    return res.status(500).json({
-      error: 'Falha ao retornar status da geocodificacao',
-      details: error.message
-    });
+    console.error('[POST /api/services/:id/geocode] Error:', error.message);
+    res.status(503).json({ error: 'Falha temporaria ao localizar endereco', code: 'geocode_unavailable' });
   }
 });
 
@@ -7389,4 +7734,5 @@ if (require.main === module) {
   });
 }
 
+app.locals.rodizioInfo = rodizioInfo;
 module.exports = app;

@@ -43,7 +43,8 @@ function makeState() {
       { id: 51, date: '2026-05-15', motorista: 'Maria', origem: 'portal_tecnico' }
     ],
     technician_events: [],
-    technician_messages: [{ id: 70, date: '2026-05-14', tecnico: 'Joao', mensagem: 'Recado', lido: false }]
+    technician_messages: [{ id: 70, date: '2026-05-14', tecnico: 'Joao', mensagem: 'Recado', lido: false }],
+    activity_logs: []
   };
 }
 
@@ -138,6 +139,22 @@ function makeBuilder(state, table) {
 
 function makeDb(state) {
   return {
+    async rpc(name, params) {
+      assert.equal(name, 'transition_service_reschedule');
+      const original = state.services.find(service => String(service.id) === String(params.p_service_id));
+      if (!original) return { data:null, error:{ message:'Servico nao encontrado' } };
+      const existing = state.services.find(service => String(service.rescheduled_from_id) === String(original.id));
+      if (existing) return { data:{ service:original, new_service:existing, idempotent:true }, error:null };
+      Object.assign(original, { status:'reagendado', exec_status:'reagendado', status_reason:params.p_reason });
+      const created = {
+        ...original, id:params.p_new_id, date:params.p_new_date, data:params.p_new_date,
+        horario:params.p_new_time, status:'agendado', exec_status:'agendado', status_reason:null,
+        rescheduled_from_id:original.id, chegada_hora:null, inicio_hora:null, fim_hora:null,
+        completion_source:null
+      };
+      state.services.push(created);
+      return { data:{ service:original, new_service:created, idempotent:false }, error:null };
+    },
     storage: {
       from(bucket) {
         return {
@@ -513,7 +530,7 @@ test('PUT /api/customers/:id/contracts aceita campos novos com fallback de schem
   });
 });
 
-test('PUT /api/services/:id atualiza agenda preservando campos operacionais', async () => {
+test('PUT /api/services/:id exige endpoint de transicao para encerramento administrativo', async () => {
   await withServer(async (baseUrl, state) => {
     state.services[0].tipos = ['DS'];
     state.services[0].tecnicos_ids = ['tec-1'];
@@ -532,14 +549,10 @@ test('PUT /api/services/:id atualiza agenda preservando campos operacionais', as
       })
     });
 
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 409);
     const payload = await response.json();
-    assert.equal(payload.cliente_id, 1);
-    assert.equal(payload.cliente, 'Alpha Cliente');
-    assert.deepEqual(payload.tipos, ['DS', 'DR']);
-    assert.deepEqual(payload.tecnicos_ids, ['tec-2']);
-    assert.equal(payload.status, 'executado');
-    assert.equal(payload.exec_status, 'finalizado');
+    assert.equal(payload.code, 'service_transition_required');
+    assert.equal(state.services[0].status, 'agendado');
   });
 });
 
@@ -690,6 +703,85 @@ test('PUT /api/services/:id libera novo atendimento quando anterior esta finaliz
   });
 });
 
+test('PUT /api/services/:id ignora execucao ativa legada quando status administrativo e terminal', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [
+      { id:10, date:'2026-05-25', status:'executado', exec_status:'em_deslocamento', tecnicos_ids:['tec-1'] },
+      { id:11, date:'2026-05-25', status:'agendado', exec_status:'agendado', tecnicos_ids:['tec-1'] }
+    ];
+    const response = await fetch(`${baseUrl}/api/services/11`, {
+      method:'PUT', headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ exec_status:'em_deslocamento' })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(state.services[1].exec_status, 'em_deslocamento');
+  });
+});
+
+test('POST /api/services/:id/transition conclui manualmente com motivo e origem', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [{ id:10, date:'2026-07-23', status:'agendado', exec_status:'em_execucao' }];
+    const response = await fetch(`${baseUrl}/api/services/10/transition`, {
+      method:'POST', headers:await adminHeaders(baseUrl),
+      body:JSON.stringify({ action:'complete_manual', reason:'Tecnico sem acesso ao portal' })
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.service.status, 'executado');
+    assert.equal(payload.service.exec_status, 'finalizado');
+    assert.equal(payload.service.completion_source, 'admin_manual');
+    assert.equal(payload.service.fim_hora, undefined);
+  });
+});
+
+test('POST /api/services/:id/transition mantem problema pendente ate resolucao com ressalva', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [{ id:10, date:'2026-07-23', status:'agendado', exec_status:'problema', problema_descricao:'Cliente ausente' }];
+    const response = await fetch(`${baseUrl}/api/services/10/transition`, {
+      method:'POST', headers:await adminHeaders(baseUrl),
+      body:JSON.stringify({ action:'resolve_problem_complete', reason:'Visita realizada parcialmente' })
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.service.status, 'executado');
+    assert.equal(payload.service.exec_status, 'problema');
+    assert.equal(payload.service.completion_source, 'admin_problem_resolution');
+  });
+});
+
+test('POST /api/services/:id/transition cancela fluxo ativo e exige motivo', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [{ id:10, date:'2026-07-23', status:'agendado', exec_status:'em_deslocamento' }];
+    const headers = await adminHeaders(baseUrl);
+    const invalid = await fetch(`${baseUrl}/api/services/10/transition`, { method:'POST', headers, body:JSON.stringify({ action:'cancel', reason:'' }) });
+    assert.equal(invalid.status, 400);
+    const response = await fetch(`${baseUrl}/api/services/10/transition`, { method:'POST', headers, body:JSON.stringify({ action:'cancel', reason:'Cancelado pelo cliente' }) });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.service.status, 'cancelado');
+    assert.equal(payload.service.exec_status, 'cancelado');
+  });
+});
+
+test('POST /api/services/:id/transition reagenda criando uma unica visita vinculada', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.services = [{ id:10, date:'2026-07-23', data:'2026-07-23', horario:'10:00', cliente:'Alpha', status:'agendado', exec_status:'problema' }];
+    const headers = await adminHeaders(baseUrl);
+    const body = JSON.stringify({ action:'reschedule', reason:'Cliente solicitou nova data', new_date:'2026-07-30', new_time:'14:30' });
+    const first = await fetch(`${baseUrl}/api/services/10/transition`, { method:'POST', headers, body });
+    assert.equal(first.status, 200);
+    const created = await first.json();
+    assert.equal(created.service.status, 'reagendado');
+    assert.equal(created.new_service.status, 'agendado');
+    assert.equal(created.new_service.rescheduled_from_id, 10);
+    const second = await fetch(`${baseUrl}/api/services/10/transition`, { method:'POST', headers, body });
+    assert.equal(second.status, 200);
+    const repeated = await second.json();
+    assert.equal(repeated.idempotent, true);
+    assert.equal(state.services.filter(service => String(service.rescheduled_from_id) === '10').length, 1);
+  });
+});
+
 test('PUT /api/customers/:id/addresses ignora colunas opcionais ausentes em schema legado', async () => {
   await withServer(async (baseUrl, state) => {
     state.__missingColumns = {
@@ -739,8 +831,7 @@ test('PUT /api/services/:id ignora colunas opcionais ausentes em schema legado',
         data: '2026-05-20',
         cliente: 'Cliente Editado',
         endereco: 'Rua Editada',
-        status: 'executado',
-        exec_status: 'finalizado',
+        status: 'agendado',
         customer_address_id: 'addr-1',
         tecnicos_ids: ['tec-2']
       })
@@ -750,9 +841,8 @@ test('PUT /api/services/:id ignora colunas opcionais ausentes em schema legado',
     const payload = await response.json();
     assert.equal(payload.cliente, 'Cliente Editado');
     assert.equal(payload.endereco, 'Rua Editada');
-    assert.equal(payload.status, 'executado');
+    assert.equal(payload.status, 'agendado');
     assert.equal(payload.date, undefined);
-    assert.equal(payload.exec_status, undefined);
     assert.equal(payload.customer_address_id, undefined);
     assert.equal(payload.tecnicos_ids, undefined);
     assert.equal(payload.data, undefined);

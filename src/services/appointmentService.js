@@ -85,7 +85,9 @@ function createAppointmentService(deps) {
       cheguei: 2,
       em_execucao: 3,
       finalizado: 4,
-      problema: 4
+      problema: 4,
+      cancelado: 4,
+      reagendado: 4
     }[status] ?? null;
   }
 
@@ -99,7 +101,11 @@ function createAppointmentService(deps) {
   }
 
   function isTerminalExecStatus(status) {
-    return ['finalizado', 'problema'].includes(status);
+    return ['finalizado', 'problema', 'cancelado', 'reagendado'].includes(status);
+  }
+
+  function isAdministrativeTerminal(service = {}) {
+    return ['executado', 'cancelado', 'reagendado'].includes(normalizeText(service.status || service.st));
   }
 
   function isStaleExecStatusUpdate(current = {}, payload = {}) {
@@ -141,7 +147,7 @@ function createAppointmentService(deps) {
 
   async function findActiveServiceConflict(db, id, candidate = {}) {
     const status = activeExecStatus(candidate);
-    if (!isActiveServiceStatus(status)) return null;
+    if (!isActiveServiceStatus(status) || isAdministrativeTerminal(candidate)) return null;
 
     const date = serviceDate(candidate);
     if (!date) return null;
@@ -153,6 +159,7 @@ function createAppointmentService(deps) {
     return (data || []).find(service => {
       if (String(service.id) === String(id)) return false;
       if (serviceDate(service) !== date) return false;
+      if (isAdministrativeTerminal(service)) return false;
       if (!isActiveServiceStatus(activeExecStatus(service))) return false;
       return sameOperationalOwner(candidate, service);
     }) || null;
