@@ -8703,56 +8703,6 @@ function rodizioAssessment(vehicleName, date, time = '', options = {}) {
     }
   }
 
-  async function transitionServiceViaBackend(id, payload) {
-    return await requestBackendJson(`/api/services/${encodeURIComponent(id)}/transition`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-  }
-
-  window.transitionServiceOperational = async function(id, action) {
-    const service = services.find(item => sameId(item.id, id));
-    if (!service) return false;
-    if (!navigator.onLine) {
-      toast('Esta ação exige conexão para preservar o histórico.', 'warn');
-      return false;
-    }
-    const labels = {
-      complete_manual: 'conclusão manual',
-      resolve_problem_complete: 'conclusão com ressalva',
-      reschedule: 'reagendamento',
-      cancel: 'cancelamento'
-    };
-    const execKey = String(service.exec_status || 'agendado').toLowerCase();
-    if (action === 'complete_manual' && ['em_deslocamento','cheguei','em_execucao'].includes(execKey)) {
-      if (!confirmAction('A equipe ainda aparece em atendimento. Encerrar administrativamente mesmo assim?')) return false;
-    }
-    const reason = window.prompt(`Informe o motivo da ${labels[action] || 'alteração'}:`, '')?.trim() || '';
-    if (reason.length < 3) {
-      toast('Informe um motivo com pelo menos 3 caracteres.', 'err');
-      return false;
-    }
-    const payload = { action, reason };
-    if (action === 'reschedule') {
-      const newDate = window.prompt('Nova data (AAAA-MM-DD):', getServiceDateValue(service) || '')?.trim() || '';
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { toast('Informe uma nova data válida.', 'err'); return false; }
-      const newTime = window.prompt('Novo horário (HH:MM):', service.horario || service.hr || '')?.trim() || '';
-      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(newTime)) { toast('Informe um novo horário válido.', 'err'); return false; }
-      Object.assign(payload, { new_date:newDate, new_time:newTime });
-    }
-    try {
-      const result = await transitionServiceViaBackend(id, payload);
-      if (result?.service) mergeServiceFromBackend(result.service, service);
-      if (result?.new_service) mergeServiceFromBackend(result.new_service, result.new_service);
-      toast(action === 'reschedule' ? 'Serviço reagendado e nova visita criada.' : 'Estado do serviço atualizado.', 'ok');
-      refreshPages();
-      return true;
-    } catch (error) {
-      toast(error?.payload?.error || error.message || 'Falha ao alterar o serviço.', 'err');
-      return false;
-    }
-  };
-
   const labels = {
     restricao_ativa: `Restrição ativa até ${nextRange?.fim || 'o fim da faixa'}`,
     atencao: `Atenção: restrição às ${nextRange?.inicio || '07:00'}`,
@@ -8761,6 +8711,56 @@ function rodizioAssessment(vehicleName, date, time = '', options = {}) {
   };
   return { vehicle, info, situation, nextRange, label:labels[situation], ranges };
 }
+
+async function transitionServiceViaBackend(id, payload) {
+  return await requestBackendJson(`/api/services/${encodeURIComponent(id)}/transition`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+window.transitionServiceOperational = async function(id, action) {
+  const service = services.find(item => sameId(item.id, id));
+  if (!service) return false;
+  if (!navigator.onLine) {
+    toast('Esta ação exige conexão para preservar o histórico.', 'warn');
+    return false;
+  }
+  const labels = {
+    complete_manual: 'conclusão manual',
+    resolve_problem_complete: 'conclusão com ressalva',
+    reschedule: 'reagendamento',
+    cancel: 'cancelamento'
+  };
+  const execKey = String(service.exec_status || 'agendado').toLowerCase();
+  if (action === 'complete_manual' && ['em_deslocamento','cheguei','em_execucao'].includes(execKey)) {
+    if (!confirmAction('A equipe ainda aparece em atendimento. Encerrar administrativamente mesmo assim?')) return false;
+  }
+  const reason = window.prompt(`Informe o motivo da ${labels[action] || 'alteração'}:`, '')?.trim() || '';
+  if (reason.length < 3) {
+    toast('Informe um motivo com pelo menos 3 caracteres.', 'err');
+    return false;
+  }
+  const payload = { action, reason };
+  if (action === 'reschedule') {
+    const newDate = window.prompt('Nova data (AAAA-MM-DD):', getServiceDateValue(service) || '')?.trim() || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { toast('Informe uma nova data válida.', 'err'); return false; }
+    const newTime = window.prompt('Novo horário (HH:MM):', service.horario || service.hr || '')?.trim() || '';
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(newTime)) { toast('Informe um novo horário válido.', 'err'); return false; }
+    Object.assign(payload, { new_date:newDate, new_time:newTime });
+  }
+  try {
+    const result = await transitionServiceViaBackend(id, payload);
+    if (result?.service) mergeServiceFromBackend(result.service, service);
+    if (result?.new_service) mergeServiceFromBackend(result.new_service, result.new_service);
+    toast(action === 'reschedule' ? 'Serviço reagendado e nova visita criada.' : 'Estado do serviço atualizado.', 'ok');
+    refreshPages();
+    return true;
+  } catch (error) {
+    toast(error?.payload?.error || error.message || 'Falha ao alterar o serviço.', 'err');
+    return false;
+  }
+};
 
 function rodizioChipHtml(assessment) {
   if (!assessment) return '';
