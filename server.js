@@ -329,6 +329,9 @@ const CUSTOMER_OPTIONAL_WRITE_COLUMNS = new Set([
   'referencia',
   'latitude',
   'longitude',
+  'location_source',
+  'location_precision',
+  'location_verified_at',
   'tipo_local',
   'restricoes_operacionais',
   'nivel_urgencia_padrao',
@@ -486,6 +489,9 @@ const CUSTOMER_ADDRESS_OPTIONAL_WRITE_COLUMNS = new Set([
   'referencia',
   'latitude',
   'longitude',
+  'location_source',
+  'location_precision',
+  'location_verified_at',
   'zona_regiao',
   'tipo_imovel',
   'bloco_torre_andar',
@@ -1338,6 +1344,28 @@ function plateLastDigit(plate) {
   if (normalized.length !== 7) return '';
   const digits = normalized.replace(/\D/g, '');
   return digits ? digits[digits.length - 1] : '';
+}
+
+function cleanLocationSource(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['address', 'cep', 'manual_map', 'technician_arrival'].includes(normalized) ? normalized : null;
+}
+
+function cleanLocationPrecision(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['exact', 'approximate', 'verified'].includes(normalized) ? normalized : null;
+}
+
+function locationMetadata(input = {}, defaults = {}) {
+  const source = cleanLocationSource(input.location_source || input.source) || defaults.source || null;
+  const precision = cleanLocationPrecision(input.location_precision || input.precision) || defaults.precision || null;
+  return {
+    location_source: source,
+    location_precision: precision,
+    location_verified_at: precision === 'verified'
+      ? (cleanNullableText(input.location_verified_at, 40) || new Date().toISOString())
+      : null
+  };
 }
 
 const RODIZIO_TIME_ZONE = 'America/Sao_Paulo';
@@ -2632,11 +2660,19 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
       customer_longitude: customerCoords?.longitude ?? addressCoords?.longitude ?? null,
       address_latitude: addressCoords?.latitude ?? null,
       address_longitude: addressCoords?.longitude ?? null,
-      location_source: addressCoords ? 'customer_address'
-        : customerCoords ? 'customer'
-          : serviceCoords ? 'service'
+      location_source: addressCoords ? (address?.location_source || 'address')
+        : customerCoords ? (customer?.location_source || 'address')
+          : serviceCoords ? (service.location_source || 'address')
             : arrivalCoords ? 'technician_arrival'
               : null,
+      location_precision: addressCoords ? (address?.location_precision || 'exact')
+        : customerCoords ? (customer?.location_precision || 'exact')
+          : serviceCoords ? (service.location_precision || 'exact')
+            : arrivalCoords ? 'verified'
+              : null,
+      location_verified_at: addressCoords ? (address?.location_verified_at || null)
+        : customerCoords ? (customer?.location_verified_at || null)
+          : null,
       customer_cep: customer?.cep || address?.cep || null,
       address_cep: address?.cep || null,
       address_numero: address?.numero || customer?.numero || null,
@@ -2673,6 +2709,9 @@ function compactCustomerAddress(address = {}) {
     google_maps_url: address.google_maps_url || null,
     latitude: address.latitude || null,
     longitude: address.longitude || null,
+    location_source: address.location_source || null,
+    location_precision: address.location_precision || null,
+    location_verified_at: address.location_verified_at || null,
     is_primary: address.is_primary === true,
     ativo: address.ativo !== false,
     origem: address.origem || null
@@ -2712,6 +2751,9 @@ function customerAddressPayload(customerId, input = {}, options = {}) {
     google_maps_url: cleanNullableText(input.google_maps_url, 500),
     latitude: cleanNumber(input.latitude),
     longitude: cleanNumber(input.longitude),
+    location_source: cleanLocationSource(input.location_source),
+    location_precision: cleanLocationPrecision(input.location_precision),
+    location_verified_at: cleanNullableText(input.location_verified_at, 40),
     is_primary: input.is_primary === true || String(input.is_primary) === 'true' || options.is_primary === true,
     ativo: input.ativo === false || String(input.ativo) === 'false' ? false : true,
     origem: cleanNullableText(input.origem || options.origem, 80) || 'sistema'
@@ -4623,7 +4665,7 @@ app.post('/api/services/:id/promote-arrival-location', strictLimiter, async (req
       try {
         const { data, error } = await runCustomerAddressWriteWithSchemaFallback(
           payload => db.from('customer_addresses').update(payload).eq('customer_id', Number(customerId)).eq('id', service.customer_address_id).select(),
-          { latitude: location.latitude, longitude: location.longitude, updated_at: new Date().toISOString() },
+          { latitude: location.latitude, longitude: location.longitude, ...locationMetadata({}, { source: 'technician_arrival', precision: 'verified' }), updated_at: new Date().toISOString() },
           'POST /api/services/:id/promote-arrival-location address'
         );
         if (error) throw error;
@@ -4637,7 +4679,7 @@ app.post('/api/services/:id/promote-arrival-location', strictLimiter, async (req
 
     const { data, error } = await runCustomerWriteWithSchemaFallback(
       payload => db.from('customers').update(payload).eq('id', Number(customerId)).select(),
-      { latitude: location.latitude, longitude: location.longitude, updated_at: new Date().toISOString() },
+      { latitude: location.latitude, longitude: location.longitude, ...locationMetadata({}, { source: 'technician_arrival', precision: 'verified' }), updated_at: new Date().toISOString() },
       'POST /api/services/:id/promote-arrival-location customer'
     );
     if (error) throw error;
@@ -6093,7 +6135,7 @@ function geocodeCandidateMatches(candidate = {}, context = {}) {
   const details = candidate.address || {};
   const expectedNumber = geocodeNumber(context.numero || context.address);
   const actualNumber = geocodeNumber(details.house_number || candidate.display_name);
-  if (expectedNumber && actualNumber !== expectedNumber) return false;
+  if (context.requireNumber !== false && expectedNumber && actualNumber !== expectedNumber) return false;
   const expectedCep = normalizeCep(context.cep);
   const actualCep = normalizeCep(details.postcode);
   if (expectedCep && actualCep && expectedCep !== actualCep) return false;
@@ -6104,7 +6146,7 @@ function geocodeCandidateMatches(candidate = {}, context = {}) {
 }
 
 function enqueueNominatimSearch(address, context = {}) {
-  const key = geocodeComparable(`${address}|${context.cep || ''}|${context.numero || ''}|${context.cidade || ''}`);
+  const key = geocodeComparable(`${address}|${context.cep || ''}|${context.numero || ''}|${context.cidade || ''}|${context.requireNumber === false ? 'approx' : 'exact'}`);
   if (geocodeCache.has(key)) return Promise.resolve(geocodeCache.get(key));
   const task = async () => {
     const waitMs = Math.max(0, GEOCODE_MIN_INTERVAL_MS - (Date.now() - geocodeLastRequestAt));
@@ -6130,10 +6172,81 @@ function enqueueNominatimSearch(address, context = {}) {
   return result;
 }
 
+async function resolveAddressLocation(addressRecord = {}, fallbackAddress = '') {
+  const address = (addressRecord.rua ? buildCustomerAddress(addressRecord) : null) || cleanText(fallbackAddress, 500) || cleanText(addressRecord.endereco_completo || addressRecord.endereco, 500);
+  if (!address) return { location: null, code: 'address_missing' };
+  const numero = geocodeNumber(addressRecord.numero || address);
+  const exact = await enqueueNominatimSearch(address, {
+    cep: addressRecord.cep,
+    numero,
+    cidade: addressRecord.cidade,
+    requireNumber: true
+  });
+  if (exact) return { location: exact, source: 'address', precision: 'exact', address };
+
+  const numberToken = String(numero || '').replace(/[^0-9A-Za-z]/g, '');
+  const streetAddress = addressRecord.rua
+    ? (buildCustomerAddress({ ...addressRecord, numero: '', complemento: '', referencia: '' }) || address)
+    : (numberToken ? address.replace(new RegExp(`\\b${numberToken}\\b`, 'i'), '') : address).replace(/,\s*,/g, ',').trim();
+  const approximate = await enqueueNominatimSearch(streetAddress, {
+    cep: addressRecord.cep,
+    numero: '',
+    cidade: addressRecord.cidade,
+    requireNumber: false
+  });
+  if (approximate) return { location: approximate, source: 'address', precision: 'approximate', address };
+
+  if (normalizeCep(addressRecord.cep).length === 8) {
+    const cepData = await lookupCep(addressRecord.cep).catch(() => null);
+    const cepLocation = validCoordinatePair(cepData?.latitude, cepData?.longitude);
+    if (cepLocation) return { location: cepLocation, source: 'cep', precision: 'approximate', address };
+  }
+  return { location: null, code: 'location_not_found', address };
+}
+
 app.get('/api/geocode', (req, res) => res.status(405).json({
   error: 'Use a geocodificacao vinculada ao servico',
   code: 'service_geocode_required'
 }));
+
+async function geocodeCustomerTarget(req, res, targetKind) {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    if (!customerId) return res.status(400).json({ error: 'Cliente invalido', code: 'customer_invalid' });
+    const customers = await safeSelectByIds(db, 'customers', 'id', [customerId]);
+    const customer = customers[0] || null;
+    if (!customer) return res.status(404).json({ error: 'Cliente nao encontrado', code: 'customer_not_found' });
+    let target = customer;
+    if (targetKind === 'customer_address') {
+      const addresses = await safeSelectByIds(db, 'customer_addresses', 'customer_id', [customerId]);
+      target = addresses.find(item => String(item.id) === String(req.params.addressId)) || null;
+      if (!target) return res.status(404).json({ error: 'Unidade nao encontrada', code: 'customer_address_not_found' });
+    }
+    const existing = validCoordinatePair(target.latitude, target.longitude);
+    if (existing && target.location_precision === 'verified') {
+      return res.json({ location: existing, source: target.location_source || 'manual_map', precision: 'verified', preserved: true, target: targetKind });
+    }
+    const result = await resolveAddressLocation(target, target.endereco_completo || target.endereco);
+    if (!result.location) return res.status(result.code === 'address_missing' ? 422 : 404).json({ error: result.code === 'address_missing' ? 'Endereco ausente' : 'Localizacao nao encontrada', code: result.code, address: result.address });
+    const update = { ...result.location, ...locationMetadata({}, { source: result.source, precision: result.precision }), updated_at: new Date().toISOString() };
+    const write = targetKind === 'customer_address'
+      ? await runCustomerAddressWriteWithSchemaFallback(
+        payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', target.id).select(), update, 'geocode customer address')
+      : await runCustomerWriteWithSchemaFallback(
+        payload => db.from('customers').update(payload).eq('id', customerId).select(), update, 'geocode customer');
+    if (write.error) throw write.error;
+    res.json({ location: result.location, source: result.source, precision: result.precision, address: result.address, target: targetKind });
+  } catch (error) {
+    console.error('[customer geocode] Error:', error.message);
+    res.status(503).json({ error: 'Falha temporaria ao localizar endereco', code: 'geocode_unavailable' });
+  }
+}
+
+app.post('/api/customers/:id/geocode', strictLimiter, (req, res) => geocodeCustomerTarget(req, res, 'customer'));
+app.post('/api/customers/:id/addresses/:addressId/geocode', strictLimiter, (req, res) => geocodeCustomerTarget(req, res, 'customer_address'));
 
 app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
   try {
@@ -6156,19 +6269,27 @@ app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
       || validCoordinatePair(customer?.latitude, customer?.longitude);
     const address = resolvedServiceAddress(service, customer, targetAddress);
     if (!address) return res.status(422).json({ error: 'Cliente sem endereco utilizavel', code: 'address_missing' });
-    if (existing) return res.json({ location: existing, cached: true, target: targetAddress ? 'customer_address' : 'customer', address });
+    if (existing) return res.json({
+      location: existing,
+      cached: true,
+      target: targetAddress ? 'customer_address' : 'customer',
+      address,
+      source: targetAddress?.location_source || customer?.location_source || 'address',
+      precision: targetAddress?.location_precision || customer?.location_precision || 'exact'
+    });
 
     const usesServiceSnapshot = !!(service.address_snapshot || service.endereco || service.endereco_completo);
     const serviceAddressDiffers = usesServiceSnapshot && targetAddress
       && !areEquivalentCustomerAddresses({ endereco: address }, targetAddress);
-    const location = await enqueueNominatimSearch(address, {
-      cep: usesServiceSnapshot ? null : (targetAddress?.cep || customer?.cep),
-      numero: geocodeNumber(address),
-      cidade: targetAddress?.cidade || customer?.cidade
-    });
-    if (!location) return res.status(404).json({ error: 'Localizacao nao encontrada com seguranca', code: 'location_not_found', address });
+    const resolutionRecord = usesServiceSnapshot
+      ? { endereco_completo: address, numero: geocodeNumber(address), cidade: targetAddress?.cidade || customer?.cidade }
+      : (targetAddress || customer || { endereco_completo: address });
+    const resolution = await resolveAddressLocation(resolutionRecord, address);
+    const location = resolution.location;
+    if (!location) return res.status(404).json({ error: 'Localizacao nao encontrada com seguranca', code: resolution.code || 'location_not_found', address });
 
     const timestamp = new Date().toISOString();
+    const locationWrite = { ...location, ...locationMetadata({}, { source: resolution.source, precision: resolution.precision }) };
     const write = serviceAddressDiffers
       ? await runServiceWriteWithSchemaFallback(
         payload => db.from('services').update(payload).eq('id', service.id).select(),
@@ -6176,17 +6297,77 @@ app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
       : targetAddress?.id
       ? await runCustomerAddressWriteWithSchemaFallback(
         payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', targetAddress.id).select(),
-        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode address')
+        { ...locationWrite, updated_at: timestamp }, 'POST /api/services/:id/geocode address')
       : await runCustomerWriteWithSchemaFallback(
         payload => db.from('customers').update(payload).eq('id', customerId).select(),
-        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode customer');
+        { ...locationWrite, updated_at: timestamp }, 'POST /api/services/:id/geocode customer');
     if (write.error) throw write.error;
-    res.json({ location, cached: false, target: serviceAddressDiffers ? 'service' : (targetAddress ? 'customer_address' : 'customer'), address });
+    res.json({ location, cached: false, target: serviceAddressDiffers ? 'service' : (targetAddress ? 'customer_address' : 'customer'), address, source: resolution.source, precision: resolution.precision });
   } catch (error) {
     console.error('[POST /api/services/:id/geocode] Error:', error.message);
     res.status(503).json({ error: 'Falha temporaria ao localizar endereco', code: 'geocode_unavailable' });
   }
 });
+
+app.get('/api/location-review', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data: customers, error } = await db.from('customers').select('*').eq('ativo', true).order('nome', { ascending: true });
+    if (error) throw error;
+    let addresses = [];
+    try {
+      const result = await db.from('customer_addresses').select('*').eq('ativo', true).order('is_primary', { ascending: false });
+      if (result.error) throw result.error;
+      addresses = result.data || [];
+    } catch (addressError) {
+      if (!isMissingRelationError(addressError)) throw addressError;
+    }
+    const customerIds = (customers || []).map(item => item.id).filter(Boolean);
+    const servicesForCustomers = await safeSelectByIds(db, 'services', 'cliente_id', customerIds).catch(() => []);
+    const serviceCount = new Map();
+    servicesForCustomers.forEach(service => {
+      const id = String(serviceCustomerId(service) || '');
+      if (id) serviceCount.set(id, (serviceCount.get(id) || 0) + 1);
+    });
+    const addressedCustomers = new Set(addresses.map(item => String(item.customer_id)));
+    const rows = [];
+    addresses.forEach(address => {
+      const customer = (customers || []).find(item => String(item.id) === String(address.customer_id));
+      rows.push(locationReviewRow(customer, address, 'customer_address', serviceCount));
+    });
+    (customers || []).filter(customer => !addressedCustomers.has(String(customer.id))).forEach(customer => {
+      rows.push(locationReviewRow(customer, customer, 'customer', serviceCount));
+    });
+    rows.sort((a, b) => b.priority_score - a.priority_score || a.customer_name.localeCompare(b.customer_name));
+    res.json(rows);
+  } catch (error) {
+    console.error('[GET /api/location-review] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao carregar fila de localizacoes' });
+  }
+});
+
+function locationReviewRow(customer = {}, target = {}, targetKind = 'customer', serviceCount = new Map()) {
+  const coords = validCoordinatePair(target?.latitude, target?.longitude);
+  const cep = normalizeCep(target?.cep || customer?.cep);
+  const precision = target?.location_precision || (coords ? 'exact' : null);
+  const status = !cep ? 'missing_cep' : !coords ? 'missing_location' : precision === 'approximate' ? 'approximate' : precision === 'verified' ? 'verified' : 'exact';
+  const linkedServices = serviceCount.get(String(customer?.id || target?.customer_id || '')) || 0;
+  return {
+    customer_id: customer?.id || target?.customer_id || null,
+    customer_name: customer?.nome || target?.label || 'Cliente sem nome',
+    address_id: targetKind === 'customer_address' ? target?.id : null,
+    address_label: target?.label || (targetKind === 'customer_address' ? 'Unidade' : 'Principal'),
+    address: buildCustomerAddress(target) || target?.endereco_completo || target?.endereco || '',
+    cep: cep ? formatCep(cep) : '',
+    latitude: coords?.latitude ?? null,
+    longitude: coords?.longitude ?? null,
+    location_source: target?.location_source || null,
+    location_precision: precision,
+    status,
+    linked_services: linkedServices,
+    priority_score: linkedServices * 10 + (customer?.cliente_recorrente ? 5 : 0) + (status === 'missing_location' ? 3 : status === 'approximate' ? 2 : 0)
+  };
+}
 
 async function updateServicesCustomerLink(db, duplicateId, primaryId, addressId = null) {
   const payload = addressId
@@ -7009,11 +7190,13 @@ app.patch('/api/customers/:id/location', strictLimiter, async (req, res) => {
     const location = parseLocationBody(req.body || {});
     if (!location.ok) return res.status(400).json(location);
 
+    const metadata = locationMetadata(req.body || {}, { source: 'manual_map', precision: 'verified' });
     const { data, error } = await runCustomerWriteWithSchemaFallback(
       payload => db.from('customers').update(payload).eq('id', customerId).select(),
       {
         latitude: location.latitude,
         longitude: location.longitude,
+        ...metadata,
         updated_at: new Date().toISOString()
       },
       'PATCH /api/customers/:id/location'
@@ -7036,11 +7219,13 @@ app.patch('/api/customers/:id/addresses/:addressId/location', strictLimiter, asy
     const location = parseLocationBody(req.body || {});
     if (!location.ok) return res.status(400).json(location);
 
+    const metadata = locationMetadata(req.body || {}, { source: 'manual_map', precision: 'verified' });
     const { data, error } = await runCustomerAddressWriteWithSchemaFallback(
       payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', addressId).select(),
       {
         latitude: location.latitude,
         longitude: location.longitude,
+        ...metadata,
         updated_at: new Date().toISOString()
       },
       'PATCH /api/customers/:id/addresses/:addressId/location'

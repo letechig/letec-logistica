@@ -4514,6 +4514,7 @@ async function carregarVeiculos(){
           <button class="btn btn-primary btn-sm" onclick="openQuickClientModal()">+ Cliente Rápido</button>
           <button class="btn btn-ghost btn-sm" onclick="openClientModal()">Cadastro Completo</button>
           <button class="btn btn-ghost btn-sm" onclick="abrirAuditoriaVinculosAgenda()">Auditar vínculos da agenda</button>
+          <button class="btn btn-orange btn-sm" onclick="openLocationReviewModal()">📍 Localizações para revisar</button>
           <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Saneamento de Clientes</button>
         </div>
       </div>
@@ -4825,6 +4826,21 @@ async function carregarVeiculos(){
       <button class="btn btn-ghost btn-sm" onclick="fecharModalTipoServico()">Cancelar</button>
       <button class="btn btn-danger btn-sm" id="cfg-tipo-del" style="display:none" onclick="excluirTipoServico(_tipoServicoEditando?.id, _tipoServicoEditando?.nome)">🗑 Excluir</button>
       <button class="btn btn-primary btn-sm" onclick="salvarTipoServico()" style="margin-left:auto">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- SELETOR ASSISTIDO DE LOCALIZACAO -->
+<div class="modal-bg" id="location-picker-modal" onclick="if(event.target===event.currentTarget)opMapCloseLocationPicker()">
+  <div class="modal location-picker-modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Revisar localização</div>
+    <div id="location-picker-address" style="font-size:12px;color:var(--text2);margin:8px 0 10px"></div>
+    <div id="location-picker-status" class="location-picker-status">Arraste o pino até a entrada correta e confirme.</div>
+    <div id="location-picker-map" class="location-picker-map" style="margin-top:10px"></div>
+    <div class="flex gap2" style="margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="opMapCloseLocationPicker()">Cancelar</button>
+      <button class="btn btn-ghost btn-sm" id="location-picker-arrival" onclick="opMapUseArrivalInPicker()" style="display:none">Usar GPS da chegada</button>
+      <button class="btn btn-primary btn-sm" onclick="opMapConfirmLocationPicker()" style="margin-left:auto">Confirmar este ponto</button>
     </div>
   </div>
 </div>
@@ -5466,6 +5482,22 @@ async function carregarVeiculos(){
   </div>
 </div>
 
+<div class="modal-bg" id="location-review-modal" onclick="if(event.target===event.currentTarget)closeLocationReviewModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:980px">
+    <div class="modal-title">📍 Localizações para revisar</div>
+    <div style="font-size:12px;color:var(--text3);margin-top:4px">Clientes recorrentes e com serviços vinculados aparecem primeiro. O lote executa uma busca por vez.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+      <select id="location-review-filter" class="fsel" onchange="renderLocationReviewQueue()">
+        <option value="pending">Pendentes</option><option value="missing_cep">Sem CEP</option><option value="missing_location">Sem coordenada</option><option value="approximate">Aproximadas</option><option value="exact">Exatas</option><option value="verified">Confirmadas</option><option value="all">Todas</option>
+      </select>
+      <button class="btn btn-primary btn-sm" id="location-review-batch" onclick="runLocationReviewBatch()">Localizar pendentes em lote</button>
+      <span id="location-review-progress" style="font-size:12px;color:var(--text2);align-self:center"></span>
+    </div>
+    <div id="location-review-content" style="max-height:62vh;overflow:auto"></div>
+    <div class="flex gap2" style="padding-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeLocationReviewModal()">Fechar</button></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="duplicates-modal" onclick="if(event.target===event.currentTarget)closeDuplicatesModal()">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:1040px">
     <div class="modal-title" id="duplicates-modal-title">🔍 Saneamento de Clientes</div>
@@ -5974,6 +6006,11 @@ async function carregarVeiculos(){
 .op-map-pin.blue { background:var(--blue); }
 .op-map-pin.green { background:var(--green); }
 .op-map-pin.gray { background:#94a3b8; }
+.op-map-location-review { color:var(--orange); font-size:10px; font-weight:800; }
+.location-picker-modal { width:min(760px,94vw); max-height:92vh; }
+.location-picker-map { height:min(55vh,440px); min-height:300px; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.location-picker-status { padding:10px 12px; border-radius:10px; background:var(--orange-bg); color:#9a3412; font-size:12px; line-height:1.4; }
+@media(max-width:480px) { .location-picker-map { min-height:340px; height:52vh; } }
 .op-map-base-pin {
   width:22px;
   height:22px;
@@ -11326,7 +11363,9 @@ function opMapBuildItems(sourceServices = [], options = {}) {
         statusLabel: opMapStatusMeta(statusKey).label,
         tipo: F.tipo || F.tipoLabel || '',
         date: getServiceDateValue(service),
-        location: opMapServiceLocation(service)
+        location: opMapServiceLocation(service),
+        locationPrecision: service.location_precision || null,
+        locationSource: service.location_source || null
       };
     })
     .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.horario || '99:99').localeCompare(b.horario || '99:99'));
@@ -11364,10 +11403,14 @@ async function opMapResolveLocations(items = [], onUpdate = null) {
       const coords = opMapValidCoordinatePair(payload.location?.latitude, payload.location?.longitude);
       if (!coords) throw new Error('location_not_found');
       item.location = { ...coords, source: payload.target || 'geocode' };
+      item.locationPrecision = payload.precision || 'exact';
+      item.locationSource = payload.source || 'address';
       item.service.latitude = coords.lat;
       item.service.longitude = coords.lng;
       item.service.customer_latitude = coords.lat;
       item.service.customer_longitude = coords.lng;
+      item.service.location_precision = item.locationPrecision;
+      item.service.location_source = item.locationSource;
       operationalMapState.geocodeCache[key] = coords;
       operationalMapState.geocodeStatus[statusKey] = 'found';
       item.locationStatus = 'found';
@@ -11420,6 +11463,7 @@ function opMapVehicleIcon(item = {}) {
 
 function opMapPinClass(item = {}) {
   const meta = opMapStatusMeta(item.statusKey);
+  if (item.location && item.locationPrecision === 'approximate') return 'orange';
   if (item.statusKey === 'atrasado' || item.statusKey === 'critico' || item.statusKey === 'executado') return meta.color;
   if (!item.hasEquipe || !item.hasVeiculo || !item.location || opMapAddressIncomplete(item)) return 'gray';
   return meta.color || 'blue';
@@ -11488,6 +11532,7 @@ function opMapPopupHtml(item, options = {}) {
     <div class="op-map-popup-line"><strong>Equipe:</strong> ${sanitize(item.equipe || 'Sem equipe')}</div>
     <div class="op-map-popup-line"><strong>Veículo:</strong> ${sanitize(item.veiculo || '—')}</div>
     <div class="op-map-popup-line"><strong>Endereço:</strong> ${sanitize(shortAddress)}</div>
+    ${item.locationPrecision === 'approximate' ? '<div class="op-map-location-review">Localização aproximada pelo CEP/endereço — revisar antes da rota</div>' : ''}
     <div class="op-map-popup-line"><span class="chip ${meta.chip}">${meta.label}</span></div>
     <div class="op-map-popup-actions">
       <button class="primary" onclick="openEditSvc(${id})">Abrir serviço</button>
@@ -11572,7 +11617,12 @@ async function opMapSaveLocationForService(serviceId, lat, lng, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ latitude: lat, longitude: lng, source: options.source || 'manual_map' })
+    body: JSON.stringify({
+      latitude: lat,
+      longitude: lng,
+      source: options.source || 'manual_map',
+      precision: options.precision || 'verified'
+    })
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
@@ -11581,41 +11631,76 @@ async function opMapSaveLocationForService(serviceId, lat, lng, options = {}) {
   service.longitude = lng;
   service.customer_latitude = lat;
   service.customer_longitude = lng;
-  service.location_source = addressId ? 'customer_address' : 'customer';
+  service.location_source = options.source || 'manual_map';
+  service.location_precision = options.precision || 'verified';
   const customer = (clientesData || []).find(c => String(c.id) === String(customerId));
   if (customer) {
     customer.latitude = lat;
     customer.longitude = lng;
+    customer.location_source = options.source || 'manual_map';
+    customer.location_precision = options.precision || 'verified';
   }
   saveSvcs();
   return payload;
 }
 
 function opMapStartLocationPicker(serviceId, canvasId = 'op-map-hoje-canvas') {
-  const map = operationalMapState.maps[canvasId];
   const service = opMapFindService(serviceId);
-  if (!map) { toast('Mapa ainda nao carregado', 'warn'); return; }
   if (!service) { toast('Servico nao encontrado', 'err'); return; }
   if (!opMapLinkedCustomer(service)) { toast('Vincule o cliente antes de salvar coordenada', 'warn'); return; }
-  operationalMapState.locationPicker = { serviceId, canvasId };
-  toast('Clique no ponto correto dentro do mapa para salvar a coordenada', 'ok');
-  map.getContainer().style.cursor = 'crosshair';
-  map.once('click', async ev => {
-    map.getContainer().style.cursor = '';
-    const lat = Number(ev.latlng.lat.toFixed(7));
-    const lng = Number(ev.latlng.lng.toFixed(7));
-    if (!confirmAction(`Salvar coordenada ${lat}, ${lng} para este atendimento?`)) return;
-    try {
-      await opMapSaveLocationForService(serviceId, lat, lng, { source: 'manual_map' });
-      toast('Coordenada salva no cadastro', 'ok');
-      if (currentPage === 'hoje') renderHoje();
-      if (currentPage === 'roteiro') renderMapaRoteiros();
-    } catch(e) {
-      toast(`Erro ao salvar coordenada: ${e.message || e}`, 'err');
-    } finally {
-      operationalMapState.locationPicker = null;
-    }
-  });
+  const current = opMapServiceLocation(service) || OP_MAP_BASE_COORDS;
+  const modal = document.getElementById('location-picker-modal');
+  document.getElementById('location-picker-address').textContent = opMapServiceAddress(service) || 'Endereço não informado';
+  document.getElementById('location-picker-status').textContent = current === OP_MAP_BASE_COORDS
+    ? 'Não foi possível aproximar pelo endereço. Posicione o pino no local correto.'
+    : 'O mapa foi centralizado na melhor localização disponível. Arraste o pino até a entrada correta.';
+  const arrivalBtn = document.getElementById('location-picker-arrival');
+  arrivalBtn.style.display = opMapValidCoordinatePair(service.chegada_lat, service.chegada_lng) ? '' : 'none';
+  modal.classList.add('open');
+  setTimeout(() => {
+    if (operationalMapState.locationPicker?.map) operationalMapState.locationPicker.map.remove();
+    const pickerMap = L.map('location-picker-map', { zoomControl:true }).setView([current.lat, current.lng], current === OP_MAP_BASE_COORDS ? 11 : 17);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap' }).addTo(pickerMap);
+    const marker = L.marker([current.lat, current.lng], { draggable:true }).addTo(pickerMap);
+    pickerMap.on('click', ev => marker.setLatLng(ev.latlng));
+    operationalMapState.locationPicker = { serviceId, canvasId, map:pickerMap, marker };
+    pickerMap.invalidateSize();
+  }, 80);
+}
+
+function opMapCloseLocationPicker() {
+  const picker = operationalMapState.locationPicker;
+  if (picker?.map) picker.map.remove();
+  operationalMapState.locationPicker = null;
+  document.getElementById('location-picker-modal')?.classList.remove('open');
+}
+
+function opMapUseArrivalInPicker() {
+  const picker = operationalMapState.locationPicker;
+  const service = picker ? opMapFindService(picker.serviceId) : null;
+  const coords = opMapValidCoordinatePair(service?.chegada_lat, service?.chegada_lng);
+  if (!coords || !picker?.marker) return toast('GPS de chegada indisponível', 'warn');
+  picker.marker.setLatLng([coords.lat, coords.lng]);
+  picker.map.setView([coords.lat, coords.lng], 18);
+  picker.source = 'technician_arrival';
+  document.getElementById('location-picker-status').textContent = 'Pino posicionado pelo GPS de chegada do técnico. Confirme para reutilizar nos próximos serviços.';
+}
+
+async function opMapConfirmLocationPicker() {
+  const picker = operationalMapState.locationPicker;
+  if (!picker?.marker) return;
+  const point = picker.marker.getLatLng();
+  try {
+    await opMapSaveLocationForService(picker.serviceId, Number(point.lat.toFixed(7)), Number(point.lng.toFixed(7)), {
+      source: picker.source || 'manual_map', precision:'verified'
+    });
+    opMapCloseLocationPicker();
+    toast('Localização confirmada e salva no cadastro', 'ok');
+    if (currentPage === 'hoje') renderHoje();
+    if (currentPage === 'roteiro') renderMapaRoteiros();
+  } catch(e) {
+    toast(`Erro ao salvar coordenada: ${e.message || e}`, 'err');
+  }
 }
 
 async function opMapPromoteArrivalLocation(serviceId) {
@@ -11631,7 +11716,8 @@ async function opMapPromoteArrivalLocation(serviceId) {
       service.longitude = lng;
       service.customer_latitude = lat;
       service.customer_longitude = lng;
-      service.location_source = payload.target || 'technician_arrival';
+      service.location_source = 'technician_arrival';
+      service.location_precision = 'verified';
       saveSvcs();
     }
     toast('GPS de chegada salvo no cadastro', 'ok');
@@ -11749,6 +11835,9 @@ function opMapQuickRouteItemHtml(item, index, canvasId = '') {
     : locationStatus === 'loading' ? 'Localizando endereço...'
       : locationStatus === 'not_found' ? 'Localização não encontrada'
         : '';
+  const approximateLabel = item.location && item.locationPrecision === 'approximate'
+    ? 'Localização aproximada — revisar'
+    : '';
   return `<div class="op-map-item op-map-quick-item ${colorClass}" onclick="opMapFocus('${canvasId}', ${id})">
     <div class="op-map-quick-row">
       <div class="op-map-item-order">${index}</div>
@@ -11763,12 +11852,13 @@ function opMapQuickRouteItemHtml(item, index, canvasId = '') {
           ${issues.map(issue => `<span class="op-map-mini-warn">${sanitize(issue)}</span>`).join('')}
         </div>
         ${locationLabel ? `<div class="op-map-location-state ${locationStatus === 'loading' ? 'loading' : 'error'}">${sanitize(locationLabel)}</div>` : ''}
+        ${approximateLabel ? `<div class="op-map-location-review">${sanitize(approximateLabel)}</div>` : ''}
       </div>
       <span class="chip ${meta.chip}">${opMapQuickStatusLabel(item.statusKey)}</span>
     </div>
     <div class="op-map-quick-actions" onclick="event.stopPropagation()">
       <button class="op-map-mini-btn primary" onclick="openEditSvc(${id})">Abrir</button>
-      ${!item.location ? `<button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${id}, '${canvasId}')">Definir ponto</button>` : ''}
+      ${(!item.location || item.locationPrecision === 'approximate') ? `<button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${id}, '${canvasId}')">Revisar localização</button>` : ''}
       ${!item.location && item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${id})">Usar chegada</button>` : ''}
       <a class="op-map-mini-btn" href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Rota</a>
     </div>
@@ -11799,9 +11889,9 @@ function opMapListHtml(items = [], canvasId = '', options = {}) {
         <span>${sanitize(item.date || '')} · ${sanitize(item.horario || '—')} · ${sanitize(item.equipe || 'Sem equipe')}</span>
         <span>${sanitize(item.veiculo || 'Sem veículo')} · ${sanitize(item.tipo || 'Serviço')}</span>
         <span>${sanitize(item.endereco || 'Sem endereço')}</span>
-        ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : ''}
+        ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : item.locationPrecision === 'approximate' ? '<span style="color:var(--orange);font-weight:700">Localização aproximada — revisar</span>' : ''}
       </div>
-      ${!item.location ? `<div class="op-map-quick-actions" onclick="event.stopPropagation()"><button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${jsArg(item.id)}, '${canvasId}')">Definir ponto</button>${item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${jsArg(item.id)})">Usar chegada</button>` : ''}</div>` : ''}
+      ${(!item.location || item.locationPrecision === 'approximate') ? `<div class="op-map-quick-actions" onclick="event.stopPropagation()"><button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${jsArg(item.id)}, '${canvasId}')">Revisar localização</button>${item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${jsArg(item.id)})">Usar chegada</button>` : ''}</div>` : ''}
     </div>`;
   }).join('')}</div>`;
 }
@@ -14902,6 +14992,9 @@ function clientAddressDraftFromForm() {
     zona_regiao: document.getElementById('cli-form-zona')?.value.trim() || '',
     latitude: Number.isFinite(Number(geo.latitude)) ? Number(geo.latitude) : null,
     longitude: Number.isFinite(Number(geo.longitude)) ? Number(geo.longitude) : null,
+    location_source: geo.source || null,
+    location_precision: geo.precision || null,
+    location_verified_at: geo.location_verified_at || null,
     is_primary: true,
     ativo: true,
     origem: 'cadastro'
@@ -14977,6 +15070,9 @@ async function loadClientAddresses(customerId) {
       google_maps_url: item.google_maps_url || '',
       latitude: item.latitude ?? null,
       longitude: item.longitude ?? null,
+      location_source: item.location_source || null,
+      location_precision: item.location_precision || null,
+      location_verified_at: item.location_verified_at || null,
       is_primary: item.is_primary === true,
       ativo: item.ativo !== false,
       origem: item.origem || 'cadastro'
@@ -15416,7 +15512,9 @@ async function buscarCepCliente() {
         endereco_completo: enderecoCompleto,
         latitude: Number(data.latitude),
         longitude: Number(data.longitude),
-        source: data.provider || 'cep'
+        source: 'cep',
+        provider: data.provider || 'cep',
+        precision: 'approximate'
       });
     }
     
@@ -15732,6 +15830,9 @@ async function saveClient() {
       const geo = JSON.parse(geocodeData);
       payload.latitude = geo.latitude;
       payload.longitude = geo.longitude;
+      payload.location_source = geo.source || null;
+      payload.location_precision = geo.precision || null;
+      payload.location_verified_at = geo.location_verified_at || null;
       payload.endereco_completo = geo.endereco_completo || enderecoCompleto;
     }
     
@@ -15761,6 +15862,9 @@ async function saveClient() {
       await saveClientContracts(savedCustomer.id);
       await saveClientAddresses(savedCustomer.id);
       await saveClientContacts(savedCustomer.id);
+      fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(savedCustomer.id)}/geocode`, {
+        method:'POST', headers: await getBackendAuthHeaders()
+      }).catch(error => console.warn('Localizacao automatica pendente:', error.message || error));
     }
     setClientModalSnapshot();
     clientAllowDuplicateOnce = false;
@@ -16959,6 +17063,91 @@ function updateNewSvcGuideSummary(){
       <div class="svc-confirm-v" title="${escapeHtmlAttr(v)}">${sanitize(v)}</div>
     </div>
   `).join('')}</div>${rodizioNote}${obs ? `<div class="svc-confirm-note"><strong>Observações:</strong> ${sanitize(obs)}</div>` : ''}`;
+}
+
+let locationReviewItems = [];
+
+function locationReviewStatusLabel(status) {
+  return ({ missing_cep:'Sem CEP', missing_location:'Sem coordenada', approximate:'Aproximada — revisar', exact:'Exata', verified:'Confirmada' })[status] || status;
+}
+
+async function openLocationReviewModal() {
+  document.getElementById('location-review-modal')?.classList.add('open');
+  document.getElementById('location-review-content').innerHTML = '<div class="ui-empty-state">Carregando localizações...</div>';
+  await loadLocationReviewQueue();
+}
+
+function closeLocationReviewModal() {
+  document.getElementById('location-review-modal')?.classList.remove('open');
+}
+
+async function loadLocationReviewQueue() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/location-review`);
+    const payload = await response.json().catch(() => ([]));
+    if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+    locationReviewItems = Array.isArray(payload) ? payload : [];
+    renderLocationReviewQueue();
+  } catch(e) {
+    document.getElementById('location-review-content').innerHTML = `<div class="ui-empty-state">${sanitize(e.message || e)}</div>`;
+  }
+}
+
+function renderLocationReviewQueue() {
+  const content = document.getElementById('location-review-content');
+  if (!content) return;
+  const filter = document.getElementById('location-review-filter')?.value || 'pending';
+  const rows = locationReviewItems.filter(item => filter === 'all'
+    || (filter === 'pending' && ['missing_cep','missing_location','approximate'].includes(item.status))
+    || item.status === filter);
+  if (!rows.length) {
+    content.innerHTML = '<div class="ui-empty-state"><div class="ui-empty-title">Nenhuma localização neste filtro</div></div>';
+    return;
+  }
+  content.innerHTML = `<div class="op-map-list">${rows.map((item, index) => {
+    const canLocate = item.status !== 'missing_cep' && item.status !== 'verified';
+    return `<div class="op-map-item ${item.status === 'approximate' ? 'orange' : ''}">
+      <div class="op-map-item-head"><div class="op-map-item-client">${index + 1}. ${sanitize(item.customer_name)}</div><span class="chip ${item.status === 'verified' ? 'chip-green' : item.status === 'exact' ? 'chip-blue' : 'chip-orange'}">${sanitize(locationReviewStatusLabel(item.status))}</span></div>
+      <div class="op-map-item-meta"><span>${sanitize(item.address_label || 'Principal')} · ${sanitize(item.cep || 'CEP ausente')}</span><span>${sanitize(item.address || 'Endereço não informado')}</span><span>${Number(item.linked_services || 0)} serviço(s) vinculado(s)</span></div>
+      <div class="op-map-quick-actions" style="margin-left:0">
+        ${canLocate ? `<button class="op-map-mini-btn primary" onclick="locateReviewItem(${jsArg(item.customer_id)}, ${jsArg(item.address_id || '')})">Localizar pelo CEP/endereço</button>` : ''}
+        <button class="op-map-mini-btn" onclick="closeLocationReviewModal();openClientModal(${jsArg(item.customer_id)})">Abrir cadastro</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+async function locateReviewItem(customerId, addressId = '', options = {}) {
+  const path = addressId
+    ? `/api/customers/${encodeURIComponent(customerId)}/addresses/${encodeURIComponent(addressId)}/geocode`
+    : `/api/customers/${encodeURIComponent(customerId)}/geocode`;
+  const response = await fetch(`${API_BASE_URL}${path}`, { method:'POST', headers: await getBackendAuthHeaders() });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+  if (!options.silent) toast(payload.precision === 'approximate' ? 'Localização aproximada encontrada; revise o ponto.' : 'Localização encontrada.', payload.precision === 'approximate' ? 'warn' : 'ok');
+  return payload;
+}
+
+async function runLocationReviewBatch() {
+  const pending = locationReviewItems.filter(item => ['missing_location','approximate'].includes(item.status) && item.cep);
+  if (!pending.length) return toast('Nenhuma localização pendente com CEP.', 'warn');
+  const button = document.getElementById('location-review-batch');
+  const progress = document.getElementById('location-review-progress');
+  button.disabled = true;
+  let successes = 0;
+  let failures = 0;
+  for (let index = 0; index < pending.length; index += 1) {
+    progress.textContent = `${index + 1}/${pending.length} · ${successes} sucesso(s) · ${failures} falha(s)`;
+    try {
+      await locateReviewItem(pending[index].customer_id, pending[index].address_id || '', { silent:true });
+      successes += 1;
+    } catch(e) {
+      failures += 1;
+    }
+  }
+  progress.textContent = `Concluído: ${successes} localizado(s), ${failures} não encontrado(s)`;
+  button.disabled = false;
+  await loadLocationReviewQueue();
 }
 
 function bindNewSvcGuideSummary(){
