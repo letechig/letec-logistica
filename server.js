@@ -84,6 +84,14 @@ const technicianLoginLimiter = rateLimit({
   legacyHeaders: false
 });
 
+const authRecoveryLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.AUTH_RECOVERY_RATE_LIMIT_MAX || 5),
+  handler: rateLimitJsonHandler('Muitas solicitacoes de acesso. Tente novamente mais tarde', 'auth_recovery_rate_limited'),
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '');
 }
@@ -290,14 +298,6 @@ function hasRelatedCustomerNames(leftName, rightName) {
   return false;
 }
 
-class CustomerLinkError extends Error {
-  constructor(message, statusCode = 409) {
-    super(message);
-    this.name = 'CustomerLinkError';
-    this.statusCode = statusCode;
-  }
-}
-
 function buildCustomerAddress({ rua, numero, bairro, cidade, uf, complemento, referencia }) {
   const parts = [];
   if (rua) parts.push(String(rua).trim());
@@ -329,6 +329,9 @@ const CUSTOMER_OPTIONAL_WRITE_COLUMNS = new Set([
   'referencia',
   'latitude',
   'longitude',
+  'location_source',
+  'location_precision',
+  'location_verified_at',
   'tipo_local',
   'restricoes_operacionais',
   'nivel_urgencia_padrao',
@@ -413,8 +416,6 @@ async function runCustomerWriteWithSchemaFallback(buildQuery, payload, context) 
 const SERVICE_OPTIONAL_WRITE_COLUMNS = new Set([
   'date',
   'data',
-  'cliente_id',
-  'customer_address_id',
   'horario',
   'tiposervico',
   'tipos',
@@ -486,6 +487,9 @@ const CUSTOMER_ADDRESS_OPTIONAL_WRITE_COLUMNS = new Set([
   'referencia',
   'latitude',
   'longitude',
+  'location_source',
+  'location_precision',
+  'location_verified_at',
   'zona_regiao',
   'tipo_imovel',
   'bloco_torre_andar',
@@ -1340,6 +1344,28 @@ function plateLastDigit(plate) {
   return digits ? digits[digits.length - 1] : '';
 }
 
+function cleanLocationSource(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['address', 'cep', 'manual_map', 'technician_arrival'].includes(normalized) ? normalized : null;
+}
+
+function cleanLocationPrecision(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['exact', 'approximate', 'verified'].includes(normalized) ? normalized : null;
+}
+
+function locationMetadata(input = {}, defaults = {}) {
+  const source = cleanLocationSource(input.location_source || input.source) || defaults.source || null;
+  const precision = cleanLocationPrecision(input.location_precision || input.precision) || defaults.precision || null;
+  return {
+    location_source: source,
+    location_precision: precision,
+    location_verified_at: precision === 'verified'
+      ? (cleanNullableText(input.location_verified_at, 40) || new Date().toISOString())
+      : null
+  };
+}
+
 const RODIZIO_TIME_ZONE = 'America/Sao_Paulo';
 const RODIZIO_RESTRICTION_WINDOWS = Object.freeze([
   Object.freeze({ inicio: '07:00', fim: '10:00' }),
@@ -1806,85 +1832,7 @@ function verifyPassword(password, storedHash) {
   }
 }
 
-const EMERGENCY_APP_ADMIN_EMAIL = normalizeEmail(process.env.INTERNAL_ADMIN_EMAIL || 'letechigienizacaoosp@gmail.com');
-const EMERGENCY_APP_ADMIN_PASSWORD_HASH = process.env.INTERNAL_ADMIN_PASSWORD_HASH || 'pbkdf2_sha256$120000$ce6d832082cda166f9e2d506975c7cb9$ca17747e71a1a7059cb39a581b3a30072b3c3e29455a09453058c2ff7ab01764';
-
-function getInternalAuthSecret() {
-  return process.env.INTERNAL_AUTH_SECRET
-    || process.env.SUPABASE_SERVICE_ROLE_KEY
-    || process.env.SUPABASE_ANON_KEY
-    || 'leteclog-internal-auth-fallback-v1';
-}
-
-function base64UrlJson(value) {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
-
-function signInternalPayload(payloadPart) {
-  return crypto.createHmac('sha256', getInternalAuthSecret()).update(payloadPart).digest('base64url');
-}
-
-function createEmergencyAppSession(email = EMERGENCY_APP_ADMIN_EMAIL) {
-  const now = Date.now();
-  const expiresAt = now + 30 * 24 * 60 * 60 * 1000;
-  const payload = {
-    typ: 'app_emergency',
-    sub: 'emergency-admin',
-    email,
-    name: 'Admin Letec',
-    role: 'admin',
-    iat: now,
-    exp: expiresAt
-  };
-  const payloadPart = base64UrlJson(payload);
-  const signature = signInternalPayload(payloadPart);
-  return {
-    token: `app_emg_${payloadPart}.${signature}`,
-    expires_at: new Date(expiresAt).toISOString(),
-    user: {
-      id: 'emergency-admin',
-      email,
-      name: 'Admin Letec',
-      role: 'admin',
-      active: true,
-      emergency: true
-    },
-    session_id: null
-  };
-}
-
-function verifyEmergencyAppSessionToken(token) {
-  const raw = String(token || '');
-  if (!raw.startsWith('app_emg_')) return null;
-  const body = raw.slice('app_emg_'.length);
-  const [payloadPart, signature] = body.split('.');
-  if (!payloadPart || !signature) return null;
-  const expected = signInternalPayload(payloadPart);
-  try {
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
-  } catch(e) {
-    return null;
-  }
-  let payload = null;
-  try {
-    payload = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8'));
-  } catch(e) {
-    return null;
-  }
-  if (payload?.typ !== 'app_emergency' || !payload.exp || Number(payload.exp) <= Date.now()) return null;
-  return {
-    session: { id: null, expires_at: new Date(Number(payload.exp)).toISOString(), emergency: true },
-    appUser: {
-      id: payload.sub || 'emergency-admin',
-      email: payload.email || EMERGENCY_APP_ADMIN_EMAIL,
-      name: payload.name || 'Admin Letec',
-      role: payload.role || 'admin',
-      active: true,
-      emergency: true
-    },
-    role: payload.role || 'admin'
-  };
-}
+const LEGACY_APP_AUTH_LOGIN_ENABLED = String(process.env.LEGACY_APP_AUTH_LOGIN_ENABLED || 'true').toLowerCase() !== 'false';
 
 function generateTechnicianPin() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
@@ -2046,11 +1994,6 @@ async function authenticateAppSession(req) {
     req.appSessionAuth = null;
     return null;
   }
-  const emergencyAuth = verifyEmergencyAppSessionToken(token);
-  if (emergencyAuth) {
-    req.appSessionAuth = emergencyAuth;
-    return req.appSessionAuth;
-  }
   const db = getSupabaseClient();
   const sessionHash = hashToken(token);
   const session = await maybeSingle(
@@ -2138,40 +2081,11 @@ async function resolveAppUserRole(req) {
       req.appUserRole = { user, appUser: byEmail, role: byEmail.role };
       return req.appUserRole;
     }
-    const bootstrapped = await maybeBootstrapFirstAppUser(db, user);
-    req.appUserRole = bootstrapped ? { user, appUser: bootstrapped, role: bootstrapped.role } : null;
-    return req.appUserRole;
+    req.appUserRole = null;
+    return null;
   }
   req.appUserRole = appUser ? { user, appUser, role: appUser.role } : null;
   return req.appUserRole;
-}
-
-async function maybeBootstrapFirstAppUser(db, user) {
-  if (!user?.email) return null;
-  try {
-    const { count, error: countError } = await db
-      .from('app_users')
-      .select('id', { count: 'exact', head: true })
-      .eq('active', true);
-    if (countError) throw countError;
-    if (Number(count || 0) > 0) return null;
-
-    const { data, error } = await db
-      .from('app_users')
-      .upsert({
-        auth_user_id: user.id,
-        email: user.email,
-        role: 'admin',
-        active: true
-      }, { onConflict: 'email' })
-      .select()
-      .limit(1);
-    if (error) throw error;
-    return data?.[0] || null;
-  } catch (error) {
-    if (isMissingRelationError(error)) return null;
-    throw error;
-  }
 }
 
 async function requireAdminOrOperator(req, res) {
@@ -2240,7 +2154,19 @@ function inferAuditEntity(req) {
   return { entity, entityId: entityId === null || entityId === undefined ? null : String(entityId) };
 }
 
-function inferAuditAction(method) {
+function inferAuditAction(req, method) {
+  const path = String(req?.path || '');
+  if (/^\/api\/services\/[^/]+\/transition$/.test(path) && req?.body?.action) return String(req.body.action);
+  if (path === '/api/app-auth/recovery') return 'auth_recovery_requested';
+  if (path === '/api/app-auth/magic-link') return 'auth_magic_link_requested';
+  if (path === '/api/app-auth/login') return 'auth_login';
+  if (path === '/api/app-auth/logout') return 'auth_logout';
+  if (path === '/api/app-users/invite') return 'auth_user_invited';
+  if (/^\/api\/app-users\/[^/]+\/revoke$/.test(path)) return 'auth_access_revoked';
+  if (/^\/api\/app-users\/[^/]+$/.test(path) && ['PUT', 'PATCH'].includes(String(method).toUpperCase())) {
+    if (req?.body?.active === false) return 'auth_user_deactivated';
+    if (req?.body?.role) return 'auth_role_changed';
+  }
   const map = { POST: 'create', PUT: 'update', PATCH: 'update', DELETE: 'delete' };
   return map[String(method || '').toUpperCase()] || 'write';
 }
@@ -2318,7 +2244,7 @@ function auditActivityMiddleware(req, res, next) {
         status_code: res.statusCode,
         entity,
         entity_id: entityId,
-        action: inferAuditAction(method),
+        action: inferAuditAction(req, method),
         request_id: firstHeader(req, 'x-request-id') || null,
         ip: req.ip || req.socket?.remoteAddress || null,
         user_agent: truncateText(firstHeader(req, 'user-agent') || '', 500) || null,
@@ -2632,11 +2558,19 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
       customer_longitude: customerCoords?.longitude ?? addressCoords?.longitude ?? null,
       address_latitude: addressCoords?.latitude ?? null,
       address_longitude: addressCoords?.longitude ?? null,
-      location_source: addressCoords ? 'customer_address'
-        : customerCoords ? 'customer'
-          : serviceCoords ? 'service'
+      location_source: addressCoords ? (address?.location_source || 'address')
+        : customerCoords ? (customer?.location_source || 'address')
+          : serviceCoords ? (service.location_source || 'address')
             : arrivalCoords ? 'technician_arrival'
               : null,
+      location_precision: addressCoords ? (address?.location_precision || 'exact')
+        : customerCoords ? (customer?.location_precision || 'exact')
+          : serviceCoords ? (service.location_precision || 'exact')
+            : arrivalCoords ? 'verified'
+              : null,
+      location_verified_at: addressCoords ? (address?.location_verified_at || null)
+        : customerCoords ? (customer?.location_verified_at || null)
+          : null,
       customer_cep: customer?.cep || address?.cep || null,
       address_cep: address?.cep || null,
       address_numero: address?.numero || customer?.numero || null,
@@ -2673,6 +2607,9 @@ function compactCustomerAddress(address = {}) {
     google_maps_url: address.google_maps_url || null,
     latitude: address.latitude || null,
     longitude: address.longitude || null,
+    location_source: address.location_source || null,
+    location_precision: address.location_precision || null,
+    location_verified_at: address.location_verified_at || null,
     is_primary: address.is_primary === true,
     ativo: address.ativo !== false,
     origem: address.origem || null
@@ -2712,6 +2649,9 @@ function customerAddressPayload(customerId, input = {}, options = {}) {
     google_maps_url: cleanNullableText(input.google_maps_url, 500),
     latitude: cleanNumber(input.latitude),
     longitude: cleanNumber(input.longitude),
+    location_source: cleanLocationSource(input.location_source),
+    location_precision: cleanLocationPrecision(input.location_precision),
+    location_verified_at: cleanNullableText(input.location_verified_at, 40),
     is_primary: input.is_primary === true || String(input.is_primary) === 'true' || options.is_primary === true,
     ativo: input.ativo === false || String(input.ativo) === 'false' ? false : true,
     origem: cleanNullableText(input.origem || options.origem, 80) || 'sistema'
@@ -2720,6 +2660,111 @@ function customerAddressPayload(customerId, input = {}, options = {}) {
 
 function hasUsableAddress(address = {}) {
   return !!buildCustomerAddressFingerprint(address);
+}
+
+function hasCompleteSchedulingAddress(address = {}) {
+  const cep = String(address.cep || '').replace(/\D/g, '');
+  return address.ativo !== false
+    && !!address.id
+    && cep.length === 8
+    && !!String(address.rua || '').trim()
+    && !!String(address.numero || '').trim()
+    && !!String(address.bairro || '').trim()
+    && !!String(address.cidade || '').trim()
+    && normalizeUf(address.uf)?.length === 2;
+}
+
+function schedulingPhone(customer = {}, contacts = []) {
+  const candidates = [
+    customer.whatsapp,
+    customer.telefone,
+    ...(contacts || []).filter(item => item.ativo !== false).flatMap(item => [item.whatsapp, item.telefone])
+  ];
+  return candidates.map(normalizeBrazilWhatsAppNumber).find(Boolean) || '';
+}
+
+function customerSchedulingView(customer = {}, addresses = [], contacts = [], requestedAddressId = null) {
+  const requestedRecord = requestedAddressId
+    ? (addresses || []).find(item => item && String(item.id) === String(requestedAddressId)) || null
+    : null;
+  const activeAddresses = (addresses || []).filter(item => item && item.ativo !== false);
+  const requestedAddress = requestedAddressId
+    ? activeAddresses.find(item => String(item.id) === String(requestedAddressId)) || null
+    : null;
+  const validAddresses = activeAddresses.filter(hasCompleteSchedulingAddress);
+  const address = requestedAddressId ? requestedAddress : (choosePrimaryAddress(validAddresses) || validAddresses[0] || null);
+  const blockers = [];
+  if (!customer?.id) blockers.push('service_customer_required');
+  else if (isInactiveCustomerRecord(customer)) blockers.push('service_customer_inactive');
+  const phone = schedulingPhone(customer, contacts);
+  if (customer?.id && !phone) blockers.push('service_customer_contact_required');
+  if (requestedAddressId && requestedRecord && String(requestedRecord.customer_id) !== String(customer?.id || '')) {
+    blockers.push('service_customer_address_mismatch');
+  } else if (requestedAddressId && !requestedRecord) {
+    blockers.push('service_customer_address_mismatch');
+  } else if (!address || !hasCompleteSchedulingAddress(address)) {
+    blockers.push('service_customer_address_required');
+  }
+  return {
+    scheduling_eligible: blockers.length === 0,
+    scheduling_blockers: [...new Set(blockers)],
+    scheduling_address_id: address?.id || null,
+    customer: customer?.id ? customer : null,
+    address,
+    phone
+  };
+}
+
+function schedulingValidationError(code) {
+  const meta = {
+    service_customer_required: ['Vincule um cliente cadastrado antes de salvar o servico', 422],
+    service_customer_inactive: ['Cliente inativo nao pode receber novo servico', 409],
+    service_customer_contact_required: ['Cadastre um telefone ou WhatsApp valido antes de agendar', 422],
+    service_customer_address_required: ['Selecione uma unidade com endereco completo antes de agendar', 422],
+    service_customer_address_mismatch: ['A unidade selecionada nao pertence ao cliente', 422]
+  }[code] || ['Cliente nao esta apto para agendamento', 422];
+  const error = new Error(meta[0]);
+  error.code = code || 'service_customer_required';
+  error.statusCode = meta[1];
+  return error;
+}
+
+async function resolveSchedulingCustomer(db, customerId, addressId) {
+  if (!customerId) throw schedulingValidationError('service_customer_required');
+  if (!addressId) throw schedulingValidationError('service_customer_address_required');
+  const customer = await maybeSingle(db.from('customers').select('*').eq('id', Number(customerId)));
+  if (!customer) throw schedulingValidationError('service_customer_required');
+  const [addresses, contacts] = await Promise.all([
+    safeSelectByIds(db, 'customer_addresses', 'id', [addressId]),
+    safeSelectByIds(db, 'customer_contacts', 'customer_id', [customerId])
+  ]);
+  const view = customerSchedulingView(customer, addresses, contacts, addressId);
+  if (!view.scheduling_eligible) throw schedulingValidationError(view.scheduling_blockers[0]);
+  return view;
+}
+
+async function enrichCustomersWithSchedulingEligibility(db, customers = []) {
+  const rows = Array.isArray(customers) ? customers : [];
+  const ids = rows.map(item => item.id).filter(Boolean);
+  if (!ids.length) return rows;
+  const [addresses, contacts] = await Promise.all([
+    safeSelectByIds(db, 'customer_addresses', 'customer_id', ids),
+    safeSelectByIds(db, 'customer_contacts', 'customer_id', ids)
+  ]);
+  return rows.map(customer => {
+    const view = customerSchedulingView(
+      customer,
+      addresses.filter(item => String(item.customer_id) === String(customer.id)),
+      contacts.filter(item => String(item.customer_id) === String(customer.id))
+    );
+    return {
+      ...customer,
+      is_incomplete: !view.scheduling_eligible,
+      scheduling_eligible: view.scheduling_eligible,
+      scheduling_blockers: view.scheduling_blockers,
+      scheduling_address_id: view.scheduling_address_id
+    };
+  });
 }
 
 async function listCustomerAddresses(db, customerId, options = {}) {
@@ -2823,60 +2868,6 @@ async function ensureCustomerAddress(db, customerId, input = {}, options = {}) {
   }
 }
 
-function normalizeServiceAddressInput(servicePayload = {}, rawInput = {}) {
-  const ufNormalizada = normalizeUf(rawInput.uf || servicePayload.uf);
-  const structured = {
-    cep: normalizeCep(rawInput.cep || servicePayload.cep),
-    rua: cleanNullableText(rawInput.rua || servicePayload.rua, 200),
-    numero: cleanNullableText(rawInput.numero || servicePayload.numero, 60),
-    bairro: cleanNullableText(rawInput.bairro || servicePayload.bairro, 160),
-    cidade: cleanNullableText(rawInput.cidade || servicePayload.cidade, 160),
-    uf: ufNormalizada,
-    complemento: cleanNullableText(rawInput.complemento || servicePayload.complemento, 200),
-    referencia: cleanNullableText(rawInput.referencia || servicePayload.referencia, 300),
-    latitude: cleanNumber(rawInput.latitude ?? servicePayload.latitude),
-    longitude: cleanNumber(rawInput.longitude ?? servicePayload.longitude)
-  };
-  const enderecoEstruturado = buildCustomerAddress(structured);
-  return {
-    ...structured,
-    endereco: cleanNullableText(rawInput.endereco || servicePayload.endereco || enderecoEstruturado, 500),
-    endereco_completo: cleanNullableText(rawInput.endereco_completo || rawInput.endereco || servicePayload.endereco || enderecoEstruturado, 500)
-  };
-}
-
-function validateRequiredServiceAddress(input = {}) {
-  if (!input.cep || normalizeCep(input.cep).length !== 8) {
-    return { ok: false, status: 400, code: 'service_address_cep_required', error: 'CEP e obrigatorio para salvar endereco novo na agenda' };
-  }
-  if (!input.numero) {
-    return { ok: false, status: 400, code: 'service_address_number_required', error: 'Numero e obrigatorio para salvar endereco novo na agenda' };
-  }
-  if (!input.rua || !input.bairro || !input.cidade || !input.uf) {
-    return { ok: false, status: 400, code: 'service_address_structured_required', error: 'Rua, bairro, cidade e UF sao obrigatorios para endereco novo na agenda' };
-  }
-  return { ok: true };
-}
-
-async function ensureServiceCustomerAddress(db, servicePayload = {}, customer = null, origem = 'agenda', rawInput = {}) {
-  const customerId = servicePayload.cliente_id || customer?.id;
-  if (!customerId || servicePayload.customer_address_id) return null;
-  const addressInput = normalizeServiceAddressInput(servicePayload, rawInput);
-  const validation = validateRequiredServiceAddress(addressInput);
-  if (!validation.ok) {
-    const error = new Error(validation.error);
-    error.statusCode = validation.status;
-    error.code = validation.code;
-    throw error;
-  }
-  const address = await ensureCustomerAddress(db, customerId, {
-    ...addressInput,
-    origem
-  }, { origem, label: servicePayload.cliente || customer?.nome || null });
-  if (address?.id) servicePayload.customer_address_id = address.id;
-  return address;
-}
-
 async function fetchServicesByDate(db, date) {
   const { data, error } = await db
     .from('services')
@@ -2921,152 +2912,6 @@ async function fetchCustomerForService(db, service = {}) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-async function ensureCustomerForServicePayload(db, servicePayload = {}, options = {}) {
-  const shouldSaveAddress = options.saveAddress !== false;
-  const rawInput = options.input || {};
-  if (servicePayload.cliente_id) {
-    const customer = await maybeSingle(db.from('customers').select('*').eq('id', servicePayload.cliente_id)).catch(() => null);
-    let address = null;
-    if (shouldSaveAddress) {
-      try {
-        address = await ensureServiceCustomerAddress(db, servicePayload, customer, 'agenda', rawInput);
-      } catch (addressError) {
-        if (addressError.statusCode) throw addressError;
-        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
-      }
-    }
-    return { payload: servicePayload, customer, address, created: false };
-  }
-
-  if (!String(servicePayload.cliente || '').trim()) {
-    return { payload: servicePayload, customer: null, address: null, created: false };
-  }
-
-  const name = String(servicePayload.cliente || '').trim();
-  const address = String(servicePayload.endereco || '').trim();
-  const serviceName = normalizeLooseForMatch(name);
-
-  const { data: activeCustomers, error: activeCustomersError } = await db
-    .from('customers')
-    .select('*')
-    .eq('ativo', true)
-    .limit(1000);
-  if (activeCustomersError) throw activeCustomersError;
-
-  const exactMatches = (activeCustomers || [])
-    .filter(customer => normalizeLooseForMatch(customer.nome_normalizado || customer.nome) === serviceName);
-
-  if (exactMatches.length === 1) {
-    servicePayload.cliente_id = Number(exactMatches[0].id);
-    let addressRecord = null;
-    if (shouldSaveAddress) {
-      try {
-        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, exactMatches[0], 'agenda', rawInput);
-      } catch (addressError) {
-        if (addressError.statusCode) throw addressError;
-        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
-      }
-    }
-    return { payload: servicePayload, customer: exactMatches[0], address: addressRecord, created: false };
-  }
-
-  if (exactMatches.length > 1) {
-    const serviceAddressFingerprint = buildCustomerAddressFingerprint({ endereco: address });
-    const addressMatches = serviceAddressFingerprint
-      ? exactMatches.filter(customer => buildCustomerAddressFingerprint(customer) === serviceAddressFingerprint)
-      : [];
-
-  if (addressMatches.length === 1) {
-    servicePayload.cliente_id = Number(addressMatches[0].id);
-    let addressRecord = null;
-    if (shouldSaveAddress) {
-      try {
-        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, addressMatches[0], 'agenda', rawInput);
-      } catch (addressError) {
-        if (addressError.statusCode) throw addressError;
-        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
-      }
-    }
-    return { payload: servicePayload, customer: addressMatches[0], address: addressRecord, created: false };
-  }
-
-    throw new CustomerLinkError(
-      `Mais de um cliente ativo encontrado para "${name}". Selecione o cliente correto no autocomplete antes de salvar.`
-    );
-  }
-
-  const duplicate = await findDuplicateCustomer({
-    nome: name,
-    endereco: address,
-    endereco_completo: address,
-    db
-  });
-  if (duplicate?.id) {
-    servicePayload.cliente_id = Number(duplicate.id);
-    let addressRecord = null;
-    if (shouldSaveAddress) {
-      try {
-        addressRecord = await ensureServiceCustomerAddress(db, servicePayload, duplicate, 'agenda', rawInput);
-      } catch (addressError) {
-        if (addressError.statusCode) throw addressError;
-        console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
-      }
-    }
-    return { payload: servicePayload, customer: duplicate, address: addressRecord, created: false };
-  }
-
-  if (!shouldSaveAddress) {
-    return { payload: servicePayload, customer: null, address: null, created: false };
-  }
-
-  const insertPayload = {
-    nome: name,
-    nome_normalizado: normalizeCustomerName(name),
-    ...normalizeServiceAddressInput(servicePayload, rawInput),
-    endereco: normalizeServiceAddressInput(servicePayload, rawInput).endereco || address || null,
-    endereco_completo: normalizeServiceAddressInput(servicePayload, rawInput).endereco_completo || address || null,
-    tipo: 'PF',
-    tipo_cliente: 'Eventual',
-    origem: 'agenda',
-    is_incomplete: false,
-    ativo: true
-  };
-  const insertValidation = validateRequiredServiceAddress(insertPayload);
-  if (!insertValidation.ok) {
-    const error = new Error(insertValidation.error);
-    error.statusCode = insertValidation.status;
-    error.code = insertValidation.code;
-    throw error;
-  }
-
-  const { data, error } = await runCustomerWriteWithSchemaFallback(
-    payload => db.from('customers').insert([payload]).select(),
-    insertPayload,
-    'POST /api/services ensure customer'
-  );
-  if (error) throw error;
-
-  const created = data?.[0] || null;
-  if (created?.id) servicePayload.cliente_id = Number(created.id);
-  if (created?.id) {
-    try {
-      await ensureCustomerAlias(db, created.id, name, 'agenda');
-    } catch (aliasError) {
-      console.warn('[POST /api/services ensure customer] Complemento de alias ignorado:', aliasError.message);
-    }
-  }
-  let addressRecord = null;
-  if (created?.id && shouldSaveAddress) {
-    try {
-      addressRecord = await ensureServiceCustomerAddress(db, servicePayload, created, 'agenda', rawInput);
-    } catch (addressError) {
-      if (addressError.statusCode) throw addressError;
-      console.warn('[POST /api/services ensure customer] Complemento de endereco ignorado:', addressError.message);
-    }
-  }
-  return { payload: servicePayload, customer: created, address: addressRecord, created: true };
-}
-
 let clientServiceInstance = null;
 function getClientDomainService() {
   if (!clientServiceInstance) {
@@ -3098,7 +2943,7 @@ function getAppointmentDomainService() {
     appointmentServiceInstance = createAppointmentService({
       normalizeServicePayload,
       runServiceWriteWithSchemaFallback,
-      ensureCustomerForServicePayload
+      resolveSchedulingCustomer
     });
   }
   return appointmentServiceInstance;
@@ -3312,32 +3157,6 @@ async function buildCustomerLinkAudit(db, options = {}) {
     counts: summarizeCustomerLinkAudit(items),
     items
   };
-}
-
-async function createCustomerFromServiceForRepair(db, service = {}) {
-  const name = serviceCustomerName(service);
-  const address = String(service.endereco || '').trim();
-  const payload = {
-    nome: name,
-    nome_normalizado: normalizeCustomerName(name),
-    endereco: address || null,
-    endereco_completo: address || null,
-    categoria: 'eventual',
-    tipo: 'PF',
-    tipo_cliente: 'Eventual',
-    status_operacional: 'Eventual',
-    prioridade: 'Média',
-    origem: 'agenda_repair',
-    observacoes: `Criado automaticamente pela correção de vínculo da Agenda a partir do serviço #${service.id || '-'}.`,
-    ativo: true
-  };
-  const { data, error } = await runCustomerWriteWithSchemaFallback(
-    workingPayload => db.from('customers').insert([workingPayload]).select(),
-    payload,
-    'POST /api/services/customer-link-repair create customer'
-  );
-  if (error) throw error;
-  return data?.[0] || null;
 }
 
 function customerPhone(customer = {}) {
@@ -3917,8 +3736,9 @@ app.post('/api/services/customer-link-repair', strictLimiter, async (req, res) =
       dry_run: !apply,
       linked: 0,
       created: 0,
-      ignored: audit.counts.revisao_manual,
+      ignored: audit.counts.revisao_manual + audit.counts.criar_cliente,
       ambiguous: audit.counts.revisao_manual,
+      requires_customer_creation: audit.counts.criar_cliente,
       errors: []
     };
 
@@ -3946,34 +3766,6 @@ app.post('/api/services/customer-link-repair', strictLimiter, async (req, res) =
         summary.linked += 1;
       } catch (error) {
         summary.errors.push({ service_id: item.service?.id || null, action: 'link', error: error.message });
-      }
-    }
-
-    const createdCustomerByRepairKey = new Map();
-    for (const item of audit.items.criar_cliente) {
-      try {
-        const serviceId = item.service?.id;
-        if (!serviceId) throw new Error('Serviço ausente para criação');
-        const service = (audit.items.criar_cliente || []).find(candidate => candidate.service?.id === serviceId)?.service || item.service;
-        const repairKey = `${normalizeCustomerName(service.cliente)}|${buildCustomerAddressFingerprint({ endereco: service.endereco || '' })}`;
-        let customerId = createdCustomerByRepairKey.get(repairKey);
-        if (!customerId) {
-          const created = await createCustomerFromServiceForRepair(db, service);
-          if (!created?.id) throw new Error('Cliente criado sem ID retornado');
-          customerId = created.id;
-          createdCustomerByRepairKey.set(repairKey, customerId);
-          summary.created += 1;
-        }
-        const { data, error } = await db
-          .from('services')
-          .update({ cliente_id: Number(customerId) })
-          .eq('id', serviceId)
-          .select();
-        if (error) throw error;
-        if (!data?.length) throw new Error('Serviço não encontrado para vínculo do cliente criado');
-        summary.linked += 1;
-      } catch (error) {
-        summary.errors.push({ service_id: item.service?.id || null, action: 'create', error: error.message });
       }
     }
 
@@ -4033,14 +3825,14 @@ app.post('/api/technician-auth/login', technicianLoginLimiter, async (req, res) 
 
 app.post('/api/app-auth/login', technicianLoginLimiter, async (req, res) => {
   try {
+    if (!LEGACY_APP_AUTH_LOGIN_ENABLED) {
+      return res.status(410).json({ error: 'Login legado desativado. Use o Supabase Auth.', code: 'legacy_login_disabled' });
+    }
     const db = getSupabaseClient();
     const email = normalizeEmail(req.body?.email || '');
     const password = String(req.body?.password || '');
     if (!email || !password) {
       return res.status(400).json({ error: 'Email e senha sao obrigatorios', code: 'missing_credentials' });
-    }
-    if (email === EMERGENCY_APP_ADMIN_EMAIL && verifyPassword(password, EMERGENCY_APP_ADMIN_PASSWORD_HASH)) {
-      return res.status(201).json(createEmergencyAppSession(email));
     }
     const appUser = await maybeSingle(
       db.from('app_users')
@@ -4052,32 +3844,6 @@ app.post('/api/app-auth/login', technicianLoginLimiter, async (req, res) => {
       if (isMissingRelationError(error)) return null;
       throw error;
     });
-    if (!appUser) {
-      const { count, error: countError } = await db
-        .from('app_users')
-        .select('id', { count: 'exact', head: true })
-        .eq('active', true);
-      if (countError && !isMissingRelationError(countError)) throw countError;
-      if (!countError && Number(count || 0) === 0) {
-        const now = new Date().toISOString();
-        const { data: created, error: createError } = await db
-          .from('app_users')
-          .upsert({
-            email,
-            name: 'Admin Letec',
-            role: 'admin',
-            active: true,
-            password_hash: hashPassword(password),
-            password_updated_at: now,
-            session_revoked_at: now
-          }, { onConflict: 'email' })
-          .select()
-          .limit(1);
-        if (createError) throw createError;
-        req.body.__bootstrapped_app_admin = true;
-        return res.status(201).json(await createAppLoginSession(db, created?.[0], req));
-      }
-    }
     if (!appUser || !appUser.password_hash || !verifyPassword(password, appUser.password_hash)) {
       return res.status(401).json({ error: 'Email ou senha invalido', code: 'invalid_credentials' });
     }
@@ -4119,6 +3885,39 @@ async function createAppLoginSession(db, appUser, req) {
   };
 }
 
+function configuredAuthRedirect(flow = 'login') {
+  const configured = String(process.env.AUTH_SITE_URL || '').trim().replace(/\/$/, '');
+  const base = configured || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000');
+  if (!base) return undefined;
+  const allowed = String(process.env.AUTH_REDIRECT_URLS || '')
+    .split(',').map(value => value.trim().replace(/\/$/, '')).filter(Boolean);
+  if (allowed.length && !allowed.includes(base)) {
+    console.warn('[auth] AUTH_SITE_URL nao consta em AUTH_REDIRECT_URLS; redirect omitido.');
+    return undefined;
+  }
+  return `${base}/?auth_flow=${encodeURIComponent(flow)}`;
+}
+
+async function sendNeutralAuthEmail(req, res, type) {
+  const email = normalizeEmail(req.body?.email || '');
+  const neutral = { ok: true, message: 'Se o e-mail estiver cadastrado, as instrucoes serao enviadas.' };
+  if (!email) return res.status(202).json(neutral);
+  try {
+    const auth = getSupabaseClient().auth;
+    const redirectTo = configuredAuthRedirect(type === 'recovery' ? 'recovery' : 'login');
+    const result = type === 'recovery'
+      ? await auth.resetPasswordForEmail(email, redirectTo ? { redirectTo } : undefined)
+      : await auth.signInWithOtp({ email, options: redirectTo ? { emailRedirectTo: redirectTo } : undefined });
+    if (result?.error) console.warn(`[auth:${type}] Provedor recusou solicitacao:`, result.error.message);
+  } catch (error) {
+    console.warn(`[auth:${type}] Falha ao solicitar e-mail:`, error.message);
+  }
+  return res.status(202).json(neutral);
+}
+
+app.post('/api/app-auth/recovery', authRecoveryLimiter, (req, res) => sendNeutralAuthEmail(req, res, 'recovery'));
+app.post('/api/app-auth/magic-link', authRecoveryLimiter, (req, res) => sendNeutralAuthEmail(req, res, 'magic_link'));
+
 app.post('/api/app-auth/logout', async (req, res) => {
   try {
     const db = getSupabaseClient();
@@ -4138,9 +3937,14 @@ app.post('/api/app-auth/logout', async (req, res) => {
 
 app.get('/api/app-auth/me', async (req, res) => {
   try {
-    const auth = await authenticateAppSession(req);
-    if (!auth) return res.status(401).json({ error: 'Sessao interna invalida', code: 'app_session_required' });
-    res.json({ user: publicAppUser(auth.appUser), session_expires_at: auth.session.expires_at });
+    const actor = await resolveAppUserRole(req);
+    if (!actor) return res.status(401).json({ error: 'Usuario nao autorizado', code: 'app_user_required' });
+    const internal = await authenticateAppSession(req);
+    res.json({
+      user: publicAppUser(actor.appUser),
+      auth_type: internal ? 'legacy_session' : 'supabase_auth',
+      session_expires_at: internal?.session?.expires_at || null
+    });
   } catch (error) {
     console.error('[GET /api/app-auth/me] Error:', error.message);
     res.status(500).json({ error: 'Falha ao validar sessao interna' });
@@ -4172,6 +3976,28 @@ function normalizeAppUserPayload(input = {}, options = {}) {
   return payload;
 }
 
+async function listSupabaseAuthUsers(db) {
+  if (!db?.auth?.admin?.listUsers) {
+    const error = new Error('Supabase Admin API indisponivel. Configure SUPABASE_SERVICE_ROLE_KEY.');
+    error.status = 503;
+    throw error;
+  }
+  const { data, error } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) throw error;
+  return data?.users || [];
+}
+
+function authUserSummary(authUser) {
+  if (!authUser) return { auth_linked: false, auth_status: 'unlinked', auth_last_sign_in_at: null, auth_confirmed_at: null, auth_invited_at: null };
+  return {
+    auth_linked: true,
+    auth_status: authUser.confirmed_at || authUser.email_confirmed_at ? 'confirmed' : 'invited',
+    auth_last_sign_in_at: authUser.last_sign_in_at || null,
+    auth_confirmed_at: authUser.confirmed_at || authUser.email_confirmed_at || null,
+    auth_invited_at: authUser.invited_at || null
+  };
+}
+
 app.get('/api/app-users', async (req, res) => {
   try {
     const actor = await requireAdmin(req, res);
@@ -4179,7 +4005,7 @@ app.get('/api/app-users', async (req, res) => {
     const db = getSupabaseClient();
     const { data, error } = await db
       .from('app_users')
-      .select('id,auth_user_id,email,name,role,active,created_at,updated_at,password_updated_at,session_revoked_at')
+      .select('id,auth_user_id,email,name,role,active,created_at,updated_at,password_updated_at,session_revoked_at,auth_linked_at,invite_sent_at,invited_by')
       .order('email', { ascending: true });
     if (error) throw error;
     res.json(data || []);
@@ -4193,21 +4019,7 @@ app.post('/api/app-users', strictLimiter, async (req, res) => {
   try {
     const actor = await requireAdmin(req, res);
     if (!actor) return;
-    const db = getSupabaseClient();
-    const payload = normalizeAppUserPayload(req.body || {});
-    if (!payload.email) return res.status(400).json({ error: 'Email e obrigatorio' });
-    if (!payload.role) payload.role = 'operador';
-    if (!payload.password_hash) return res.status(400).json({ error: 'Senha e obrigatoria para novo usuario' });
-
-    const { data, error } = await db
-      .from('app_users')
-      .insert([payload])
-      .select('id,auth_user_id,email,name,role,active,created_at,updated_at,password_updated_at,session_revoked_at');
-    if (error) {
-      if (error.code === '23505') return res.status(409).json({ error: 'Ja existe usuario interno com este email' });
-      throw error;
-    }
-    res.status(201).json(data?.[0] || null);
+    res.status(410).json({ error: 'Criacao com senha foi descontinuada. Use /api/app-users/invite.', code: 'password_user_creation_disabled' });
   } catch (error) {
     console.error('[POST /api/app-users] Error:', error.message);
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar usuario interno' });
@@ -4396,20 +4208,14 @@ app.post('/api/services', async (req, res) => {
     const db = getSupabaseClient();
     const result = await getAppointmentDomainService().createAppointment(db, req.body || {});
     if (result.error) {
-      if (result.customerLinkFailed && result.error instanceof CustomerLinkError) {
-        return res.status(result.status || 409).json({
-          error: result.error.message,
-          code: 'customer_link_ambiguous'
-        });
-      }
       if (result.error?.code === '23505' && result.payload?.id !== undefined && result.payload?.id !== null) {
         const existing = await maybeSingle(db.from('services').select('*').eq('id', result.payload.id));
         if (existing) return res.status(200).json(existing);
       }
-      if (result.customerLinkFailed) {
-        return res.status(result.status || 500).json({
-          error: result.error?.statusCode ? result.error.message : 'Falha ao criar/vincular cliente do serviço',
-          code: result.error?.code || 'customer_link_failed',
+      if (result.schedulingValidationFailed) {
+        return res.status(result.status || 422).json({
+          error: result.error?.message || 'Cliente nao esta apto para agendamento',
+          code: result.error?.code || 'service_customer_required',
           details: publicDbErrorDetails(result.error)
         });
       }
@@ -4493,12 +4299,16 @@ app.post('/api/services/:id/transition', strictLimiter, async (req, res) => {
     const transition = normalizeServiceTransitionInput(req.body || {});
     if (!SERVICE_TRANSITION_ACTIONS.has(transition.action)) return res.status(400).json({ error:'Transicao de servico invalida', code:'invalid_service_transition' });
     if (transition.reason.length < 3) return res.status(400).json({ error:'Informe um motivo com pelo menos 3 caracteres', code:'transition_reason_required' });
+    if (req.body?.password !== undefined || req.body?.senha !== undefined) {
+      return res.status(410).json({ error: 'Troca de senha interna foi descontinuada. Use a recuperacao do Supabase Auth.', code: 'legacy_password_update_disabled' });
+    }
     const db = getSupabaseClient();
     const service = await fetchServiceById(db, req.params.id);
     if (!service) return res.status(404).json({ error:'Servico nao encontrado', code:'service_not_found' });
 
     if (transition.action === 'reschedule') {
       if (!transition.newDate || !/^([01]\d|2[0-3]):[0-5]\d$/.test(transition.newTime)) return res.status(400).json({ error:'Nova data e horario valido sao obrigatorios', code:'reschedule_date_time_required' });
+      await resolveSchedulingCustomer(db, serviceCustomerId(service), service.customer_address_id);
       if (typeof db.rpc !== 'function') return res.status(503).json({ error:'Migration da Fase 2 ainda nao foi aplicada', code:'service_transition_migration_required' });
       const { data, error } = await db.rpc('transition_service_reschedule', {
         p_service_id:Number(req.params.id), p_new_id:Date.now(), p_new_date:transition.newDate,
@@ -4545,6 +4355,13 @@ app.put('/api/services/:id', async (req, res) => {
       }
       delete req.body.status_reason;
       delete req.body.rescheduled_from_id;
+      delete req.body.cliente_id;
+      delete req.body.customer_id;
+      delete req.body.customer_address_id;
+      delete req.body.cliente;
+      delete req.body.endereco;
+      delete req.body.client_name_snapshot;
+      delete req.body.address_snapshot;
       if (technicianExecStatus === 'finalizado') {
         req.body.completion_source = 'portal_tecnico';
         req.body.status_changed_at = req.body.status_changed_at || new Date().toISOString();
@@ -4565,6 +4382,23 @@ app.put('/api/services/:id', async (req, res) => {
       delete req.body.status_reason;
       delete req.body.status_changed_at;
       delete req.body.rescheduled_from_id;
+      const hasClientInput = Object.prototype.hasOwnProperty.call(req.body || {}, 'cliente_id')
+        || Object.prototype.hasOwnProperty.call(req.body || {}, 'customer_id');
+      const hasAddressInput = Object.prototype.hasOwnProperty.call(req.body || {}, 'customer_address_id');
+      const customerId = hasClientInput
+        ? cleanNumber(req.body.cliente_id ?? req.body.customer_id)
+        : cleanNumber(serviceCustomerId(current));
+      const addressId = hasAddressInput
+        ? cleanNullableText(req.body.customer_address_id, 80)
+        : cleanNullableText(current.customer_address_id, 80);
+      const scheduling = await resolveSchedulingCustomer(db, customerId, addressId);
+      req.body.cliente_id = Number(scheduling.customer.id);
+      req.body.customer_address_id = scheduling.address.id;
+      req.body.cliente = scheduling.customer.nome;
+      req.body.endereco = scheduling.address.endereco_completo || scheduling.address.endereco;
+      req.body.client_name_snapshot = scheduling.customer.nome;
+      req.body.address_snapshot = req.body.endereco;
+      req.body.phone_snapshot = scheduling.phone || null;
     }
     const result = await getAppointmentDomainService().updateAppointment(db, id, req.body || {});
     if (result.error) {
@@ -4572,6 +4406,9 @@ app.put('/api/services/:id', async (req, res) => {
     }
     res.json(result.data);
   } catch (error) {
+    if (error?.statusCode && error?.code) {
+      return res.status(error.statusCode).json({ code: error.code, error: error.message });
+    }
     console.error('[PUT /api/services/:id] Error:', error.message);
     res.status(500).json({
       code: 'service_update_failed',
@@ -4623,7 +4460,7 @@ app.post('/api/services/:id/promote-arrival-location', strictLimiter, async (req
       try {
         const { data, error } = await runCustomerAddressWriteWithSchemaFallback(
           payload => db.from('customer_addresses').update(payload).eq('customer_id', Number(customerId)).eq('id', service.customer_address_id).select(),
-          { latitude: location.latitude, longitude: location.longitude, updated_at: new Date().toISOString() },
+          { latitude: location.latitude, longitude: location.longitude, ...locationMetadata({}, { source: 'technician_arrival', precision: 'verified' }), updated_at: new Date().toISOString() },
           'POST /api/services/:id/promote-arrival-location address'
         );
         if (error) throw error;
@@ -4637,7 +4474,7 @@ app.post('/api/services/:id/promote-arrival-location', strictLimiter, async (req
 
     const { data, error } = await runCustomerWriteWithSchemaFallback(
       payload => db.from('customers').update(payload).eq('id', Number(customerId)).select(),
-      { latitude: location.latitude, longitude: location.longitude, updated_at: new Date().toISOString() },
+      { latitude: location.latitude, longitude: location.longitude, ...locationMetadata({}, { source: 'technician_arrival', precision: 'verified' }), updated_at: new Date().toISOString() },
       'POST /api/services/:id/promote-arrival-location customer'
     );
     if (error) throw error;
@@ -5838,6 +5675,7 @@ app.get('/api/customers', async (req, res) => {
     if (!includeInactiveCustomers) {
       normalizedData = normalizedData.filter(row => !isInactiveCustomerRecord(row));
     }
+    normalizedData = await enrichCustomersWithSchedulingEligibility(db, normalizedData);
     if (hasPagination) {
       return res.json({ items: normalizedData, total: count || 0, page, limit, offset });
     }
@@ -5845,6 +5683,19 @@ app.get('/api/customers', async (req, res) => {
   } catch (error) {
     console.error('[GET /api/customers] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar clientes' });
+  }
+});
+
+app.get('/api/customers/:id(\\d+)', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const customer = await getClientDomainService().findClientById(db, req.params.id);
+    if (!customer) return res.status(404).json({ code: 'customer_not_found', error: 'Cliente nao encontrado' });
+    const [enriched] = await enrichCustomersWithSchedulingEligibility(db, [customer]);
+    return res.json(enriched);
+  } catch (error) {
+    console.error('[GET /api/customers/:id] Error:', error.message);
+    return res.status(500).json({ code: 'customer_get_failed', error: 'Falha ao buscar cliente' });
   }
 });
 
@@ -6093,7 +5944,7 @@ function geocodeCandidateMatches(candidate = {}, context = {}) {
   const details = candidate.address || {};
   const expectedNumber = geocodeNumber(context.numero || context.address);
   const actualNumber = geocodeNumber(details.house_number || candidate.display_name);
-  if (expectedNumber && actualNumber !== expectedNumber) return false;
+  if (context.requireNumber !== false && expectedNumber && actualNumber !== expectedNumber) return false;
   const expectedCep = normalizeCep(context.cep);
   const actualCep = normalizeCep(details.postcode);
   if (expectedCep && actualCep && expectedCep !== actualCep) return false;
@@ -6104,7 +5955,7 @@ function geocodeCandidateMatches(candidate = {}, context = {}) {
 }
 
 function enqueueNominatimSearch(address, context = {}) {
-  const key = geocodeComparable(`${address}|${context.cep || ''}|${context.numero || ''}|${context.cidade || ''}`);
+  const key = geocodeComparable(`${address}|${context.cep || ''}|${context.numero || ''}|${context.cidade || ''}|${context.requireNumber === false ? 'approx' : 'exact'}`);
   if (geocodeCache.has(key)) return Promise.resolve(geocodeCache.get(key));
   const task = async () => {
     const waitMs = Math.max(0, GEOCODE_MIN_INTERVAL_MS - (Date.now() - geocodeLastRequestAt));
@@ -6130,10 +5981,81 @@ function enqueueNominatimSearch(address, context = {}) {
   return result;
 }
 
+async function resolveAddressLocation(addressRecord = {}, fallbackAddress = '') {
+  const address = (addressRecord.rua ? buildCustomerAddress(addressRecord) : null) || cleanText(fallbackAddress, 500) || cleanText(addressRecord.endereco_completo || addressRecord.endereco, 500);
+  if (!address) return { location: null, code: 'address_missing' };
+  const numero = geocodeNumber(addressRecord.numero || address);
+  const exact = await enqueueNominatimSearch(address, {
+    cep: addressRecord.cep,
+    numero,
+    cidade: addressRecord.cidade,
+    requireNumber: true
+  });
+  if (exact) return { location: exact, source: 'address', precision: 'exact', address };
+
+  const numberToken = String(numero || '').replace(/[^0-9A-Za-z]/g, '');
+  const streetAddress = addressRecord.rua
+    ? (buildCustomerAddress({ ...addressRecord, numero: '', complemento: '', referencia: '' }) || address)
+    : (numberToken ? address.replace(new RegExp(`\\b${numberToken}\\b`, 'i'), '') : address).replace(/,\s*,/g, ',').trim();
+  const approximate = await enqueueNominatimSearch(streetAddress, {
+    cep: addressRecord.cep,
+    numero: '',
+    cidade: addressRecord.cidade,
+    requireNumber: false
+  });
+  if (approximate) return { location: approximate, source: 'address', precision: 'approximate', address };
+
+  if (normalizeCep(addressRecord.cep).length === 8) {
+    const cepData = await lookupCep(addressRecord.cep).catch(() => null);
+    const cepLocation = validCoordinatePair(cepData?.latitude, cepData?.longitude);
+    if (cepLocation) return { location: cepLocation, source: 'cep', precision: 'approximate', address };
+  }
+  return { location: null, code: 'location_not_found', address };
+}
+
 app.get('/api/geocode', (req, res) => res.status(405).json({
   error: 'Use a geocodificacao vinculada ao servico',
   code: 'service_geocode_required'
 }));
+
+async function geocodeCustomerTarget(req, res, targetKind) {
+  try {
+    const actor = await requireAdminOrOperator(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const customerId = Number(req.params.id);
+    if (!customerId) return res.status(400).json({ error: 'Cliente invalido', code: 'customer_invalid' });
+    const customers = await safeSelectByIds(db, 'customers', 'id', [customerId]);
+    const customer = customers[0] || null;
+    if (!customer) return res.status(404).json({ error: 'Cliente nao encontrado', code: 'customer_not_found' });
+    let target = customer;
+    if (targetKind === 'customer_address') {
+      const addresses = await safeSelectByIds(db, 'customer_addresses', 'customer_id', [customerId]);
+      target = addresses.find(item => String(item.id) === String(req.params.addressId)) || null;
+      if (!target) return res.status(404).json({ error: 'Unidade nao encontrada', code: 'customer_address_not_found' });
+    }
+    const existing = validCoordinatePair(target.latitude, target.longitude);
+    if (existing && target.location_precision === 'verified') {
+      return res.json({ location: existing, source: target.location_source || 'manual_map', precision: 'verified', preserved: true, target: targetKind });
+    }
+    const result = await resolveAddressLocation(target, target.endereco_completo || target.endereco);
+    if (!result.location) return res.status(result.code === 'address_missing' ? 422 : 404).json({ error: result.code === 'address_missing' ? 'Endereco ausente' : 'Localizacao nao encontrada', code: result.code, address: result.address });
+    const update = { ...result.location, ...locationMetadata({}, { source: result.source, precision: result.precision }), updated_at: new Date().toISOString() };
+    const write = targetKind === 'customer_address'
+      ? await runCustomerAddressWriteWithSchemaFallback(
+        payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', target.id).select(), update, 'geocode customer address')
+      : await runCustomerWriteWithSchemaFallback(
+        payload => db.from('customers').update(payload).eq('id', customerId).select(), update, 'geocode customer');
+    if (write.error) throw write.error;
+    res.json({ location: result.location, source: result.source, precision: result.precision, address: result.address, target: targetKind });
+  } catch (error) {
+    console.error('[customer geocode] Error:', error.message);
+    res.status(503).json({ error: 'Falha temporaria ao localizar endereco', code: 'geocode_unavailable' });
+  }
+}
+
+app.post('/api/customers/:id/geocode', strictLimiter, (req, res) => geocodeCustomerTarget(req, res, 'customer'));
+app.post('/api/customers/:id/addresses/:addressId/geocode', strictLimiter, (req, res) => geocodeCustomerTarget(req, res, 'customer_address'));
 
 app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
   try {
@@ -6156,19 +6078,27 @@ app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
       || validCoordinatePair(customer?.latitude, customer?.longitude);
     const address = resolvedServiceAddress(service, customer, targetAddress);
     if (!address) return res.status(422).json({ error: 'Cliente sem endereco utilizavel', code: 'address_missing' });
-    if (existing) return res.json({ location: existing, cached: true, target: targetAddress ? 'customer_address' : 'customer', address });
+    if (existing) return res.json({
+      location: existing,
+      cached: true,
+      target: targetAddress ? 'customer_address' : 'customer',
+      address,
+      source: targetAddress?.location_source || customer?.location_source || 'address',
+      precision: targetAddress?.location_precision || customer?.location_precision || 'exact'
+    });
 
     const usesServiceSnapshot = !!(service.address_snapshot || service.endereco || service.endereco_completo);
     const serviceAddressDiffers = usesServiceSnapshot && targetAddress
       && !areEquivalentCustomerAddresses({ endereco: address }, targetAddress);
-    const location = await enqueueNominatimSearch(address, {
-      cep: usesServiceSnapshot ? null : (targetAddress?.cep || customer?.cep),
-      numero: geocodeNumber(address),
-      cidade: targetAddress?.cidade || customer?.cidade
-    });
-    if (!location) return res.status(404).json({ error: 'Localizacao nao encontrada com seguranca', code: 'location_not_found', address });
+    const resolutionRecord = usesServiceSnapshot
+      ? { endereco_completo: address, numero: geocodeNumber(address), cidade: targetAddress?.cidade || customer?.cidade }
+      : (targetAddress || customer || { endereco_completo: address });
+    const resolution = await resolveAddressLocation(resolutionRecord, address);
+    const location = resolution.location;
+    if (!location) return res.status(404).json({ error: 'Localizacao nao encontrada com seguranca', code: resolution.code || 'location_not_found', address });
 
     const timestamp = new Date().toISOString();
+    const locationWrite = { ...location, ...locationMetadata({}, { source: resolution.source, precision: resolution.precision }) };
     const write = serviceAddressDiffers
       ? await runServiceWriteWithSchemaFallback(
         payload => db.from('services').update(payload).eq('id', service.id).select(),
@@ -6176,17 +6106,77 @@ app.post('/api/services/:id/geocode', strictLimiter, async (req, res) => {
       : targetAddress?.id
       ? await runCustomerAddressWriteWithSchemaFallback(
         payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', targetAddress.id).select(),
-        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode address')
+        { ...locationWrite, updated_at: timestamp }, 'POST /api/services/:id/geocode address')
       : await runCustomerWriteWithSchemaFallback(
         payload => db.from('customers').update(payload).eq('id', customerId).select(),
-        { ...location, updated_at: timestamp }, 'POST /api/services/:id/geocode customer');
+        { ...locationWrite, updated_at: timestamp }, 'POST /api/services/:id/geocode customer');
     if (write.error) throw write.error;
-    res.json({ location, cached: false, target: serviceAddressDiffers ? 'service' : (targetAddress ? 'customer_address' : 'customer'), address });
+    res.json({ location, cached: false, target: serviceAddressDiffers ? 'service' : (targetAddress ? 'customer_address' : 'customer'), address, source: resolution.source, precision: resolution.precision });
   } catch (error) {
     console.error('[POST /api/services/:id/geocode] Error:', error.message);
     res.status(503).json({ error: 'Falha temporaria ao localizar endereco', code: 'geocode_unavailable' });
   }
 });
+
+app.get('/api/location-review', async (req, res) => {
+  try {
+    const db = getSupabaseClient();
+    const { data: customers, error } = await db.from('customers').select('*').eq('ativo', true).order('nome', { ascending: true });
+    if (error) throw error;
+    let addresses = [];
+    try {
+      const result = await db.from('customer_addresses').select('*').eq('ativo', true).order('is_primary', { ascending: false });
+      if (result.error) throw result.error;
+      addresses = result.data || [];
+    } catch (addressError) {
+      if (!isMissingRelationError(addressError)) throw addressError;
+    }
+    const customerIds = (customers || []).map(item => item.id).filter(Boolean);
+    const servicesForCustomers = await safeSelectByIds(db, 'services', 'cliente_id', customerIds).catch(() => []);
+    const serviceCount = new Map();
+    servicesForCustomers.forEach(service => {
+      const id = String(serviceCustomerId(service) || '');
+      if (id) serviceCount.set(id, (serviceCount.get(id) || 0) + 1);
+    });
+    const addressedCustomers = new Set(addresses.map(item => String(item.customer_id)));
+    const rows = [];
+    addresses.forEach(address => {
+      const customer = (customers || []).find(item => String(item.id) === String(address.customer_id));
+      rows.push(locationReviewRow(customer, address, 'customer_address', serviceCount));
+    });
+    (customers || []).filter(customer => !addressedCustomers.has(String(customer.id))).forEach(customer => {
+      rows.push(locationReviewRow(customer, customer, 'customer', serviceCount));
+    });
+    rows.sort((a, b) => b.priority_score - a.priority_score || a.customer_name.localeCompare(b.customer_name));
+    res.json(rows);
+  } catch (error) {
+    console.error('[GET /api/location-review] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao carregar fila de localizacoes' });
+  }
+});
+
+function locationReviewRow(customer = {}, target = {}, targetKind = 'customer', serviceCount = new Map()) {
+  const coords = validCoordinatePair(target?.latitude, target?.longitude);
+  const cep = normalizeCep(target?.cep || customer?.cep);
+  const precision = target?.location_precision || (coords ? 'exact' : null);
+  const status = !cep ? 'missing_cep' : !coords ? 'missing_location' : precision === 'approximate' ? 'approximate' : precision === 'verified' ? 'verified' : 'exact';
+  const linkedServices = serviceCount.get(String(customer?.id || target?.customer_id || '')) || 0;
+  return {
+    customer_id: customer?.id || target?.customer_id || null,
+    customer_name: customer?.nome || target?.label || 'Cliente sem nome',
+    address_id: targetKind === 'customer_address' ? target?.id : null,
+    address_label: target?.label || (targetKind === 'customer_address' ? 'Unidade' : 'Principal'),
+    address: buildCustomerAddress(target) || target?.endereco_completo || target?.endereco || '',
+    cep: cep ? formatCep(cep) : '',
+    latitude: coords?.latitude ?? null,
+    longitude: coords?.longitude ?? null,
+    location_source: target?.location_source || null,
+    location_precision: precision,
+    status,
+    linked_services: linkedServices,
+    priority_score: linkedServices * 10 + (customer?.cliente_recorrente ? 5 : 0) + (status === 'missing_location' ? 3 : status === 'approximate' ? 2 : 0)
+  };
+}
 
 async function updateServicesCustomerLink(db, duplicateId, primaryId, addressId = null) {
   const payload = addressId
@@ -7009,11 +6999,13 @@ app.patch('/api/customers/:id/location', strictLimiter, async (req, res) => {
     const location = parseLocationBody(req.body || {});
     if (!location.ok) return res.status(400).json(location);
 
+    const metadata = locationMetadata(req.body || {}, { source: 'manual_map', precision: 'verified' });
     const { data, error } = await runCustomerWriteWithSchemaFallback(
       payload => db.from('customers').update(payload).eq('id', customerId).select(),
       {
         latitude: location.latitude,
         longitude: location.longitude,
+        ...metadata,
         updated_at: new Date().toISOString()
       },
       'PATCH /api/customers/:id/location'
@@ -7036,11 +7028,13 @@ app.patch('/api/customers/:id/addresses/:addressId/location', strictLimiter, asy
     const location = parseLocationBody(req.body || {});
     if (!location.ok) return res.status(400).json(location);
 
+    const metadata = locationMetadata(req.body || {}, { source: 'manual_map', precision: 'verified' });
     const { data, error } = await runCustomerAddressWriteWithSchemaFallback(
       payload => db.from('customer_addresses').update(payload).eq('customer_id', customerId).eq('id', addressId).select(),
       {
         latitude: location.latitude,
         longitude: location.longitude,
+        ...metadata,
         updated_at: new Date().toISOString()
       },
       'PATCH /api/customers/:id/addresses/:addressId/location'
@@ -7545,9 +7539,72 @@ app.get('/api/central-recados', async (req, res) => {
     if (destinatario) query = query.eq('destinatario_tipo', destinatario);
     const { data, error } = await query.order('data_referencia', { ascending: true }).limit(1000);
     if (error) throw error;
-    res.json(data || []);
+    let authUsers = [];
+    try { authUsers = await listSupabaseAuthUsers(db); } catch (error) { console.warn('[GET /api/app-users] Auth status indisponivel:', error.message); }
+    const byId = new Map(authUsers.map(user => [String(user.id), user]));
+    const byEmail = new Map(authUsers.map(user => [normalizeEmail(user.email), user]));
+    res.json((data || []).map(user => ({ ...user, ...authUserSummary(byId.get(String(user.auth_user_id)) || byEmail.get(normalizeEmail(user.email))) })));
   } catch (error) {
     res.status(500).json({ error: 'Falha ao listar recados', detail: error.message });
+  }
+});
+
+app.get('/api/app-users/auth-audit', async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const [authUsers, appResult] = await Promise.all([listSupabaseAuthUsers(db), db.from('app_users').select('id,auth_user_id,email,name,role,active')]);
+    if (appResult.error) throw appResult.error;
+    const appUsers = appResult.data || [];
+    res.json(authUsers.map(user => {
+      const email = normalizeEmail(user.email);
+      const linked = appUsers.find(item => String(item.auth_user_id || '') === String(user.id)) || null;
+      const emailMatch = appUsers.find(item => normalizeEmail(item.email) === email) || null;
+      let classification = linked ? 'administrative' : 'unmapped';
+      if (!linked && /preview/i.test(email || '')) classification = 'preview';
+      else if (!linked && /tecnico/i.test(email || '')) classification = 'technician';
+      return { id: user.id, email, classification, linked_app_user: linked, email_match_app_user: emailMatch, ...authUserSummary(user) };
+    }));
+  } catch (error) {
+    console.error('[GET /api/app-users/auth-audit] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao auditar vinculos Auth' });
+  }
+});
+
+app.post('/api/app-users/invite', strictLimiter, async (req, res) => {
+  try {
+    const actor = await requireAdmin(req, res);
+    if (!actor) return;
+    const db = getSupabaseClient();
+    const payload = normalizeAppUserPayload(req.body || {});
+    delete payload.password_hash;
+    if (!payload.email) return res.status(400).json({ error: 'Email e obrigatorio' });
+    if (!payload.role) payload.role = 'operador';
+    const authUsers = await listSupabaseAuthUsers(db);
+    let authUser = authUsers.find(user => normalizeEmail(user.email) === payload.email) || null;
+    let invited = false;
+    if (!authUser) {
+      const redirectTo = configuredAuthRedirect('invite');
+      const { data, error } = await db.auth.admin.inviteUserByEmail(payload.email, { data: { name: payload.name || payload.email }, ...(redirectTo ? { redirectTo } : {}) });
+      if (error) throw error;
+      authUser = data?.user;
+      invited = true;
+    }
+    if (!authUser?.id) throw new Error('Supabase Auth nao retornou o usuario convidado');
+    const now = new Date().toISOString();
+    const existing = await maybeSingle(db.from('app_users').select('*').eq('email', payload.email).limit(1));
+    const savedPayload = { ...payload, auth_user_id: authUser.id, auth_linked_at: now, ...(invited ? { invite_sent_at: now, invited_by: actor.appUser?.email || actor.user?.email || null } : {}), updated_at: now };
+    const query = existing ? db.from('app_users').update(savedPayload).eq('id', existing.id) : db.from('app_users').insert([{ ...savedPayload, created_at: now }]);
+    const { data, error } = await query.select();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Este usuario Auth ja esta vinculado a outro perfil' });
+      throw error;
+    }
+    res.status(invited ? 201 : 200).json({ user: { ...(data?.[0] || {}), ...authUserSummary(authUser) }, invited });
+  } catch (error) {
+    console.error('[POST /api/app-users/invite] Error:', error.message);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao convidar ou vincular usuario' });
   }
 });
 

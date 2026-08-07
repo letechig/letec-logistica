@@ -2,16 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 async function adminHeaders(baseUrl) {
-  const response = await fetch(`${baseUrl}/api/app-auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'letechigienizacaoosp@gmail.com', password: 'Letec@835778' })
-  });
-  assert.equal(response.status, 201);
-  const payload = await response.json();
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${payload.token}`
+    Authorization: 'Bearer test-admin-jwt'
   };
 }
 
@@ -27,14 +20,18 @@ function makeState() {
       { id: 2, nome: 'Beta Cliente', nome_normalizado: 'BETA CLIENTE', telefone: '552222222222', ativo: true, endereco: 'Rua B' },
       { id: 3, nome: 'Beta Cliente', nome_normalizado: 'BETA CLIENTE', telefone: '553333333333', ativo: true, endereco: 'Rua B' }
     ],
-    services: [{ id: 10, cliente_id: 2, cliente: 'Beta Cliente', endereco: 'Rua B' }],
+    services: [{ id: 10, cliente_id: 2, customer_address_id: 'addr-2', cliente: 'Beta Cliente', endereco: 'Rua B, 20 - Centro - Sao Paulo / SP' }],
     technicians: [{ id: 'tec-1', nome: 'Joao', ativo: true }],
     vehicles: [{ id: 'vei-1', nome: 'Fox', ativo: true }],
     contracts: [{ id: 20, customer_id: 2, tipo_servico: 'Controle de pragas' }],
     customer_service_history: [{ id: 30, customer_id: 2, servico: 'DS' }],
     data_reviews: [{ id: 40, customer_id: 2, tipo_problema: 'possivel_duplicidade' }],
     customer_reminders: [{ id: 'rem-1', customer_id: 2, mensagem: 'x' }],
-    customer_addresses: [],
+    customer_addresses: [
+      { id: 'addr-1', customer_id: 1, label: 'Principal', endereco: 'Rua A, 10 - Centro - Sao Paulo / SP', endereco_completo: 'Rua A, 10 - Centro - Sao Paulo / SP', cep: '01001000', rua: 'Rua A', numero: '10', bairro: 'Centro', cidade: 'Sao Paulo', uf: 'SP', is_primary: true, ativo: true },
+      { id: 'addr-2', customer_id: 2, label: 'Principal', endereco: 'Rua B, 20 - Centro - Sao Paulo / SP', endereco_completo: 'Rua B, 20 - Centro - Sao Paulo / SP', cep: '02002000', rua: 'Rua B', numero: '20', bairro: 'Centro', cidade: 'Sao Paulo', uf: 'SP', is_primary: true, ativo: true },
+      { id: 'addr-3', customer_id: 3, label: 'Principal', endereco: 'Rua B, 30 - Centro - Sao Paulo / SP', endereco_completo: 'Rua B, 30 - Centro - Sao Paulo / SP', cep: '03003000', rua: 'Rua B', numero: '30', bairro: 'Centro', cidade: 'Sao Paulo', uf: 'SP', is_primary: true, ativo: true }
+    ],
     customer_contacts: [],
     customer_aliases: [],
     storage_uploads: [],
@@ -45,6 +42,8 @@ function makeState() {
     technician_events: [],
     technician_messages: [{ id: 70, date: '2026-05-14', tecnico: 'Joao', mensagem: 'Recado', lido: false }],
     activity_logs: []
+    ,app_users: [{ id: 1, auth_user_id: 'auth-admin-1', email: 'letechigienizacaoosp@gmail.com', name: 'Admin Teste', role: 'admin', active: true }]
+    ,app_user_sessions: []
   };
 }
 
@@ -139,6 +138,22 @@ function makeBuilder(state, table) {
 
 function makeDb(state) {
   return {
+    auth: {
+      async getUser(token) {
+        if (token !== 'test-admin-jwt') return { data: { user: null }, error: { message: 'invalid token' } };
+        return { data: { user: { id: 'auth-admin-1', email: 'letechigienizacaoosp@gmail.com' } }, error: null };
+      },
+      async resetPasswordForEmail(email) {
+        state.auth_recovery_requests = state.auth_recovery_requests || [];
+        state.auth_recovery_requests.push(email);
+        return { data: {}, error: state.__authRecoveryError || null };
+      },
+      async signInWithOtp({ email }) {
+        state.auth_magic_link_requests = state.auth_magic_link_requests || [];
+        state.auth_magic_link_requests.push(email);
+        return { data: {}, error: null };
+      }
+    },
     async rpc(name, params) {
       assert.equal(name, 'transition_service_reschedule');
       const original = state.services.find(service => String(service.id) === String(params.p_service_id));
@@ -201,6 +216,30 @@ function requiredAddress(overrides = {}) {
   };
 }
 
+test('GET /api/app-auth/me autoriza Supabase Auth somente com app_users ativo', async () => {
+  await withServer(async (baseUrl, state) => {
+    const allowed = await fetch(`${baseUrl}/api/app-auth/me`, { headers: await adminHeaders(baseUrl) });
+    assert.equal(allowed.status, 200);
+    assert.equal((await allowed.json()).auth_type, 'supabase_auth');
+
+    state.app_users[0].active = false;
+    const denied = await fetch(`${baseUrl}/api/app-auth/me`, { headers: await adminHeaders(baseUrl) });
+    assert.equal(denied.status, 401);
+  });
+});
+
+test('POST /api/app-auth/recovery responde de forma neutra mesmo se provedor falhar', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.__authRecoveryError = { message: 'email rate limit exceeded' };
+    const response = await fetch(`${baseUrl}/api/app-auth/recovery`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'alguem@example.com' })
+    });
+    assert.equal(response.status, 202);
+    assert.equal((await response.json()).ok, true);
+    assert.deepEqual(state.auth_recovery_requests, ['alguem@example.com']);
+  });
+});
+
 test('GET /api/customers suporta autocomplete limitado e paginação com total', async () => {
   await withServer(async (baseUrl) => {
     const auto = await fetch(`${baseUrl}/api/customers?search=Beta&limit=10`);
@@ -208,6 +247,8 @@ test('GET /api/customers suporta autocomplete limitado e paginação com total',
     const autoPayload = await auto.json();
     assert.equal(Array.isArray(autoPayload), true);
     assert.equal(autoPayload.length, 2);
+    assert.equal(autoPayload.every(customer => customer.scheduling_eligible === true), true);
+    assert.equal(autoPayload.every(customer => Array.isArray(customer.scheduling_blockers)), true);
 
     const paged = await fetch(`${baseUrl}/api/customers?page=1&limit=2`);
     assert.equal(paged.status, 200);
@@ -215,6 +256,12 @@ test('GET /api/customers suporta autocomplete limitado e paginação com total',
     assert.equal(payload.items.length, 2);
     assert.equal(payload.total, 3);
     assert.equal(payload.limit, 2);
+
+    const exact = await fetch(`${baseUrl}/api/customers/1`);
+    assert.equal(exact.status, 200);
+    const exactPayload = await exact.json();
+    assert.equal(exactPayload.scheduling_eligible, true);
+    assert.equal(exactPayload.scheduling_address_id, 'addr-1');
   });
 });
 
@@ -380,6 +427,7 @@ test('POST /api/customers cria cliente basico mesmo sem colunas opcionais legada
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nome: 'Cliente Schema Legado',
+        telefone: '(11) 98888-1111',
         origem: 'teste',
         ...requiredAddress({
           endereco: 'Rua Schema, 10',
@@ -400,6 +448,7 @@ test('POST /api/customers cria cliente basico mesmo sem colunas opcionais legada
 
 test('POST /api/customers/quick cria cliente incompleto sem endereco obrigatorio', async () => {
   await withServer(async (baseUrl, state) => {
+    const addressCount = state.customer_addresses.length;
     const response = await fetch(`${baseUrl}/api/customers/quick`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -417,6 +466,13 @@ test('POST /api/customers/quick cria cliente incompleto sem endereco obrigatorio
     assert.equal(payload.is_incomplete, true);
     assert.equal(state.customers.some(customer => customer.nome === 'Cliente Rapido'), true);
     assert.equal(state.customer_addresses.some(address => address.customer_id === payload.id), false);
+    assert.equal(state.customer_addresses.length, addressCount);
+
+    const listed = await fetch(`${baseUrl}/api/customers?search=Cliente%20Rapido&limit=10`);
+    const customers = await listed.json();
+    assert.equal(customers[0].scheduling_eligible, false);
+    assert.equal(customers[0].is_incomplete, true);
+    assert.ok(customers[0].scheduling_blockers.includes('service_customer_address_required'));
   });
 });
 
@@ -570,11 +626,36 @@ test('PUT /api/services/:id retorna service_not_found quando agenda nao existe n
   });
 });
 
+test('PUT /api/services/:id nao remove vinculo e bloqueia edicao administrativa legada', async () => {
+  await withServer(async (baseUrl, state) => {
+    const unlink = await fetch(`${baseUrl}/api/services/10`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cliente_id: null })
+    });
+    assert.equal(unlink.status, 422);
+    assert.equal((await unlink.json()).code, 'service_customer_required');
+    assert.equal(state.services[0].cliente_id, 2);
+
+    state.services.push({ id: 19, cliente: 'Legado sem vinculo', status: 'agendado', exec_status: 'agendado' });
+    const legacyEdit = await fetch(`${baseUrl}/api/services/19`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ observacoes: 'Tentativa administrativa' })
+    });
+    assert.equal(legacyEdit.status, 422);
+    assert.equal((await legacyEdit.json()).code, 'service_customer_required');
+    assert.equal(state.services.find(service => service.id === 19).observacoes, undefined);
+  });
+});
+
 test('PUT /api/services/:id bloqueia outro atendimento ativo do mesmo tecnico', async () => {
   await withServer(async (baseUrl, state) => {
     state.services = [
       {
         id: 10,
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
         date: '2026-05-25',
         cliente: 'Cliente Ativo',
         horario: '10:30',
@@ -585,6 +666,8 @@ test('PUT /api/services/:id bloqueia outro atendimento ativo do mesmo tecnico', 
       },
       {
         id: 11,
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
         date: '2026-05-25',
         cliente: 'Outro Cliente',
         horario: '',
@@ -613,6 +696,8 @@ test('PUT /api/services/:id permite avancar o proprio atendimento ativo', async 
     state.services = [
       {
         id: 10,
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
         date: '2026-05-25',
         cliente: 'Cliente Ativo',
         equipe: 'Lucas Eduardo',
@@ -639,6 +724,8 @@ test('PUT /api/services/:id ignora atualizacao operacional atrasada que voltaria
     state.services = [
       {
         id: 10,
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
         date: '2026-05-25',
         cliente: 'Cliente Ativo',
         equipe: 'Lucas Eduardo',
@@ -667,6 +754,8 @@ test('PUT /api/services/:id libera novo atendimento quando anterior esta finaliz
     state.services = [
       {
         id: 10,
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
         date: '2026-05-25',
         cliente: 'Cliente Finalizado',
         equipe: 'Lucas Eduardo',
@@ -675,6 +764,8 @@ test('PUT /api/services/:id libera novo atendimento quando anterior esta finaliz
       },
       {
         id: 11,
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
         date: '2026-05-25',
         cliente: 'Cliente Problema',
         equipe: 'Lucas Eduardo',
@@ -683,6 +774,8 @@ test('PUT /api/services/:id libera novo atendimento quando anterior esta finaliz
       },
       {
         id: 12,
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
         date: '2026-05-25',
         cliente: 'Proximo Cliente',
         equipe: 'Lucas Eduardo',
@@ -706,8 +799,8 @@ test('PUT /api/services/:id libera novo atendimento quando anterior esta finaliz
 test('PUT /api/services/:id ignora execucao ativa legada quando status administrativo e terminal', async () => {
   await withServer(async (baseUrl, state) => {
     state.services = [
-      { id:10, date:'2026-05-25', status:'executado', exec_status:'em_deslocamento', tecnicos_ids:['tec-1'] },
-      { id:11, date:'2026-05-25', status:'agendado', exec_status:'agendado', tecnicos_ids:['tec-1'] }
+      { id:10, cliente_id:1, customer_address_id:'addr-1', date:'2026-05-25', status:'executado', exec_status:'em_deslocamento', tecnicos_ids:['tec-1'] },
+      { id:11, cliente_id:1, customer_address_id:'addr-1', date:'2026-05-25', status:'agendado', exec_status:'agendado', tecnicos_ids:['tec-1'] }
     ];
     const response = await fetch(`${baseUrl}/api/services/11`, {
       method:'PUT', headers:{ 'Content-Type':'application/json' },
@@ -765,7 +858,7 @@ test('POST /api/services/:id/transition cancela fluxo ativo e exige motivo', asy
 
 test('POST /api/services/:id/transition reagenda criando uma unica visita vinculada', async () => {
   await withServer(async (baseUrl, state) => {
-    state.services = [{ id:10, date:'2026-07-23', data:'2026-07-23', horario:'10:00', cliente:'Alpha', status:'agendado', exec_status:'problema' }];
+    state.services = [{ id:10, cliente_id:1, customer_address_id:'addr-1', date:'2026-07-23', data:'2026-07-23', horario:'10:00', cliente:'Alpha', status:'agendado', exec_status:'problema' }];
     const headers = await adminHeaders(baseUrl);
     const body = JSON.stringify({ action:'reschedule', reason:'Cliente solicitou nova data', new_date:'2026-07-30', new_time:'14:30' });
     const first = await fetch(`${baseUrl}/api/services/10/transition`, { method:'POST', headers, body });
@@ -817,7 +910,7 @@ test('PUT /api/customers/:id/addresses ignora colunas opcionais ausentes em sche
   });
 });
 
-test('PUT /api/services/:id ignora colunas opcionais ausentes em schema legado', async () => {
+test('PUT /api/services/:id falha explicitamente sem customer_address_id no schema', async () => {
   await withServer(async (baseUrl, state) => {
     state.__missingColumns = {
       services: new Set(['date', 'data', 'exec_status', 'customer_address_id', 'tecnicos_ids'])
@@ -829,23 +922,18 @@ test('PUT /api/services/:id ignora colunas opcionais ausentes em schema legado',
       body: JSON.stringify({
         date: '2026-05-20',
         data: '2026-05-20',
-        cliente: 'Cliente Editado',
-        endereco: 'Rua Editada',
+        cliente_id: 1,
         status: 'agendado',
         customer_address_id: 'addr-1',
         tecnicos_ids: ['tec-2']
       })
     });
 
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 500);
     const payload = await response.json();
-    assert.equal(payload.cliente, 'Cliente Editado');
-    assert.equal(payload.endereco, 'Rua Editada');
-    assert.equal(payload.status, 'agendado');
-    assert.equal(payload.date, undefined);
-    assert.equal(payload.customer_address_id, undefined);
-    assert.equal(payload.tecnicos_ids, undefined);
-    assert.equal(payload.data, undefined);
+    assert.equal(payload.code, 'PGRST204');
+    assert.match(payload.message, /customer_address_id/);
+    assert.equal(state.services[0].customer_address_id, 'addr-2');
   });
 });
 
@@ -1114,20 +1202,32 @@ test('POST /api/services salva cliente_id no agendamento', async () => {
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 99, date: '2026-05-13', cliente_id: 1, cliente: 'Alpha Cliente', salvar_unidade_cliente: false })
+      body: JSON.stringify({
+        id: 99,
+        date: '2026-05-13',
+        cliente_id: 1,
+        customer_address_id: 'addr-1',
+        cliente: 'Nome nao confiavel',
+        endereco: 'Endereco nao confiavel'
+      })
     });
     assert.equal(response.status, 201);
     const payload = await response.json();
     assert.equal(payload.id, 99);
     assert.equal(payload.cliente_id, 1);
+    assert.equal(payload.customer_address_id, 'addr-1');
     assert.equal(payload.cliente, 'Alpha Cliente');
+    assert.equal(payload.endereco, 'Rua A, 10 - Centro - Sao Paulo / SP');
+    assert.equal(payload.client_name_snapshot, 'Alpha Cliente');
+    assert.equal(payload.address_snapshot, 'Rua A, 10 - Centro - Sao Paulo / SP');
     assert.equal(payload.data, '2026-05-13');
   });
 });
 
-test('POST /api/services vincula cliente existente por nome sem duplicar cadastro', async () => {
+test('POST /api/services rejeita nome identico sem IDs e nao tenta vinculo automatico', async () => {
   await withServer(async (baseUrl, state) => {
     const beforeCustomers = state.customers.length;
+    const beforeServices = state.services.length;
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1138,36 +1238,35 @@ test('POST /api/services vincula cliente existente por nome sem duplicar cadastr
         ...requiredAddress({ endereco: 'Rua A', endereco_completo: 'Rua A, 10 - Centro - Sao Paulo / SP', rua: 'Rua A' })
       })
     });
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 422);
     const payload = await response.json();
-    assert.equal(payload.cliente_id, 1);
+    assert.equal(payload.code, 'service_customer_required');
     assert.equal(state.customers.length, beforeCustomers);
-    assert.equal(state.services.find(service => service.id === 100).cliente_id, 1);
-    assert.equal(state.customer_addresses.length, 1);
-    assert.equal(state.services.find(service => service.id === 100).customer_address_id, state.customer_addresses[0].id);
-    assert.equal(state.customer_addresses[0].customer_id, 1);
+    assert.equal(state.services.length, beforeServices);
   });
 });
 
-test('POST /api/services rejeita cliente ambíguo sem criar serviço ou duplicata', async () => {
+test('POST /api/services rejeita unidade pertencente a outro cliente', async () => {
   await withServer(async (baseUrl, state) => {
     const beforeCustomers = state.customers.length;
     const beforeServices = state.services.length;
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 102, date: '2026-05-13', cliente: 'Beta Cliente' })
+      body: JSON.stringify({ id: 102, date: '2026-05-13', cliente_id: 1, customer_address_id: 'addr-2' })
     });
-    assert.equal(response.status, 409);
+    assert.equal(response.status, 422);
     const payload = await response.json();
-    assert.equal(payload.code, 'customer_link_ambiguous');
+    assert.equal(payload.code, 'service_customer_address_mismatch');
     assert.equal(state.customers.length, beforeCustomers);
     assert.equal(state.services.length, beforeServices);
   });
 });
 
-test('POST /api/services cria cliente automaticamente quando agenda usa cliente novo', async () => {
+test('POST /api/services nunca cria cliente automaticamente quando recebe apenas nome novo', async () => {
   await withServer(async (baseUrl, state) => {
+    const customerCount = state.customers.length;
+    const serviceCount = state.services.length;
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1183,15 +1282,56 @@ test('POST /api/services cria cliente automaticamente quando agenda usa cliente 
         })
       })
     });
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 422);
     const payload = await response.json();
-    const created = state.customers.find(customer => customer.nome === 'Cliente Novo Agenda');
-    assert.ok(created);
-    assert.equal(created.origem, 'agenda');
-    assert.equal(payload.cliente_id, created.id);
-    assert.equal(state.services.find(service => service.id === 101).cliente_id, created.id);
-    assert.equal(state.customer_aliases.some(alias => alias.customer_id === created.id && alias.alias_normalizado === 'CLIENTE NOVO AGENDA'), true);
-    assert.equal(state.customer_addresses.some(address => address.customer_id === created.id && address.endereco === 'Rua Nova, 123'), true);
+    assert.equal(payload.code, 'service_customer_required');
+    assert.equal(state.customers.length, customerCount);
+    assert.equal(state.services.length, serviceCount);
+  });
+});
+
+test('POST /api/services rejeita cliente inativo, sem contato ou sem unidade', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers[0].ativo = false;
+    const inactive = await fetch(`${baseUrl}/api/services`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 110, date: '2026-05-13', cliente_id: 1, customer_address_id: 'addr-1' })
+    });
+    assert.equal(inactive.status, 409);
+    assert.equal((await inactive.json()).code, 'service_customer_inactive');
+
+    state.customers[0].ativo = true;
+    state.customers[0].telefone = '';
+    const withoutContact = await fetch(`${baseUrl}/api/services`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 111, date: '2026-05-13', cliente_id: 1, customer_address_id: 'addr-1' })
+    });
+    assert.equal(withoutContact.status, 422);
+    assert.equal((await withoutContact.json()).code, 'service_customer_contact_required');
+
+    state.customers[0].telefone = '551111111111';
+    const withoutAddress = await fetch(`${baseUrl}/api/services`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 112, date: '2026-05-13', cliente_id: 1 })
+    });
+    assert.equal(withoutAddress.status, 422);
+    assert.equal((await withoutAddress.json()).code, 'service_customer_address_required');
+    assert.equal(state.services.some(service => [110, 111, 112].includes(service.id)), false);
+  });
+});
+
+test('POST /api/services falha explicitamente se cliente_id nao existe no schema', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.__missingColumns = { services: new Set(['cliente_id']) };
+    const response = await fetch(`${baseUrl}/api/services`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 113, date: '2026-05-13', cliente_id: 1, customer_address_id: 'addr-1' })
+    });
+    assert.equal(response.status, 500);
+    const payload = await response.json();
+    assert.equal(payload.code, 'service_create_failed');
+    assert.equal(payload.details, 'Coluna ausente no schema: cliente_id');
+    assert.equal(state.services.some(service => service.id === 113), false);
   });
 });
 
@@ -1245,17 +1385,15 @@ test('POST /api/services/customer-link-repair respeita dry-run e aplica apenas c
     });
     assert.equal(applied.status, 200);
     const appliedPayload = await applied.json();
-    assert.equal(appliedPayload.linked, 3);
-    assert.equal(appliedPayload.created, 1);
+    assert.equal(appliedPayload.linked, 1);
+    assert.equal(appliedPayload.created, 0);
     assert.equal(appliedPayload.ambiguous, 1);
+    assert.equal(appliedPayload.requires_customer_creation, 2);
     assert.equal(state.services.find(service => service.id === 11).cliente_id, 1);
-    assert.ok(state.services.find(service => service.id === 12).cliente_id);
-    assert.equal(state.services.find(service => service.id === 14).cliente_id, state.services.find(service => service.id === 12).cliente_id);
+    assert.equal(state.services.find(service => service.id === 12).cliente_id, undefined);
+    assert.equal(state.services.find(service => service.id === 14).cliente_id, undefined);
     assert.equal(state.services.find(service => service.id === 13).cliente_id, undefined);
-    assert.equal(state.customers.length, originalCustomers + 1);
-    const created = state.customers.find(customer => customer.nome === 'Cliente Novo Agenda');
-    assert.equal(created.tipo_cliente, 'Eventual');
-    assert.equal(created.origem, 'agenda_repair');
+    assert.equal(state.customers.length, originalCustomers);
   });
 });
 

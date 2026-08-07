@@ -121,9 +121,28 @@ CREATE TABLE IF NOT EXISTS app_users (
   active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  auth_linked_at TIMESTAMP WITH TIME ZONE,
+  invite_sent_at TIMESTAMP WITH TIME ZONE,
+  invited_by TEXT,
   UNIQUE(auth_user_id),
   UNIQUE(email)
 );
+
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS auth_linked_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS invite_sent_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS invited_by TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'app_users_auth_user_id_fkey'
+  ) THEN
+    ALTER TABLE app_users
+      ADD CONSTRAINT app_users_auth_user_id_fkey
+      FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
+      ON DELETE SET NULL NOT VALID;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_app_users_auth_user_id ON app_users(auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(LOWER(email));
@@ -602,6 +621,9 @@ CREATE TABLE IF NOT EXISTS customers (
   referencia       TEXT,
   latitude         DECIMAL(10,8),
   longitude        DECIMAL(11,8),
+  location_source  TEXT CHECK (location_source IS NULL OR location_source IN ('address', 'cep', 'manual_map', 'technician_arrival')),
+  location_precision TEXT CHECK (location_precision IS NULL OR location_precision IN ('exact', 'approximate', 'verified')),
+  location_verified_at TIMESTAMP WITH TIME ZONE,
   tipo_local       TEXT,
   restricoes_operacionais TEXT,
   nivel_urgencia_padrao TEXT DEFAULT 'normal' CHECK (nivel_urgencia_padrao IN ('normal', 'urgente', 'crítico')),

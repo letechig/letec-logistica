@@ -192,8 +192,41 @@ test('POST /api/services/:id/geocode localiza endereco vinculado e nao aceita pa
       assert.equal(payload.address, 'Rua A, 1');
       assert.equal(payload.location.latitude, -23.55052);
       assert.equal(payload.target, 'customer_address');
+      assert.equal(payload.source, 'address');
+      assert.equal(payload.precision, 'exact');
     });
   } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('POST /api/services/:id/geocode usa rua como aproximacao quando numero nao confere', async () => {
+  const originalFetch = global.fetch;
+  const originalAddress = services[0].endereco;
+  services[0].endereco = 'Rua A, 999';
+  global.fetch = async (url, options) => {
+    if (String(url).startsWith('https://nominatim.openstreetmap.org/search')) {
+      return new Response(JSON.stringify([{
+        lat: '-23.55110', lon: '-46.63420', display_name: 'Rua A, Sao Paulo, Brasil',
+        address: { road: 'Rua A', city: 'Sao Paulo' }
+      }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return originalFetch(url, options);
+  };
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/services/1/geocode`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' }
+      });
+      const payload = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(payload));
+      assert.equal(payload.precision, 'approximate');
+      assert.equal(payload.source, 'address');
+      assert.equal(payload.location.latitude, -23.5511);
+    });
+  } finally {
+    services[0].endereco = originalAddress;
     global.fetch = originalFetch;
   }
 });

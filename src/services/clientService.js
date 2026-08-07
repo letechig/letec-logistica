@@ -57,6 +57,9 @@ function createClientService(deps) {
       referencia: input.referencia ? String(input.referencia).trim() : null,
       latitude: input.latitude ? parseFloat(input.latitude) : null,
       longitude: input.longitude ? parseFloat(input.longitude) : null,
+      location_source: ['address', 'cep', 'manual_map', 'technician_arrival'].includes(String(input.location_source || '').toLowerCase()) ? String(input.location_source).toLowerCase() : null,
+      location_precision: ['exact', 'approximate', 'verified'].includes(String(input.location_precision || '').toLowerCase()) ? String(input.location_precision).toLowerCase() : null,
+      location_verified_at: input.location_precision === 'verified' ? (input.location_verified_at || new Date().toISOString()) : null,
       tipo_local: input.tipo_local ? String(input.tipo_local).trim() : null,
       restricoes_operacionais: input.restricoes_operacionais ? String(input.restricoes_operacionais).trim() : null,
       nome_fantasia: input.nome_fantasia ? String(input.nome_fantasia).trim() : null,
@@ -105,6 +108,13 @@ function createClientService(deps) {
 
   function validateClientPayload(payload) {
     if (!payload.nome) return { ok: false, status: 400, error: 'Nome é obrigatório', code: 'client_name_required' };
+    const contactDigits = String(payload.whatsapp || payload.telefone || '').replace(/\D/g, '');
+    const validContact = contactDigits.startsWith('55')
+      ? [12, 13].includes(contactDigits.length)
+      : [10, 11].includes(contactDigits.length);
+    if (!validContact) {
+      return { ok: false, status: 400, error: 'Telefone ou WhatsApp valido e obrigatorio', code: 'client_contact_required' };
+    }
     if (payload._meta?.categoria === 'contrato' && !payload.periodicidade) {
       return { ok: false, status: 400, error: 'Periodicidade é obrigatória para clientes de contrato', code: 'client_periodicity_required' };
     }
@@ -171,6 +181,7 @@ function createClientService(deps) {
     const normalized = normalizeClientPayload(input);
     const validation = validateClientPayload(normalized);
     if (!validation.ok) return { status: validation.status, error: validation };
+    normalized.is_incomplete = false;
 
     const duplicates = await findDuplicateClients(db, normalized);
     if (duplicates.length && input.allow_duplicate !== true) {
@@ -195,7 +206,27 @@ function createClientService(deps) {
     const created = data?.[0] || null;
     if (created?.id) {
       try { await ensureCustomerAlias(db, created.id, created.nome || normalized.nome, input.origem || 'cadastro'); } catch (e) {}
-      try { await ensureCustomerAddress(db, created.id, { ...dbPayload(normalized), origem: input.origem || 'cadastro' }, { origem: input.origem || 'cadastro', is_primary: true, label: 'Principal' }); } catch (e) {}
+      try {
+        const address = await ensureCustomerAddress(db, created.id, { ...dbPayload(normalized), origem: input.origem || 'cadastro' }, { origem: input.origem || 'cadastro', is_primary: true, label: 'Principal' });
+        if (!address?.id) {
+          return {
+            status: 503,
+            error: {
+              code: 'customer_address_persistence_required',
+              error: 'Cliente criado, mas a unidade obrigatoria nao foi persistida. Aplique migration-clientes-unidades.sql antes de agendar.'
+            }
+          };
+        }
+      } catch (error) {
+        return {
+          status: 503,
+          error: {
+            code: 'customer_address_persistence_required',
+            error: 'Cliente criado, mas a unidade obrigatoria nao foi persistida. Corrija o schema antes de agendar.',
+            details: publicDbErrorDetails(error)
+          }
+        };
+      }
     }
     return { status: 201, data: created };
   }
@@ -204,6 +235,7 @@ function createClientService(deps) {
     const normalized = normalizeClientPayload(input);
     const validation = validateClientPayload(normalized);
     if (!validation.ok) return { status: validation.status, error: validation };
+    normalized.is_incomplete = false;
 
     const duplicates = await findDuplicateClients(db, normalized, id);
     if (duplicates.length && input.allow_duplicate !== true) {
@@ -224,7 +256,31 @@ function createClientService(deps) {
       'clientService.updateClient'
     );
     if (error) return { status: 500, error };
-    return { status: 200, data: data?.[0] || null };
+    const updated = data?.[0] || null;
+    if (updated?.id) {
+      try {
+        const address = await ensureCustomerAddress(db, updated.id, { ...dbPayload(normalized), origem: input.origem || 'cadastro' }, { origem: input.origem || 'cadastro', is_primary: true, label: 'Principal' });
+        if (!address?.id) {
+          return {
+            status: 503,
+            error: {
+              code: 'customer_address_persistence_required',
+              error: 'A unidade obrigatoria do cliente nao foi persistida. Aplique migration-clientes-unidades.sql.'
+            }
+          };
+        }
+      } catch (addressError) {
+        return {
+          status: 503,
+          error: {
+            code: 'customer_address_persistence_required',
+            error: 'A unidade obrigatoria do cliente nao foi persistida. Corrija o schema antes de agendar.',
+            details: publicDbErrorDetails(addressError)
+          }
+        };
+      }
+    }
+    return { status: 200, data: updated };
   }
 
   async function createQuickClient(db, input = {}) {
@@ -240,13 +296,7 @@ function createClientService(deps) {
       return { status: 400, error: { code: 'client_name_required', error: 'Nome ou apelido e obrigatorio' } };
     }
 
-    const missingImportantData = [
-      normalized.whatsapp || normalized.telefone,
-      normalized.cep && normalized.numero && normalized.rua && normalized.bairro && normalized.cidade && normalized.uf,
-      normalized.categoria || normalized.tipo_cliente,
-      normalized.vendedor_responsavel
-    ].filter(Boolean).length < 4;
-    normalized.is_incomplete = input.is_incomplete !== false || missingImportantData;
+    normalized.is_incomplete = true;
     normalized.ativo = normalized.status_operacional === 'Inativo' ? false : true;
 
     const duplicates = await findDuplicateClients(db, normalized);
@@ -272,9 +322,6 @@ function createClientService(deps) {
     const created = data?.[0] || null;
     if (created?.id) {
       try { await ensureCustomerAlias(db, created.id, created.nome || normalized.nome, input.origem || 'cliente_rapido'); } catch (e) {}
-      if (normalized.cep || normalized.endereco || normalized.rua || normalized.numero) {
-        try { await ensureCustomerAddress(db, created.id, { ...dbPayload(normalized), origem: input.origem || 'cliente_rapido' }, { origem: input.origem || 'cliente_rapido', is_primary: true, label: 'Principal' }); } catch (e) {}
-      }
     }
     return { status: 201, data: created };
   }

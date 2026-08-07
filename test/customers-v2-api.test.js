@@ -9,9 +9,9 @@ const app = require('../server');
 function makeState() {
   return {
     customers: [
-      { id: 1, nome: 'Rede Moriah', nome_normalizado: 'REDE MORIAH', ativo: true, endereco: 'Av. Moaci, 974', status_operacional: 'Ativo', categoria: 'contrato' },
-      { id: 2, nome: 'REDE MORIAH', nome_normalizado: 'REDE MORIAH', ativo: true, endereco: 'Av. Moaci, 3236', status_operacional: 'Ativo', categoria: 'contrato' },
-      { id: 3, nome: 'Hospital Moriah', nome_normalizado: 'HOSPITAL MORIAH', ativo: true, endereco: 'Av. Moaci, 974', status_operacional: 'Eventual' }
+      { id: 1, nome: 'Rede Moriah', nome_normalizado: 'REDE MORIAH', telefone: '5511999990001', ativo: true, endereco: 'Av. Moaci, 974', status_operacional: 'Ativo', categoria: 'contrato' },
+      { id: 2, nome: 'REDE MORIAH', nome_normalizado: 'REDE MORIAH', telefone: '5511999990002', ativo: true, endereco: 'Av. Moaci, 3236', status_operacional: 'Ativo', categoria: 'contrato' },
+      { id: 3, nome: 'Hospital Moriah', nome_normalizado: 'HOSPITAL MORIAH', telefone: '5511999990003', ativo: true, endereco: 'Av. Moaci, 974', status_operacional: 'Eventual' }
     ],
     services: [{ id: 10, cliente_id: 2, cliente: 'REDE MORIAH', endereco: 'Av. Moaci, 3236' }],
     contracts: [{ id: 20, customer_id: 2, tipo_servico: 'Contrato' }],
@@ -19,7 +19,9 @@ function makeState() {
     data_reviews: [{ id: 40, customer_id: 2 }],
     customer_reminders: [{ id: 'rem-1', customer_id: 2 }],
     customer_addresses: [],
+    customer_contacts: [],
     customer_aliases: [],
+    activity_logs: [],
     app_users: [{ id: 1, auth_user_id: 'admin-1', email: 'admin@letec.test', role: 'admin', active: true }]
   };
 }
@@ -123,6 +125,7 @@ test('Clientes V2 bloqueia novo cadastro com mesmo nome canonico', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nome: ' rede   moriah ',
+        telefone: '(11) 99999-9999',
         ...requiredAddress({ endereco: 'Outro endereco', endereco_completo: 'Outro endereco, 10 - Centro - Sao Paulo / SP' })
       })
     });
@@ -134,8 +137,16 @@ test('Clientes V2 bloqueia novo cadastro com mesmo nome canonico', async () => {
   });
 });
 
-test('Clientes V2 cria unidade ao salvar servico com cliente existente e endereco novo', async () => {
+test('Clientes V2 exige unidade persistida ao salvar servico com cliente existente', async () => {
   await withServer(async (baseUrl, state) => {
+    state.customer_addresses.push({
+      id: 'addr-1', customer_id: 1, ativo: true, is_primary: true,
+      ...requiredAddress({
+        endereco: 'Av. Moaci, 971',
+        endereco_completo: 'Av. Moaci, 971 - Moema - Sao Paulo / SP',
+        rua: 'Av. Moaci', numero: '971', bairro: 'Moema'
+      })
+    });
     const response = await fetch(`${baseUrl}/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,23 +154,20 @@ test('Clientes V2 cria unidade ao salvar servico com cliente existente e enderec
         id: 99,
         date: '2026-05-19',
         cliente_id: 1,
-        cliente: 'Rede Moriah',
-        ...requiredAddress({
-          endereco: 'Av. Moaci, 971',
-          endereco_completo: 'Av. Moaci, 971 - Moema - Sao Paulo / SP',
-          rua: 'Av. Moaci',
-          numero: '971',
-          bairro: 'Moema'
-        })
+        customer_address_id: 'addr-1',
+        cliente: 'Nome adulterado',
+        endereco: 'Endereco adulterado'
       })
     });
     assert.equal(response.status, 201);
     const payload = await response.json();
     assert.equal(payload.cliente_id, 1);
+    assert.equal(payload.customer_address_id, 'addr-1');
     assert.equal(state.customer_addresses.length, 1);
     assert.equal(state.customer_addresses[0].customer_id, 1);
     assert.equal(state.customer_addresses[0].endereco, 'Av. Moaci, 971');
-    assert.equal(state.services.find(service => service.id === 99).customer_address_id, state.customer_addresses[0].id);
+    assert.equal(payload.cliente, 'Rede Moriah');
+    assert.equal(payload.endereco, 'Av. Moaci, 971 - Moema - Sao Paulo / SP');
   });
 });
 

@@ -3474,6 +3474,7 @@ async function carregarVeiculos(){
     const payload = {
       date:         s.data        || s.dt        || null,
       cliente_id:   s.cliente_id  ? Number(s.cliente_id) : null,
+      customer_address_id: s.customer_address_id || null,
       cliente:      s.cliente     || s.cl        || '',
       endereco:     s.endereco    || '',
       horario:      s.horario     || s.hr        || '',
@@ -3537,8 +3538,15 @@ async function carregarVeiculos(){
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      const friendlyMessage = payload?.code === 'customer_link_ambiguous'
-        ? 'Cliente ambíguo na Agenda: selecione o cliente correto no autocomplete antes de salvar.'
+      const customerSchedulingMessages = {
+        service_customer_required: 'Selecione um cliente cadastrado antes de salvar o serviço.',
+        service_customer_inactive: 'Este cliente está inativo. Reative ou selecione outro cadastro.',
+        service_customer_contact_required: 'Complete o telefone ou WhatsApp do cliente antes de agendar.',
+        service_customer_address_required: 'Selecione uma unidade com endereço completo antes de agendar.',
+        service_customer_address_mismatch: 'A unidade selecionada não pertence ao cliente.'
+      };
+      const friendlyMessage = customerSchedulingMessages[payload?.code]
+        ? customerSchedulingMessages[payload.code]
         : payload?.code === 'service_not_found'
           ? 'Serviço não encontrado no servidor. Recarregue a Agenda ou sincronize pendências antes de editar novamente.'
           : (payload?.error || `HTTP ${response.status}`);
@@ -3575,12 +3583,6 @@ async function carregarVeiculos(){
     ['cep','rua','numero','bairro','cidade','uf','complemento','referencia','latitude','longitude'].forEach(key => {
       if (servico && Object.prototype.hasOwnProperty.call(servico, key)) payload[key] = servico[key];
     });
-    if (servico && Object.prototype.hasOwnProperty.call(servico, 'salvar_unidade_cliente')) {
-      payload.salvar_unidade_cliente = servico.salvar_unidade_cliente === true;
-    }
-    if (servico && Object.prototype.hasOwnProperty.call(servico, 'save_customer_address')) {
-      payload.save_customer_address = servico.save_customer_address === true;
-    }
     return payload;
   }
 
@@ -4514,6 +4516,7 @@ async function carregarVeiculos(){
           <button class="btn btn-primary btn-sm" onclick="openQuickClientModal()">+ Cliente Rápido</button>
           <button class="btn btn-ghost btn-sm" onclick="openClientModal()">Cadastro Completo</button>
           <button class="btn btn-ghost btn-sm" onclick="abrirAuditoriaVinculosAgenda()">Auditar vínculos da agenda</button>
+          <button class="btn btn-orange btn-sm" onclick="openLocationReviewModal()">📍 Localizações para revisar</button>
           <button class="btn btn-orange btn-sm" onclick="openDuplicatesModal()">🔍 Saneamento de Clientes</button>
         </div>
       </div>
@@ -4825,6 +4828,21 @@ async function carregarVeiculos(){
       <button class="btn btn-ghost btn-sm" onclick="fecharModalTipoServico()">Cancelar</button>
       <button class="btn btn-danger btn-sm" id="cfg-tipo-del" style="display:none" onclick="excluirTipoServico(_tipoServicoEditando?.id, _tipoServicoEditando?.nome)">🗑 Excluir</button>
       <button class="btn btn-primary btn-sm" onclick="salvarTipoServico()" style="margin-left:auto">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- SELETOR ASSISTIDO DE LOCALIZACAO -->
+<div class="modal-bg" id="location-picker-modal" onclick="if(event.target===event.currentTarget)opMapCloseLocationPicker()">
+  <div class="modal location-picker-modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Revisar localização</div>
+    <div id="location-picker-address" style="font-size:12px;color:var(--text2);margin:8px 0 10px"></div>
+    <div id="location-picker-status" class="location-picker-status">Arraste o pino até a entrada correta e confirme.</div>
+    <div id="location-picker-map" class="location-picker-map" style="margin-top:10px"></div>
+    <div class="flex gap2" style="margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="opMapCloseLocationPicker()">Cancelar</button>
+      <button class="btn btn-ghost btn-sm" id="location-picker-arrival" onclick="opMapUseArrivalInPicker()" style="display:none">Usar GPS da chegada</button>
+      <button class="btn btn-primary btn-sm" onclick="opMapConfirmLocationPicker()" style="margin-left:auto">Confirmar este ponto</button>
     </div>
   </div>
 </div>
@@ -5393,7 +5411,7 @@ async function carregarVeiculos(){
 <div class="modal-bg" id="quick-client-modal" onclick="if(event.target===event.currentTarget)closeQuickClientModal()">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:620px">
     <div class="modal-title">Cliente Rápido</div>
-    <div class="section-sub" style="margin:4px 0 14px">Cadastro mínimo para não travar atendimento, prospecção ou agendamento.</div>
+    <div class="section-sub" style="margin:4px 0 14px">Cadastro mínimo somente para prospecção. Não pode ser agendado até concluir o cadastro completo.</div>
     <div class="client-grid">
       <div class="client-field full">
         <label class="client-label">Nome / Apelido <span class="req">*</span></label>
@@ -5466,6 +5484,22 @@ async function carregarVeiculos(){
   </div>
 </div>
 
+<div class="modal-bg" id="location-review-modal" onclick="if(event.target===event.currentTarget)closeLocationReviewModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:980px">
+    <div class="modal-title">📍 Localizações para revisar</div>
+    <div style="font-size:12px;color:var(--text3);margin-top:4px">Clientes recorrentes e com serviços vinculados aparecem primeiro. O lote executa uma busca por vez.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+      <select id="location-review-filter" class="fsel" onchange="renderLocationReviewQueue()">
+        <option value="pending">Pendentes</option><option value="missing_cep">Sem CEP</option><option value="missing_location">Sem coordenada</option><option value="approximate">Aproximadas</option><option value="exact">Exatas</option><option value="verified">Confirmadas</option><option value="all">Todas</option>
+      </select>
+      <button class="btn btn-primary btn-sm" id="location-review-batch" onclick="runLocationReviewBatch()">Localizar pendentes em lote</button>
+      <span id="location-review-progress" style="font-size:12px;color:var(--text2);align-self:center"></span>
+    </div>
+    <div id="location-review-content" style="max-height:62vh;overflow:auto"></div>
+    <div class="flex gap2" style="padding-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeLocationReviewModal()">Fechar</button></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="duplicates-modal" onclick="if(event.target===event.currentTarget)closeDuplicatesModal()">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:1040px">
     <div class="modal-title" id="duplicates-modal-title">🔍 Saneamento de Clientes</div>
@@ -5492,14 +5526,6 @@ async function carregarVeiculos(){
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Entre com seu email e senha para acessar o sistema.</div>
     </div>
     <form id="auth-form" style="padding:0 20px 20px;display:flex;flex-direction:column;gap:10px">
-      <div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Perfil de acesso</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" type="button" id="auth-profile-admin" onclick="selectAuthProfile('admin')">Admin</button>
-          <button class="btn btn-ghost btn-sm" type="button" id="auth-profile-operador" onclick="selectAuthProfile('operador')">Operador</button>
-          <button class="btn btn-ghost btn-sm" type="button" id="auth-profile-tecnicos" onclick="selectAuthProfile('tecnicos')">Técnicos</button>
-        </div>
-      </div>
       <div class="field">
         <label>Email</label>
         <input type="email" id="auth-email" autocomplete="username" required placeholder="seuemail@empresa.com">
@@ -5509,6 +5535,22 @@ async function carregarVeiculos(){
         <input type="password" id="auth-password" autocomplete="current-password" required placeholder="Digite sua senha">
       </div>
       <button class="btn btn-primary" id="auth-login-btn" type="submit">Entrar</button>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" type="button" onclick="requestMagicLink()">Enviar link mágico</button>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="requestPasswordRecovery()">Esqueci minha senha</button>
+      </div>
+      <a href="portal-tecnico.html" style="font-size:12px;text-align:center;color:var(--text3)">Sou técnico — acessar Portal Técnico</a>
+    </form>
+  </div>
+</div>
+
+<div class="modal-bg" id="password-recovery-modal">
+  <div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
+    <div style="padding:18px 20px 0"><div class="modal-title">Definir nova senha</div></div>
+    <form id="password-recovery-form" style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:10px">
+      <div class="field"><label>Nova senha</label><input type="password" id="recovery-password" autocomplete="new-password" minlength="8" required></div>
+      <div class="field"><label>Confirmar nova senha</label><input type="password" id="recovery-password-confirm" autocomplete="new-password" minlength="8" required></div>
+      <button class="btn btn-primary" type="submit">Salvar nova senha</button>
     </form>
   </div>
 </div>
@@ -5974,6 +6016,11 @@ async function carregarVeiculos(){
 .op-map-pin.blue { background:var(--blue); }
 .op-map-pin.green { background:var(--green); }
 .op-map-pin.gray { background:#94a3b8; }
+.op-map-location-review { color:var(--orange); font-size:10px; font-weight:800; }
+.location-picker-modal { width:min(760px,94vw); max-height:92vh; }
+.location-picker-map { height:min(55vh,440px); min-height:300px; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.location-picker-status { padding:10px 12px; border-radius:10px; background:var(--orange-bg); color:#9a3412; font-size:12px; line-height:1.4; }
+@media(max-width:480px) { .location-picker-map { min-height:340px; height:52vh; } }
 .op-map-base-pin {
   width:22px;
   height:22px;
@@ -10532,7 +10579,7 @@ function openEditSvc(id) {
           <section class="svc-edit-section">
             <div class="svc-edit-section-head">
               <div class="svc-edit-section-title">Cliente e endereço</div>
-              <div class="svc-edit-section-desc">Use o cadastro para preencher automaticamente, mantendo edição manual quando necessário.</div>
+              <div class="svc-edit-section-desc">Selecione o cadastro e uma unidade persistida; o endereço textual não pode ser editado isoladamente.</div>
             </div>
             <div class="svc-edit-grid">
               <div class="svc-edit-field full">
@@ -10541,6 +10588,7 @@ function openEditSvc(id) {
                 <input type="hidden" id="ed-client-select" value="${escapeHtmlAttr(clienteIdSelecionado)}">
                 <div id="ed-client-suggestions" style="margin-top:6px;display:none"></div>
                 <div id="ed-client-hint" class="svc-edit-help">Busque um cliente para preencher e vincular automaticamente.</div>
+                <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="abrirCadastroClienteParaServico('ed')">+ Cadastrar cliente completo</button>
               </div>
               <div class="svc-edit-field full">
                 <label class="svc-edit-label" for="ed-cl">Cliente / Condomínio</label>
@@ -10548,7 +10596,12 @@ function openEditSvc(id) {
               </div>
               <div class="svc-edit-field full">
                 <label class="svc-edit-label" for="ed-end">Endereço completo</label>
-                <input type="text" id="ed-end" value="${escapeHtmlAttr(s.endereco||'')}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" placeholder="Rua, número, bairro, cidade">
+                <input type="text" id="ed-end" value="${escapeHtmlAttr(s.endereco||'')}" data-client-id="${escapeHtmlAttr(clienteIdSelecionado)}" placeholder="Selecione uma unidade cadastrada" readonly>
+              </div>
+              <div class="svc-edit-field full" id="ed-address-wrap" style="display:none">
+                <label class="svc-edit-label" for="ed-address-select">Unidade / endereço do cliente</label>
+                <select id="ed-address-select" onchange="selecionarEnderecoServico('ed')"><option value="">Selecione uma unidade cadastrada</option></select>
+                <div id="ed-address-hint" class="svc-edit-help">A unidade deve estar completa no cadastro do cliente.</div>
               </div>
             </div>
           </section>
@@ -10642,6 +10695,7 @@ async function salvarEdicaoSvc(id) {
     const novoCl    = document.getElementById('ed-cl')?.value.trim();
     const novoEnd   = document.getElementById('ed-end')?.value.trim();
     let cliente_id = document.getElementById('ed-cl')?.dataset.clientId || document.getElementById('ed-end')?.dataset.clientId || document.getElementById('ed-client-select')?.value || '';
+    const customer_address_id = document.getElementById('ed-address-select')?.value || s.customer_address_id || '';
     const novoSt    = document.getElementById('ed-st')?.value;
     const tecnicos_ids = Array.from(
       document.querySelectorAll('#ed-tecnicos-container input:checked')
@@ -10668,6 +10722,7 @@ async function salvarEdicaoSvc(id) {
     if(novoHr  !== undefined) { candidato.horario = novoHr; candidato.hr = novoHr; }
     if(novoCl)    { candidato.cliente = novoCl; candidato.cl = novoCl; }
     candidato.cliente_id = cliente_id;
+    candidato.customer_address_id = customer_address_id;
     if(novoEnd !== undefined) { candidato.endereco = novoEnd; }
     // Atualiza tipos[] + tipoServico (string combo para exibição e legado)
     if(tiposSel.length > 0) {
@@ -10683,6 +10738,17 @@ async function salvarEdicaoSvc(id) {
     if(novoOS  !== undefined) { candidato.OS = novoOS; candidato.os = novoOS; }
     if(novoSc  !== undefined) { candidato.sc = novoSc || candidato.sc; }
     if(novaObs !== undefined) { candidato.observacoes = novaObs; candidato.obs = novaObs; }
+
+    if (!cliente_id) {
+      toast('Selecione um cliente cadastrado antes de salvar', 'err');
+      document.getElementById('ed-client-search')?.focus();
+      return;
+    }
+    if (!customer_address_id) {
+      toast('Selecione uma unidade completa do cliente antes de salvar', 'err');
+      document.getElementById('ed-address-select')?.focus();
+      return;
+    }
 
     const avaliacao = await validarLogisticaServico(candidato, { ignoreId: id });
     if (typeof validarTempoOperacional === 'function') {
@@ -11326,7 +11392,9 @@ function opMapBuildItems(sourceServices = [], options = {}) {
         statusLabel: opMapStatusMeta(statusKey).label,
         tipo: F.tipo || F.tipoLabel || '',
         date: getServiceDateValue(service),
-        location: opMapServiceLocation(service)
+        location: opMapServiceLocation(service),
+        locationPrecision: service.location_precision || null,
+        locationSource: service.location_source || null
       };
     })
     .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.horario || '99:99').localeCompare(b.horario || '99:99'));
@@ -11364,10 +11432,14 @@ async function opMapResolveLocations(items = [], onUpdate = null) {
       const coords = opMapValidCoordinatePair(payload.location?.latitude, payload.location?.longitude);
       if (!coords) throw new Error('location_not_found');
       item.location = { ...coords, source: payload.target || 'geocode' };
+      item.locationPrecision = payload.precision || 'exact';
+      item.locationSource = payload.source || 'address';
       item.service.latitude = coords.lat;
       item.service.longitude = coords.lng;
       item.service.customer_latitude = coords.lat;
       item.service.customer_longitude = coords.lng;
+      item.service.location_precision = item.locationPrecision;
+      item.service.location_source = item.locationSource;
       operationalMapState.geocodeCache[key] = coords;
       operationalMapState.geocodeStatus[statusKey] = 'found';
       item.locationStatus = 'found';
@@ -11420,6 +11492,7 @@ function opMapVehicleIcon(item = {}) {
 
 function opMapPinClass(item = {}) {
   const meta = opMapStatusMeta(item.statusKey);
+  if (item.location && item.locationPrecision === 'approximate') return 'orange';
   if (item.statusKey === 'atrasado' || item.statusKey === 'critico' || item.statusKey === 'executado') return meta.color;
   if (!item.hasEquipe || !item.hasVeiculo || !item.location || opMapAddressIncomplete(item)) return 'gray';
   return meta.color || 'blue';
@@ -11488,6 +11561,7 @@ function opMapPopupHtml(item, options = {}) {
     <div class="op-map-popup-line"><strong>Equipe:</strong> ${sanitize(item.equipe || 'Sem equipe')}</div>
     <div class="op-map-popup-line"><strong>Veículo:</strong> ${sanitize(item.veiculo || '—')}</div>
     <div class="op-map-popup-line"><strong>Endereço:</strong> ${sanitize(shortAddress)}</div>
+    ${item.locationPrecision === 'approximate' ? '<div class="op-map-location-review">Localização aproximada pelo CEP/endereço — revisar antes da rota</div>' : ''}
     <div class="op-map-popup-line"><span class="chip ${meta.chip}">${meta.label}</span></div>
     <div class="op-map-popup-actions">
       <button class="primary" onclick="openEditSvc(${id})">Abrir serviço</button>
@@ -11572,7 +11646,12 @@ async function opMapSaveLocationForService(serviceId, lat, lng, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ latitude: lat, longitude: lng, source: options.source || 'manual_map' })
+    body: JSON.stringify({
+      latitude: lat,
+      longitude: lng,
+      source: options.source || 'manual_map',
+      precision: options.precision || 'verified'
+    })
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
@@ -11581,41 +11660,76 @@ async function opMapSaveLocationForService(serviceId, lat, lng, options = {}) {
   service.longitude = lng;
   service.customer_latitude = lat;
   service.customer_longitude = lng;
-  service.location_source = addressId ? 'customer_address' : 'customer';
+  service.location_source = options.source || 'manual_map';
+  service.location_precision = options.precision || 'verified';
   const customer = (clientesData || []).find(c => String(c.id) === String(customerId));
   if (customer) {
     customer.latitude = lat;
     customer.longitude = lng;
+    customer.location_source = options.source || 'manual_map';
+    customer.location_precision = options.precision || 'verified';
   }
   saveSvcs();
   return payload;
 }
 
 function opMapStartLocationPicker(serviceId, canvasId = 'op-map-hoje-canvas') {
-  const map = operationalMapState.maps[canvasId];
   const service = opMapFindService(serviceId);
-  if (!map) { toast('Mapa ainda nao carregado', 'warn'); return; }
   if (!service) { toast('Servico nao encontrado', 'err'); return; }
   if (!opMapLinkedCustomer(service)) { toast('Vincule o cliente antes de salvar coordenada', 'warn'); return; }
-  operationalMapState.locationPicker = { serviceId, canvasId };
-  toast('Clique no ponto correto dentro do mapa para salvar a coordenada', 'ok');
-  map.getContainer().style.cursor = 'crosshair';
-  map.once('click', async ev => {
-    map.getContainer().style.cursor = '';
-    const lat = Number(ev.latlng.lat.toFixed(7));
-    const lng = Number(ev.latlng.lng.toFixed(7));
-    if (!confirmAction(`Salvar coordenada ${lat}, ${lng} para este atendimento?`)) return;
-    try {
-      await opMapSaveLocationForService(serviceId, lat, lng, { source: 'manual_map' });
-      toast('Coordenada salva no cadastro', 'ok');
-      if (currentPage === 'hoje') renderHoje();
-      if (currentPage === 'roteiro') renderMapaRoteiros();
-    } catch(e) {
-      toast(`Erro ao salvar coordenada: ${e.message || e}`, 'err');
-    } finally {
-      operationalMapState.locationPicker = null;
-    }
-  });
+  const current = opMapServiceLocation(service) || OP_MAP_BASE_COORDS;
+  const modal = document.getElementById('location-picker-modal');
+  document.getElementById('location-picker-address').textContent = opMapServiceAddress(service) || 'Endereço não informado';
+  document.getElementById('location-picker-status').textContent = current === OP_MAP_BASE_COORDS
+    ? 'Não foi possível aproximar pelo endereço. Posicione o pino no local correto.'
+    : 'O mapa foi centralizado na melhor localização disponível. Arraste o pino até a entrada correta.';
+  const arrivalBtn = document.getElementById('location-picker-arrival');
+  arrivalBtn.style.display = opMapValidCoordinatePair(service.chegada_lat, service.chegada_lng) ? '' : 'none';
+  modal.classList.add('open');
+  setTimeout(() => {
+    if (operationalMapState.locationPicker?.map) operationalMapState.locationPicker.map.remove();
+    const pickerMap = L.map('location-picker-map', { zoomControl:true }).setView([current.lat, current.lng], current === OP_MAP_BASE_COORDS ? 11 : 17);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap' }).addTo(pickerMap);
+    const marker = L.marker([current.lat, current.lng], { draggable:true }).addTo(pickerMap);
+    pickerMap.on('click', ev => marker.setLatLng(ev.latlng));
+    operationalMapState.locationPicker = { serviceId, canvasId, map:pickerMap, marker };
+    pickerMap.invalidateSize();
+  }, 80);
+}
+
+function opMapCloseLocationPicker() {
+  const picker = operationalMapState.locationPicker;
+  if (picker?.map) picker.map.remove();
+  operationalMapState.locationPicker = null;
+  document.getElementById('location-picker-modal')?.classList.remove('open');
+}
+
+function opMapUseArrivalInPicker() {
+  const picker = operationalMapState.locationPicker;
+  const service = picker ? opMapFindService(picker.serviceId) : null;
+  const coords = opMapValidCoordinatePair(service?.chegada_lat, service?.chegada_lng);
+  if (!coords || !picker?.marker) return toast('GPS de chegada indisponível', 'warn');
+  picker.marker.setLatLng([coords.lat, coords.lng]);
+  picker.map.setView([coords.lat, coords.lng], 18);
+  picker.source = 'technician_arrival';
+  document.getElementById('location-picker-status').textContent = 'Pino posicionado pelo GPS de chegada do técnico. Confirme para reutilizar nos próximos serviços.';
+}
+
+async function opMapConfirmLocationPicker() {
+  const picker = operationalMapState.locationPicker;
+  if (!picker?.marker) return;
+  const point = picker.marker.getLatLng();
+  try {
+    await opMapSaveLocationForService(picker.serviceId, Number(point.lat.toFixed(7)), Number(point.lng.toFixed(7)), {
+      source: picker.source || 'manual_map', precision:'verified'
+    });
+    opMapCloseLocationPicker();
+    toast('Localização confirmada e salva no cadastro', 'ok');
+    if (currentPage === 'hoje') renderHoje();
+    if (currentPage === 'roteiro') renderMapaRoteiros();
+  } catch(e) {
+    toast(`Erro ao salvar coordenada: ${e.message || e}`, 'err');
+  }
 }
 
 async function opMapPromoteArrivalLocation(serviceId) {
@@ -11631,7 +11745,8 @@ async function opMapPromoteArrivalLocation(serviceId) {
       service.longitude = lng;
       service.customer_latitude = lat;
       service.customer_longitude = lng;
-      service.location_source = payload.target || 'technician_arrival';
+      service.location_source = 'technician_arrival';
+      service.location_precision = 'verified';
       saveSvcs();
     }
     toast('GPS de chegada salvo no cadastro', 'ok');
@@ -11749,6 +11864,9 @@ function opMapQuickRouteItemHtml(item, index, canvasId = '') {
     : locationStatus === 'loading' ? 'Localizando endereço...'
       : locationStatus === 'not_found' ? 'Localização não encontrada'
         : '';
+  const approximateLabel = item.location && item.locationPrecision === 'approximate'
+    ? 'Localização aproximada — revisar'
+    : '';
   return `<div class="op-map-item op-map-quick-item ${colorClass}" onclick="opMapFocus('${canvasId}', ${id})">
     <div class="op-map-quick-row">
       <div class="op-map-item-order">${index}</div>
@@ -11763,12 +11881,13 @@ function opMapQuickRouteItemHtml(item, index, canvasId = '') {
           ${issues.map(issue => `<span class="op-map-mini-warn">${sanitize(issue)}</span>`).join('')}
         </div>
         ${locationLabel ? `<div class="op-map-location-state ${locationStatus === 'loading' ? 'loading' : 'error'}">${sanitize(locationLabel)}</div>` : ''}
+        ${approximateLabel ? `<div class="op-map-location-review">${sanitize(approximateLabel)}</div>` : ''}
       </div>
       <span class="chip ${meta.chip}">${opMapQuickStatusLabel(item.statusKey)}</span>
     </div>
     <div class="op-map-quick-actions" onclick="event.stopPropagation()">
       <button class="op-map-mini-btn primary" onclick="openEditSvc(${id})">Abrir</button>
-      ${!item.location ? `<button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${id}, '${canvasId}')">Definir ponto</button>` : ''}
+      ${(!item.location || item.locationPrecision === 'approximate') ? `<button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${id}, '${canvasId}')">Revisar localização</button>` : ''}
       ${!item.location && item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${id})">Usar chegada</button>` : ''}
       <a class="op-map-mini-btn" href="${escapeHtmlAttr(route)}" target="_blank" rel="noopener">Rota</a>
     </div>
@@ -11799,9 +11918,9 @@ function opMapListHtml(items = [], canvasId = '', options = {}) {
         <span>${sanitize(item.date || '')} · ${sanitize(item.horario || '—')} · ${sanitize(item.equipe || 'Sem equipe')}</span>
         <span>${sanitize(item.veiculo || 'Sem veículo')} · ${sanitize(item.tipo || 'Serviço')}</span>
         <span>${sanitize(item.endereco || 'Sem endereço')}</span>
-        ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : ''}
+        ${!item.location ? '<span style="color:var(--orange);font-weight:700">Sem coordenada no mapa</span>' : item.locationPrecision === 'approximate' ? '<span style="color:var(--orange);font-weight:700">Localização aproximada — revisar</span>' : ''}
       </div>
-      ${!item.location ? `<div class="op-map-quick-actions" onclick="event.stopPropagation()"><button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${jsArg(item.id)}, '${canvasId}')">Definir ponto</button>${item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${jsArg(item.id)})">Usar chegada</button>` : ''}</div>` : ''}
+      ${(!item.location || item.locationPrecision === 'approximate') ? `<div class="op-map-quick-actions" onclick="event.stopPropagation()"><button class="op-map-mini-btn" onclick="opMapStartLocationPicker(${jsArg(item.id)}, '${canvasId}')">Revisar localização</button>${item.service?.chegada_lat && item.service?.chegada_lng ? `<button class="op-map-mini-btn" onclick="opMapPromoteArrivalLocation(${jsArg(item.id)})">Usar chegada</button>` : ''}</div>` : ''}
     </div>`;
   }).join('')}</div>`;
 }
@@ -13671,6 +13790,7 @@ let clientModalInitialSnapshot = '';
 let clientAllowDuplicateOnce = false;
 const servicoEnderecosCache = {};
 let customerLinkAuditData = null;
+let serviceClientReturnContext = null;
 
 function normalizeClientePriority(value) {
   const raw = String(value || '').trim();
@@ -13742,7 +13862,9 @@ function renderCustomerLinkAuditRows(items = [], type = '') {
                   : '—';
             const action = type === 'revisao_manual'
               ? `<button class="btn btn-ghost btn-xs" onclick="closeModal();setTimeout(()=>openEditSvc(${jsArg(service.id)}),100)">Abrir serviço</button>`
-              : '<span class="chip chip-green">Seguro</span>';
+              : type === 'criar_cliente'
+                ? `<button class="btn btn-ghost btn-xs" onclick="abrirCadastroCompletoAuditoria(${jsArg(service.id)},${jsArg(service.cliente || '')})">Cadastrar completo</button>`
+                : '<span class="chip chip-green">Seguro</span>';
             return `<tr>
               <td><div class="mono">#${sanitize(service.id || '—')}</div><div class="text-muted">${sanitize(service.date || 'sem data')}</div></td>
               <td><strong>${sanitize(service.cliente || 'Cliente sem nome')}</strong><div class="text-muted">${sanitize(service.endereco || 'sem endereço')}</div></td>
@@ -13767,19 +13889,19 @@ function renderCustomerLinkAuditModal(payload, repairResult = null) {
   body.innerHTML = `
     <div class="grid-kpi mb3">
       <div class="card"><div class="card-label">Vincular seguro</div><div class="card-value">${counts.link_auto_seguro || 0}</div><div class="card-trend">cliente já existe</div></div>
-      <div class="card"><div class="card-label">Criar cliente</div><div class="card-value">${counts.criar_cliente || 0}</div><div class="card-trend">sem candidato seguro</div></div>
+      <div class="card"><div class="card-label">Cadastro manual</div><div class="card-value">${counts.criar_cliente || 0}</div><div class="card-trend">sem candidato seguro</div></div>
       <div class="card"><div class="card-label">Revisar manual</div><div class="card-value">${counts.revisao_manual || 0}</div><div class="card-trend">nome parecido ou duplicado</div></div>
       <div class="card"><div class="card-label">Já vinculados/ignorados</div><div class="card-value">${counts.ignorados || 0}</div><div class="card-trend">fora da correção</div></div>
     </div>
-    ${repairResult ? `<div class="note mb3">Correção aplicada: ${repairResult.linked || 0} vínculo(s), ${repairResult.created || 0} cliente(s) criado(s), ${repairResult.ambiguous || 0} em revisão, ${repairResult.errors?.length || 0} erro(s).</div>` : ''}
+    ${repairResult ? `<div class="note mb3">Correção aplicada: ${repairResult.linked || 0} vínculo(s) com clientes existentes, ${repairResult.requires_customer_creation || 0} exigindo cadastro, ${repairResult.ambiguous || 0} em revisão, ${repairResult.errors?.length || 0} erro(s).</div>` : ''}
     <div class="flex gap2 mb3" style="flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" id="customer-link-repair-btn" onclick="aplicarCorrecoesVinculoCliente()">Aplicar correções seguras</button>
       <button class="btn btn-ghost btn-sm" onclick="abrirAuditoriaVinculosAgenda(true)">Atualizar prévia</button>
     </div>
-    <div class="note mb3">A correção segura só preenche <span class="mono">services.cliente_id</span> ou cria cliente eventual quando não houver candidato parecido. O texto histórico do serviço não será alterado.</div>
+    <div class="note mb3">A correção segura só vincula clientes que já existem e têm correspondência única. Ela nunca cria clientes. O texto e o histórico do serviço não serão alterados.</div>
     <div class="ui-subsection-head"><div><div class="ui-subsection-title">Pode vincular automaticamente</div><div class="ui-subsection-sub">Nome exato único ou endereço único com nome compatível.</div></div></div>
     ${renderCustomerLinkAuditRows(items.link_auto_seguro || [], 'link_auto_seguro')}
-    <div class="ui-subsection-head"><div><div class="ui-subsection-title">Pode criar cliente</div><div class="ui-subsection-sub">Nenhum cadastro confiável encontrado.</div></div></div>
+    <div class="ui-subsection-head"><div><div class="ui-subsection-title">Exige cadastro completo</div><div class="ui-subsection-sub">Nenhum cadastro confiável encontrado; estes casos nunca são criados em massa.</div></div></div>
     ${renderCustomerLinkAuditRows(items.criar_cliente || [], 'criar_cliente')}
     <div class="ui-subsection-head"><div><div class="ui-subsection-title">Precisa revisar</div><div class="ui-subsection-sub">Há múltiplos candidatos ou apenas nome parecido.</div></div></div>
     ${renderCustomerLinkAuditRows(items.revisao_manual || [], 'revisao_manual')}
@@ -13794,7 +13916,7 @@ async function abrirAuditoriaVinculosAgenda(force = false) {
   modal.classList.remove('svc-edit-modal','day-detail-modal','changelog-modal','diagnostics-modal');
   modal.classList.add('open');
   try {
-    const response = await fetch(`${API_BASE_URL}/api/services/customer-link-audit?limit=5000`);
+    const response = await fetch(`${API_BASE_URL}/api/services/customer-link-audit?limit=5000&include_cancelled=true`);
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
     renderCustomerLinkAuditModal(payload);
@@ -13807,7 +13929,7 @@ async function abrirAuditoriaVinculosAgenda(force = false) {
 
 async function aplicarCorrecoesVinculoCliente() {
   const counts = customerLinkAuditData?.counts || {};
-  const totalSafe = Number(counts.link_auto_seguro || 0) + Number(counts.criar_cliente || 0);
+  const totalSafe = Number(counts.link_auto_seguro || 0);
   if (!totalSafe) {
     toast('Não há correções seguras para aplicar.', 'warn');
     return;
@@ -13819,12 +13941,12 @@ async function aplicarCorrecoesVinculoCliente() {
     const response = await fetch(`${API_BASE_URL}/api/services/customer-link-repair?apply=true`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apply: true })
+      body: JSON.stringify({ apply: true, include_cancelled: true })
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
-    toast(`Correção aplicada: ${result.linked || 0} vínculo(s), ${result.created || 0} cliente(s) criado(s).`, result.errors?.length ? 'warn' : 'ok');
-    const refreshed = await fetch(`${API_BASE_URL}/api/services/customer-link-audit?limit=5000`);
+    toast(`Correção aplicada: ${result.linked || 0} vínculo(s) com clientes existentes. Nenhum cliente foi criado.`, result.errors?.length ? 'warn' : 'ok');
+    const refreshed = await fetch(`${API_BASE_URL}/api/services/customer-link-audit?limit=5000&include_cancelled=true`);
     const payload = await refreshed.json().catch(() => ({}));
     if (refreshed.ok) renderCustomerLinkAuditModal(payload, result);
     await Promise.allSettled([getServices(), renderClientes()]);
@@ -14902,6 +15024,9 @@ function clientAddressDraftFromForm() {
     zona_regiao: document.getElementById('cli-form-zona')?.value.trim() || '',
     latitude: Number.isFinite(Number(geo.latitude)) ? Number(geo.latitude) : null,
     longitude: Number.isFinite(Number(geo.longitude)) ? Number(geo.longitude) : null,
+    location_source: geo.source || null,
+    location_precision: geo.precision || null,
+    location_verified_at: geo.location_verified_at || null,
     is_primary: true,
     ativo: true,
     origem: 'cadastro'
@@ -14977,6 +15102,9 @@ async function loadClientAddresses(customerId) {
       google_maps_url: item.google_maps_url || '',
       latitude: item.latitude ?? null,
       longitude: item.longitude ?? null,
+      location_source: item.location_source || null,
+      location_precision: item.location_precision || null,
+      location_verified_at: item.location_verified_at || null,
       is_primary: item.is_primary === true,
       ativo: item.ativo !== false,
       origem: item.origem || 'cadastro'
@@ -15014,12 +15142,12 @@ async function saveClientAddresses(customerId) {
   return true;
 }
 
-function openClientModal(clientId = null) {
+function openClientModal(clientId = null, options = {}) {
   let modalDraftLoadPromise = null;
   clientAllowDuplicateOnce = false;
   if (clientId) {
     // Editar cliente existente
-    clienteEditando = clientesData.find(c => c.id === clientId);
+    clienteEditando = clientesData.find(c => String(c.id) === String(clientId));
     if (!clienteEditando) return;
     
     document.getElementById('client-modal-title').textContent = 'Editar Cliente';
@@ -15103,7 +15231,7 @@ function openClientModal(clientId = null) {
     clienteEditando = null;
     document.getElementById('client-modal-title').textContent = 'Novo Cliente';
     document.getElementById('client-modal-subtitle').textContent = 'Cadastre os dados cadastrais e operacionais do cliente.';
-    document.getElementById('cli-form-nome').value = '';
+    document.getElementById('cli-form-nome').value = options.prefillName || '';
     document.getElementById('cli-form-fantasia').value = '';
     document.getElementById('cli-form-nome-normalizado').value = '';
     document.getElementById('cli-form-tel').value = '';
@@ -15172,7 +15300,7 @@ function openClientModal(clientId = null) {
   clearClientFormErrors();
   document.getElementById('cli-geocode-suggestions').style.display = 'none';
   updateClientCentralSummary();
-  switchClientTab('resumo');
+  switchClientTab(options.serviceContext ? 'dados' : 'resumo');
   document.getElementById('client-modal').classList.add('open');
   setClientModalSnapshot();
   if (modalDraftLoadPromise) {
@@ -15249,6 +15377,7 @@ function closeClientModal(options = {}) {
   document.getElementById('cli-form-error').style.display = 'none';
   document.getElementById('cli-historico-section').style.display = 'none';
   clearClientFormErrors();
+  if (!options.preserveServiceContext) serviceClientReturnContext = null;
 }
 
 function openQuickClientModal() {
@@ -15416,7 +15545,9 @@ async function buscarCepCliente() {
         endereco_completo: enderecoCompleto,
         latitude: Number(data.latitude),
         longitude: Number(data.longitude),
-        source: data.provider || 'cep'
+        source: 'cep',
+        provider: data.provider || 'cep',
+        precision: 'approximate'
       });
     }
     
@@ -15646,6 +15777,17 @@ async function saveClient() {
       markClientFieldInvalid('cli-form-nome', 'cli-error-nome');
       return;
     }
+    const contactDigits = String(whatsapp || telefone || '').replace(/\D/g, '');
+    const validContact = contactDigits.startsWith('55')
+      ? [12, 13].includes(contactDigits.length)
+      : [10, 11].includes(contactDigits.length);
+    if (!validContact) {
+      errorEl.textContent = 'Telefone ou WhatsApp válido é obrigatório para o cliente operacional';
+      errorEl.style.display = 'block';
+      switchClientTab('dados');
+      markClientFieldInvalid('cli-form-tel', 'cli-error-tel');
+      return;
+    }
     if ((categoria === 'contrato' || recorrente) && !periodicidade) {
       errorEl.textContent = 'Periodicidade é obrigatória para clientes recorrentes ou de contrato';
       errorEl.style.display = 'block';
@@ -15686,7 +15828,7 @@ async function saveClient() {
       observacao_comercial,
       cadastro_quality_score: quality.score,
       cadastro_quality_flags: quality.missing,
-      is_incomplete: quality.score < 100,
+      is_incomplete: false,
       cep,
       endereco: enderecoCompleto,
       categoria,
@@ -15732,6 +15874,9 @@ async function saveClient() {
       const geo = JSON.parse(geocodeData);
       payload.latitude = geo.latitude;
       payload.longitude = geo.longitude;
+      payload.location_source = geo.source || null;
+      payload.location_precision = geo.precision || null;
+      payload.location_verified_at = geo.location_verified_at || null;
       payload.endereco_completo = geo.endereco_completo || enderecoCompleto;
     }
     
@@ -15759,15 +15904,21 @@ async function saveClient() {
     const savedCustomer = await response.json();
     if (savedCustomer?.id) {
       await saveClientContracts(savedCustomer.id);
-      await saveClientAddresses(savedCustomer.id);
+      const addressesSaved = await saveClientAddresses(savedCustomer.id);
+      if (!addressesSaved) throw new Error('O cliente foi salvo, mas a unidade obrigatória não foi persistida. Corrija a migration antes de agendar.');
       await saveClientContacts(savedCustomer.id);
+      fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(savedCustomer.id)}/geocode`, {
+        method:'POST', headers: await getBackendAuthHeaders()
+      }).catch(error => console.warn('Localizacao automatica pendente:', error.message || error));
     }
     setClientModalSnapshot();
     clientAllowDuplicateOnce = false;
+    const returningToService = !!serviceClientReturnContext;
+    if (returningToService) await retornarClienteSalvoParaServico(savedCustomer);
     closeClientModal({ force: true });
     await renderClientes();
 
-    if (savedCustomer?.id && isNewClient) {
+    if (savedCustomer?.id && isNewClient && !returningToService) {
       setTimeout(() => {
         if (confirmAction(`Cliente "${savedCustomer.nome}" salvo. Deseja criar um serviço para ele agora?`)) {
           openServiceFromClient(savedCustomer.id);
@@ -15954,7 +16105,7 @@ function preencherServicoPorCliente(prefix = 'ns', cliente) {
   if (endereco) {
     enderecoInput.value = endereco;
     if (hint) {
-      hint.textContent = 'Cliente vinculado ao cadastro. Endereço preenchido automaticamente; ajuste se este atendimento for em outro local.';
+      hint.textContent = 'Cliente vinculado. Escolha abaixo uma unidade cadastrada para este atendimento.';
       hint.style.color = 'var(--green)';
     }
   } else if (hint) {
@@ -15990,9 +16141,10 @@ async function buscarClienteServicoAutocomplete(prefix = 'ns') {
     const results = await buscarClientesServicoRemoto(term);
     clientesData = mergeClientesCache(results);
     if (!results.length) {
-      suggestions.innerHTML = '<div style="font-size:11px;color:var(--orange);padding:6px">Nenhum cliente encontrado. Ao salvar, será criado um novo cadastro.</div>';
+      suggestions.innerHTML = `<div style="font-size:11px;color:var(--orange);padding:6px">Nenhum cliente encontrado.</div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="abrirCadastroClienteParaServico('${prefix}')">+ Cadastrar cliente completo</button>`;
       if (hint) {
-        hint.textContent = 'Cliente novo: o sistema criará o cadastro automaticamente ao salvar.';
+        hint.textContent = 'Cadastre o cliente completo antes de criar o serviço.';
         hint.style.color = 'var(--orange)';
       }
       return;
@@ -16001,11 +16153,17 @@ async function buscarClienteServicoAutocomplete(prefix = 'ns') {
       hint.textContent = 'Encontramos clientes parecidos. Selecione o cadastro correto para vincular o histórico.';
       hint.style.color = 'var(--blue2)';
     }
-    suggestions.innerHTML = results.map(c => `
+    suggestions.innerHTML = results.map(c => c.scheduling_eligible ? `
       <button type="button" class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;margin-bottom:4px;text-align:left" onclick="selecionarClienteServicoAutocomplete('${prefix}', ${jsArg(c.id)})">
         ${sanitize(c.nome || 'Cliente sem nome')} <span class="mono" style="color:var(--text3);font-size:10px">${sanitize(c.telefone || c.whatsapp || '')}</span>
+        <span class="chip chip-green" style="margin-left:auto">Apto</span>
       </button>
-    `).join('');
+    ` : `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px;margin-bottom:4px;border:1px solid var(--border);border-radius:8px">
+        <div style="flex:1"><strong>${sanitize(c.nome || 'Cliente sem nome')}</strong><div style="font-size:10px;color:var(--orange)">Cadastro incompleto para agendamento</div></div>
+        <button type="button" class="btn btn-ghost btn-xs" onclick="abrirCadastroClienteParaServico('${prefix}', ${jsArg(c.id)})">Completar</button>
+      </div>
+    `).join('') + `<button type="button" class="btn btn-primary btn-sm" onclick="abrirCadastroClienteParaServico('${prefix}')">+ Cadastrar novo cliente</button>`;
   } catch(e) {
     suggestions.innerHTML = `<div style="font-size:11px;color:var(--red);padding:6px">${sanitize(e.message || e)}</div>`;
   }
@@ -16017,9 +16175,13 @@ function mergeClientesCache(items = []) {
   return Array.from(map.values());
 }
 
-function selecionarClienteServicoAutocomplete(prefix = 'ns', id) {
+async function selecionarClienteServicoAutocomplete(prefix = 'ns', id) {
   const cliente = (clientesData || []).find(c => String(c.id) === String(id));
   if (!cliente) return;
+  if (cliente.scheduling_eligible === false) {
+    abrirCadastroClienteParaServico(prefix, cliente.id);
+    return;
+  }
   const select = document.getElementById(`${prefix}-client-select`);
   const search = document.getElementById(`${prefix}-client-search`);
   const suggestions = document.getElementById(`${prefix}-client-suggestions`);
@@ -16030,7 +16192,7 @@ function selecionarClienteServicoAutocomplete(prefix = 'ns', id) {
     suggestions.innerHTML = '';
   }
   preencherServicoPorCliente(prefix, cliente);
-  carregarEnderecosClienteServico(prefix, cliente.id, document.getElementById(`${prefix}-end`)?.value || '');
+  await carregarEnderecosClienteServico(prefix, cliente.id, document.getElementById(`${prefix}-end`)?.value || '');
   if (prefix === 'ns') updateNewSvcGuideSummary();
 }
 
@@ -16055,9 +16217,19 @@ async function carregarEnderecosClienteServico(prefix = 'ns', customerId, curren
     renderEnderecosClienteServico(prefix, customerId, currentAddress);
   } catch (error) {
     servicoEnderecosCache[String(customerId)] = [];
-    select.innerHTML = '<option value="">Usar endereco digitado</option>';
-    if (hint) hint.textContent = 'Nao foi possivel carregar unidades. O servico usara o endereco digitado.';
+    select.innerHTML = '<option value="">Unidades indisponiveis</option>';
+    if (hint) hint.textContent = 'Nao foi possivel carregar as unidades. Tente novamente antes de salvar.';
   }
+}
+
+function isSchedulingAddressCompleteFrontend(address = {}) {
+  return address.ativo !== false
+    && String(address.cep || '').replace(/\D/g, '').length === 8
+    && !!String(address.rua || '').trim()
+    && !!String(address.numero || '').trim()
+    && !!String(address.bairro || '').trim()
+    && !!String(address.cidade || '').trim()
+    && String(address.uf || '').trim().length === 2;
 }
 
 function renderEnderecosClienteServico(prefix = 'ns', customerId, currentAddress = '') {
@@ -16065,18 +16237,29 @@ function renderEnderecosClienteServico(prefix = 'ns', customerId, currentAddress
   const hint = document.getElementById(`${prefix}-address-hint`);
   const saveNew = document.getElementById(`${prefix}-save-address-unit`);
   if (!select) return;
-  const addresses = servicoEnderecosCache[String(customerId)] || [];
+  const allAddresses = servicoEnderecosCache[String(customerId)] || [];
+  const addresses = allAddresses.filter(isSchedulingAddressCompleteFrontend);
   const currentKey = normalizeAddressText(currentAddress);
-  const selected = addresses.find(item => normalizeAddressText(item.endereco_completo || item.endereco || buildClientAddress(item)) === currentKey);
+  const customer = (clientesData || []).find(item => String(item.id) === String(customerId));
+  const selected = addresses.find(item => normalizeAddressText(item.endereco_completo || item.endereco || buildClientAddress(item)) === currentKey)
+    || addresses.find(item => String(item.id) === String(customer?.scheduling_address_id || ''))
+    || addresses.find(item => item.is_primary)
+    || addresses[0];
   select.innerHTML = [
-    '<option value="">Usar endereco digitado / nova unidade</option>',
+    '<option value="">Selecione uma unidade cadastrada</option>',
     ...addresses.map(item => `<option value="${escapeHtmlAttr(item.id)}" ${String(item.id) === String(selected?.id) ? 'selected' : ''}>${sanitize(formatServiceAddressOption(item))}</option>`)
   ].join('');
   if (saveNew) saveNew.checked = false;
+  if (selected?.id) {
+    select.value = String(selected.id);
+    selecionarEnderecoServico(prefix);
+  }
   if (hint) {
     hint.textContent = addresses.length
-      ? 'Escolha uma unidade existente ou marque a opcao abaixo para salvar o endereco digitado como nova unidade.'
-      : 'Este cliente ainda nao tem unidades salvas. O servico usara o endereco digitado; marque a opcao abaixo para salvar como unidade.';
+      ? 'Escolha uma unidade cadastrada deste cliente.'
+      : allAddresses.length
+        ? 'As unidades existentes estão incompletas. Complete CEP, rua, número, bairro, cidade e UF.'
+        : 'Cliente sem unidade válida. Complete o cadastro antes de agendar.';
   }
 }
 
@@ -16114,7 +16297,7 @@ function onServicoClienteManualInput(prefix = 'ns') {
   const addressWrap = document.getElementById(`${prefix}-address-wrap`);
   if (addressWrap) addressWrap.style.display = 'none';
   if (hint) {
-    hint.textContent = 'Nome editado manualmente. Se for cliente novo, o cadastro será criado ao salvar; se já existir, selecione no autocomplete.';
+    hint.textContent = 'Nome sem vínculo. Selecione um cadastro ou use “Cadastrar cliente completo”.';
     hint.style.color = 'var(--orange)';
   }
   if (prefix === 'ns') updateNewSvcGuideSummary();
@@ -16137,6 +16320,60 @@ function initServicoClienteSelect(prefix = 'ns', selectedClientId = '', currentN
 }
 
 function onNovoServicoClienteManualInput() { onServicoClienteManualInput('ns'); }
+
+function abrirCadastroClienteParaServico(prefix = 'ns', clientId = null) {
+  const typedName = document.getElementById(`${prefix}-cl`)?.value.trim()
+    || document.getElementById(`${prefix}-client-search`)?.value.trim()
+    || '';
+  serviceClientReturnContext = { prefix };
+  openClientModal(clientId ? Number(clientId) : null, {
+    serviceContext: true,
+    prefillName: typedName
+  });
+}
+
+function abrirCadastroCompletoAuditoria(serviceId, customerName = '') {
+  serviceClientReturnContext = { prefix: 'audit', serviceId };
+  openClientModal(null, {
+    serviceContext: true,
+    prefillName: customerName
+  });
+}
+
+async function retornarClienteSalvoParaServico(savedCustomer) {
+  const context = serviceClientReturnContext;
+  if (!context || !savedCustomer?.id) return false;
+  let refreshed = savedCustomer;
+  try {
+    refreshed = await requestBackendJson(`/api/customers/${encodeURIComponent(savedCustomer.id)}`);
+  } catch (error) {
+    const matches = await buscarClientesServicoRemoto(savedCustomer.nome || '');
+    refreshed = matches.find(item => String(item.id) === String(savedCustomer.id)) || savedCustomer;
+  }
+  clientesData = mergeClientesCache([refreshed]);
+  if (refreshed.scheduling_eligible === false) {
+    throw new Error('O cliente ainda não possui contato e unidade completos para agendamento.');
+  }
+  if (context.prefix === 'audit') {
+    const addressId = refreshed.scheduling_address_id;
+    if (!addressId) throw new Error('Selecione e salve uma unidade completa para vincular este serviço.');
+    await requestBackendJson(`/api/services/${context.serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        cliente_id: Number(refreshed.id),
+        customer_address_id: addressId
+      })
+    });
+    serviceClientReturnContext = null;
+    await getServices();
+    toast('Cliente completo criado e vinculado ao serviço legado.', 'ok');
+    return true;
+  }
+  await selecionarClienteServicoAutocomplete(context.prefix, refreshed.id);
+  serviceClientReturnContext = null;
+  toast('Cliente completo e vinculado ao serviço.', 'ok');
+  return true;
+}
 
 async function geocodeClientAddress() {
   const cep = document.getElementById('cli-form-cep')?.value.replace(/\D/g, '') || '';
@@ -16961,6 +17198,91 @@ function updateNewSvcGuideSummary(){
   `).join('')}</div>${rodizioNote}${obs ? `<div class="svc-confirm-note"><strong>Observações:</strong> ${sanitize(obs)}</div>` : ''}`;
 }
 
+let locationReviewItems = [];
+
+function locationReviewStatusLabel(status) {
+  return ({ missing_cep:'Sem CEP', missing_location:'Sem coordenada', approximate:'Aproximada — revisar', exact:'Exata', verified:'Confirmada' })[status] || status;
+}
+
+async function openLocationReviewModal() {
+  document.getElementById('location-review-modal')?.classList.add('open');
+  document.getElementById('location-review-content').innerHTML = '<div class="ui-empty-state">Carregando localizações...</div>';
+  await loadLocationReviewQueue();
+}
+
+function closeLocationReviewModal() {
+  document.getElementById('location-review-modal')?.classList.remove('open');
+}
+
+async function loadLocationReviewQueue() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/location-review`);
+    const payload = await response.json().catch(() => ([]));
+    if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+    locationReviewItems = Array.isArray(payload) ? payload : [];
+    renderLocationReviewQueue();
+  } catch(e) {
+    document.getElementById('location-review-content').innerHTML = `<div class="ui-empty-state">${sanitize(e.message || e)}</div>`;
+  }
+}
+
+function renderLocationReviewQueue() {
+  const content = document.getElementById('location-review-content');
+  if (!content) return;
+  const filter = document.getElementById('location-review-filter')?.value || 'pending';
+  const rows = locationReviewItems.filter(item => filter === 'all'
+    || (filter === 'pending' && ['missing_cep','missing_location','approximate'].includes(item.status))
+    || item.status === filter);
+  if (!rows.length) {
+    content.innerHTML = '<div class="ui-empty-state"><div class="ui-empty-title">Nenhuma localização neste filtro</div></div>';
+    return;
+  }
+  content.innerHTML = `<div class="op-map-list">${rows.map((item, index) => {
+    const canLocate = item.status !== 'missing_cep' && item.status !== 'verified';
+    return `<div class="op-map-item ${item.status === 'approximate' ? 'orange' : ''}">
+      <div class="op-map-item-head"><div class="op-map-item-client">${index + 1}. ${sanitize(item.customer_name)}</div><span class="chip ${item.status === 'verified' ? 'chip-green' : item.status === 'exact' ? 'chip-blue' : 'chip-orange'}">${sanitize(locationReviewStatusLabel(item.status))}</span></div>
+      <div class="op-map-item-meta"><span>${sanitize(item.address_label || 'Principal')} · ${sanitize(item.cep || 'CEP ausente')}</span><span>${sanitize(item.address || 'Endereço não informado')}</span><span>${Number(item.linked_services || 0)} serviço(s) vinculado(s)</span></div>
+      <div class="op-map-quick-actions" style="margin-left:0">
+        ${canLocate ? `<button class="op-map-mini-btn primary" onclick="locateReviewItem(${jsArg(item.customer_id)}, ${jsArg(item.address_id || '')})">Localizar pelo CEP/endereço</button>` : ''}
+        <button class="op-map-mini-btn" onclick="closeLocationReviewModal();openClientModal(${jsArg(item.customer_id)})">Abrir cadastro</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+async function locateReviewItem(customerId, addressId = '', options = {}) {
+  const path = addressId
+    ? `/api/customers/${encodeURIComponent(customerId)}/addresses/${encodeURIComponent(addressId)}/geocode`
+    : `/api/customers/${encodeURIComponent(customerId)}/geocode`;
+  const response = await fetch(`${API_BASE_URL}${path}`, { method:'POST', headers: await getBackendAuthHeaders() });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Erro ${response.status}`);
+  if (!options.silent) toast(payload.precision === 'approximate' ? 'Localização aproximada encontrada; revise o ponto.' : 'Localização encontrada.', payload.precision === 'approximate' ? 'warn' : 'ok');
+  return payload;
+}
+
+async function runLocationReviewBatch() {
+  const pending = locationReviewItems.filter(item => ['missing_location','approximate'].includes(item.status) && item.cep);
+  if (!pending.length) return toast('Nenhuma localização pendente com CEP.', 'warn');
+  const button = document.getElementById('location-review-batch');
+  const progress = document.getElementById('location-review-progress');
+  button.disabled = true;
+  let successes = 0;
+  let failures = 0;
+  for (let index = 0; index < pending.length; index += 1) {
+    progress.textContent = `${index + 1}/${pending.length} · ${successes} sucesso(s) · ${failures} falha(s)`;
+    try {
+      await locateReviewItem(pending[index].customer_id, pending[index].address_id || '', { silent:true });
+      successes += 1;
+    } catch(e) {
+      failures += 1;
+    }
+  }
+  progress.textContent = `Concluído: ${successes} localizado(s), ${failures} não encontrado(s)`;
+  button.disabled = false;
+  await loadLocationReviewQueue();
+}
+
 function bindNewSvcGuideSummary(){
   ['ns-dt','ns-hr','ns-client-search','ns-cl','ns-cep','ns-numero','ns-end','ns-address-select','ns-save-address-unit','ns-vei','ns-os','ns-obs'].forEach(id => {
     const el = document.getElementById(id);
@@ -16975,12 +17297,17 @@ function bindNewSvcGuideSummary(){
 
 function openNewSvc(initialData = {}){
   carregarCatalogosServico();
+  let storedDraft = null;
+  if (!Object.keys(initialData || {}).length) {
+    try { storedDraft = JSON.parse(localStorage.getItem(NEW_SERVICE_DRAFT_KEY) || 'null'); } catch(e) { storedDraft = null; }
+  }
+  const source = { ...(storedDraft || {}), ...(initialData || {}) };
   const defaults = {
-    data: initialData.data || new Date().toISOString().split('T')[0],
-    clientId: initialData.clientId || '',
-    cliente: initialData.cliente || '',
-    endereco: initialData.endereco || '',
-    focarData: !!initialData.focarData
+    data: source.data || source.dt || new Date().toISOString().split('T')[0],
+    clientId: source.clientId || source.cliente_id || '',
+    cliente: source.cliente || source.cl || '',
+    endereco: source.endereco || '',
+    focarData: !!source.focarData
   };
   const modal = document.getElementById('modal');
   modal.classList.remove('day-detail-modal','changelog-modal','diagnostics-modal');
@@ -17002,7 +17329,7 @@ function openNewSvc(initialData = {}){
       </div>
 
       <div class="svc-guide-steps" aria-label="Fluxo guiado do serviço">
-        <div class="svc-guide-step"><span class="svc-guide-num">1</span><div><div class="svc-guide-label">Cliente</div><div class="svc-guide-help">Busque para vincular ou digite novo.</div></div></div>
+        <div class="svc-guide-step"><span class="svc-guide-num">1</span><div><div class="svc-guide-label">Cliente</div><div class="svc-guide-help">Selecione um cadastro apto ou complete-o.</div></div></div>
         <div class="svc-guide-step"><span class="svc-guide-num">2</span><div><div class="svc-guide-label">Serviço</div><div class="svc-guide-help">Informe data, horário e tipo.</div></div></div>
         <div class="svc-guide-step"><span class="svc-guide-num">3</span><div><div class="svc-guide-label">Técnico</div><div class="svc-guide-help">Defina equipe e veículo se possível.</div></div></div>
         <div class="svc-guide-step"><span class="svc-guide-num">4</span><div><div class="svc-guide-label">Confirmar</div><div class="svc-guide-help">Revise o resumo antes de salvar.</div></div></div>
@@ -17022,7 +17349,7 @@ function openNewSvc(initialData = {}){
           <section class="svc-edit-section">
             <div class="svc-edit-section-head">
               <div class="svc-edit-section-title">1. Cliente e data</div>
-              <div class="svc-edit-section-desc">Selecione um cliente cadastrado ou digite um novo para o sistema criar junto com o serviço.</div>
+              <div class="svc-edit-section-desc">Selecione um cliente apto ou conclua o cadastro antes de criar o serviço.</div>
             </div>
             <div class="svc-edit-grid">
               <div class="svc-edit-field">
@@ -17038,7 +17365,8 @@ function openNewSvc(initialData = {}){
                 <input type="search" id="ns-client-search" class="finput" placeholder="Digite 3 letras para buscar e vincular..." oninput="buscarClienteServicoAutocomplete('ns');updateNewSvcGuideSummary()" autocomplete="off">
                 <input type="hidden" id="ns-client-select" value="${escapeHtmlAttr(defaults.clientId)}">
                 <div id="ns-client-suggestions" style="margin-top:6px;display:none"></div>
-                <div id="ns-client-hint" class="svc-edit-help">Se o cliente já existir, selecione na lista. Se não existir, ele será criado automaticamente ao salvar.</div>
+                <div id="ns-client-hint" class="svc-edit-help">Se o cliente não existir, conclua o cadastro completo antes de agendar.</div>
+                <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="abrirCadastroClienteParaServico('ns')">+ Cadastrar cliente completo</button>
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Cliente / Condomínio</label>
@@ -17047,8 +17375,7 @@ function openNewSvc(initialData = {}){
               <div class="svc-edit-field">
                 <label class="svc-edit-label">CEP</label>
                 <div class="client-inline">
-                  <input type="text" id="ns-cep" class="finput" placeholder="00000-000" maxlength="9" onblur="buscarCepServico('ns')">
-                  <button type="button" class="client-btn secondary" id="ns-cep-btn" onclick="buscarCepServico('ns')" style="min-height:42px;padding:0 12px">Buscar</button>
+                  <input type="text" id="ns-cep" class="finput" placeholder="Preenchido pela unidade" maxlength="9" readonly>
                 </div>
                 <input type="hidden" id="ns-rua">
                 <input type="hidden" id="ns-bairro">
@@ -17058,18 +17385,18 @@ function openNewSvc(initialData = {}){
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Número</label>
-                <input type="text" id="ns-numero" class="finput" placeholder="Ex: 135" oninput="syncServicoEndereco('ns')">
+                <input type="text" id="ns-numero" class="finput" placeholder="Preenchido pela unidade" readonly>
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Endereço completo</label>
-                <input type="text" id="ns-end" value="${escapeHtmlAttr(defaults.endereco)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Ex: Rua Silva Teles, 951 - Pari, São Paulo" oninput="renderEnderecosClienteServico('ns', document.getElementById('ns-client-select')?.value || '', this.value);updateNewSvcGuideSummary()">
+                <input type="text" id="ns-end" value="${escapeHtmlAttr(defaults.endereco)}" data-client-id="${escapeHtmlAttr(defaults.clientId)}" placeholder="Selecione uma unidade cadastrada" readonly>
               </div>
               <div class="svc-edit-field full" id="ns-address-wrap" style="display:none">
                 <label class="svc-edit-label">Unidade / endereço do cliente</label>
                 <select id="ns-address-select" onchange="selecionarEnderecoServico('ns')">
-                  <option value="">Use o endereço digitado</option>
+                  <option value="">Selecione uma unidade cadastrada</option>
                 </select>
-                <label class="client-checkbox-row" style="margin-top:8px" for="ns-save-address-unit">
+                <label class="client-checkbox-row" style="margin-top:8px;display:none" for="ns-save-address-unit">
                   <input type="checkbox" id="ns-save-address-unit">
                   <span>Salvar endereço digitado como nova unidade do cliente</span>
                 </label>
@@ -17111,7 +17438,7 @@ function openNewSvc(initialData = {}){
           <section class="svc-confirm-panel">
             <div class="svc-confirm-title">4. Conferir antes de salvar</div>
             <div id="ns-guide-summary"></div>
-            <div class="svc-confirm-note">Ao salvar, o sistema valida a logística e tenta vincular o cliente automaticamente. Se houver mais de um cliente parecido, você será orientado a selecionar o cadastro correto.</div>
+            <div class="svc-confirm-note">O serviço só será confirmado depois que o servidor validar o cliente, o contato e a unidade selecionada.</div>
           </section>
         </div>
       </div>
@@ -17119,24 +17446,40 @@ function openNewSvc(initialData = {}){
       <div class="svc-edit-footer">
         <button type="button" class="svc-edit-btn secondary" onclick="closeModal()">Cancelar</button>
         <span class="svc-edit-footer-spacer"></span>
-        <button type="button" class="svc-edit-btn primary" onclick="confirmNewSvc()">Salvar Serviço</button>
+        <button type="button" class="svc-edit-btn primary" id="ns-save-btn" onclick="confirmNewSvc()">Salvar Serviço</button>
       </div>
     </div>
   `;
   document.getElementById('modal-del').style.display='none';
   currentDelId=null;
   modal.classList.add('open');
-  renderTecnicos([], 'ns-tecnicos-container');
-  carregarTecnicos().then(() => { renderTecnicos([], 'ns-tecnicos-container'); updateNewSvcGuideSummary(); });
-  carregarVeiculos().then(() => { renderVeiculosSelect('ns-vei'); updateNewSvcGuideSummary(); });
-  renderTiposCheckbox([], 'ns-tipos-container');
+  const draftTechnicians = Array.isArray(source.tecnicos_ids) ? source.tecnicos_ids : [];
+  const draftTypes = Array.isArray(source.tipos) ? source.tipos : [];
+  renderTecnicos(draftTechnicians, 'ns-tecnicos-container');
+  carregarTecnicos().then(() => { renderTecnicos(draftTechnicians, 'ns-tecnicos-container'); updateNewSvcGuideSummary(); });
+  carregarVeiculos().then(() => { renderVeiculosSelect('ns-vei', source.veiculo || ''); updateNewSvcGuideSummary(); });
+  renderTiposCheckbox(draftTypes, 'ns-tipos-container');
   bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
   initServicoClienteSelect('ns', defaults.clientId, defaults.cliente);
+  const fieldValues = {
+    'ns-hr': source.horario || source.hr || '',
+    'ns-os': source.os || source.OS || '',
+    'ns-obs': source.observacoes || source.obs || ''
+  };
+  Object.entries(fieldValues).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.value = value; });
   bindNewSvcGuideSummary();
+  if (storedDraft) toast('Rascunho não agendado restaurado.', 'warn');
   if (defaults.focarData) {
     document.getElementById('ns-dt')?.focus();
   }
 }
+
+const NEW_SERVICE_DRAFT_KEY = 'letec_new_service_draft_v1';
+
+function saveNewServiceDraft(draft) {
+  try { localStorage.setItem(NEW_SERVICE_DRAFT_KEY, JSON.stringify({ ...draft, saved_at: new Date().toISOString() })); } catch(e) {}
+}
+
 async function confirmNewSvc(){
   const dt=document.getElementById('ns-dt')?.value;
   const clienteInput = document.getElementById('ns-cl');
@@ -17166,15 +17509,16 @@ async function confirmNewSvc(){
   const horario     = document.getElementById('ns-hr')?.value||'';
   const cliente_id = document.getElementById('ns-client-select')?.value || clienteInput?.dataset.clientId || enderecoEl?.dataset.clientId || '';
   const customer_address_id = document.getElementById('ns-address-select')?.value || '';
-  const salvarUnidadeCliente = document.getElementById('ns-save-address-unit')?.checked === true;
   const addressPayload = servicoAddressPayloadFromForm('ns');
-  if (!customer_address_id && salvarUnidadeCliente) {
-    const cepDigits = String(addressPayload.cep || '').replace(/\D/g, '');
-    if (cepDigits.length !== 8 || !addressPayload.numero || !addressPayload.rua || !addressPayload.bairro || !addressPayload.cidade || !addressPayload.uf) {
-      toast('Para endereço novo, busque o CEP e informe o número antes de salvar', 'err');
-      document.getElementById('ns-cep')?.focus();
-      return;
-    }
+  if (!cliente_id) {
+    toast('Selecione um cliente cadastrado antes de salvar', 'err');
+    document.getElementById('ns-client-search')?.focus();
+    return;
+  }
+  if (!customer_address_id) {
+    toast('Selecione uma unidade completa do cliente antes de salvar', 'err');
+    document.getElementById('ns-address-select')?.focus();
+    return;
   }
 
   // Gerar ID único (timestamp numérico compatível com BIGINT PK do Supabase)
@@ -17183,16 +17527,13 @@ async function confirmNewSvc(){
   const newS={
     id: newId, dt, dw, ms,
     cliente: cl, cliente_id, customer_address_id,
-    salvar_unidade_cliente: salvarUnidadeCliente,
     endereco, horario,
     ...addressPayload,
     tipoServico, tipos: tiposSel,
     tecnicos_ids, equipe, veiculo, os, observacoes,
     pre_agendamento: tecnicos_ids.length === 0,
     status: 'agendado',
-    cl, hr: horario, sc: tipoFirst, eq: '', st: 'agendado', obs: observacoes,
-    _syncStatus: 'pending_create',
-    _queuedAt: new Date().toISOString()
+    cl, hr: horario, sc: tipoFirst, eq: '', st: 'agendado', obs: observacoes
   };
 
   const avaliacao = await validarLogisticaServico(newS);
@@ -17218,34 +17559,31 @@ async function confirmNewSvc(){
       .catch(e => logisticaDebug('[Validação logística legado indisponível]', e?.message || e));
   }
 
-  // Adicionar ao array
-  services.unshift(newS);
-  
-  // Salvar para localStorage (crítico!)
-  saveSvcs();
-  
-  // Fechar modal e atualizar UI
-  closeModal();
-  updateBadges();
-  updateFooter();
-  
-  // Feedback ao usuário
-  if (avaliacao.status === 'conflito_critico') {
-    toast('Serviço criado com justificativa logística crítica','warn');
-  } else if (avaliacao.status === 'alerta') {
-    toast(mensagemResumoValidacaoLogistica(avaliacao),'warn');
-  } else {
-    toast(`✅ Serviço criado! (${tipoServico})`,'ok');
+  if (!navigator.onLine) {
+    saveNewServiceDraft(newS);
+    toast('Sem conexão: rascunho salvo neste dispositivo, mas o serviço não foi agendado.', 'warn');
+    return;
   }
-  
-  // Re-renderizar página atual
-  if(currentPage==='agenda') renderAgenda();
-  if(currentPage==='hoje') renderHoje();
-  if(currentPage==='dashboard') renderDash();
-  
-  // Salvar no Supabase (assíncrono, sem bloquear)
-  if (USAR_SUPABASE) {
-    salvarServicoSupabase(newS).catch(e => console.error('Erro ao salvar no Supabase:', e));
+
+  const saveButton = document.getElementById('ns-save-btn');
+  if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Validando e salvando...'; }
+  try {
+    const saved = await createServiceViaBackend(newS);
+    mergeServiceFromBackend(saved, newS);
+    try { localStorage.removeItem(NEW_SERVICE_DRAFT_KEY); } catch(e) {}
+    closeModal();
+    if (avaliacao.status === 'conflito_critico') {
+      toast('Serviço criado com justificativa logística crítica','warn');
+    } else if (avaliacao.status === 'alerta') {
+      toast(mensagemResumoValidacaoLogistica(avaliacao),'warn');
+    } else {
+      toast(`✅ Serviço criado! (${tipoServico})`,'ok');
+    }
+  } catch (error) {
+    console.error('Erro ao criar serviço:', error);
+    toast(error.message || 'Não foi possível criar o serviço', 'err');
+  } finally {
+    if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Salvar Serviço'; }
   }
 }
 
@@ -17254,21 +17592,6 @@ async function confirmNewSvc(){
 // ════════════════════════════════════════════════
 let authEventsBound = false;
 const APP_AUTH_SESSION_KEY = 'letec_app_auth_session_v1';
-const AUTH_PROFILES = {
-  admin: {
-    label: 'Admin',
-    email: 'admin@leteclog.local'
-  },
-  operador: {
-    label: 'Operador',
-    email: 'logistica@leteclog.local'
-  },
-  tecnicos: {
-    label: 'Técnicos',
-    email: 'tecnicos@leteclog.local'
-  }
-};
-let selectedAuthProfile = 'admin';
 
 function loadAppAuthSession(){
   try {
@@ -17304,22 +17627,6 @@ function openAuthModal(){
 function closeAuthModal(){
   const modal = document.getElementById('auth-modal');
   if(modal) modal.classList.remove('open');
-}
-
-function selectAuthProfile(profile){
-  if(!AUTH_PROFILES[profile]) return;
-  selectedAuthProfile = profile;
-
-  const emailInput = document.getElementById('auth-email');
-  if(emailInput && !emailInput.value.trim()){
-    emailInput.value = AUTH_PROFILES[profile].email;
-  }
-
-  ['admin','operador','tecnicos'].forEach((key)=>{
-    const btn = document.getElementById(`auth-profile-${key}`);
-    if(!btn) return;
-    btn.className = key === profile ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
-  });
 }
 
 function authDisplayName(user){
@@ -17367,6 +17674,16 @@ function bindAuthEvents(){
     });
   }
 
+  document.getElementById('password-recovery-form')?.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    await updateRecoveredPassword();
+  });
+  supabaseClient.auth.onAuthStateChange((event) => {
+    if(event === 'PASSWORD_RECOVERY') document.getElementById('password-recovery-modal')?.classList.add('open');
+  });
+  const authFlow = new URLSearchParams(location.search).get('auth_flow');
+  if(authFlow === 'recovery' || authFlow === 'invite') document.getElementById('password-recovery-modal')?.classList.add('open');
+
   authEventsBound = true;
 }
 
@@ -17389,14 +17706,24 @@ async function checkAuth(){
     const { data, error } = await supabaseClient.auth.getSession();
     if(error) throw error;
 
-    const user = data?.session?.user || null;
-    updateAuthUI(user);
-
-    if(!user){
+    const session = data?.session || null;
+    if(!session?.user){
+      updateAuthUI(null);
       openAuthModal();
       return false;
     }
-
+    const response = await fetch(`${API_BASE_URL}/api/app-auth/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if(!response.ok){
+      await supabaseClient.auth.signOut();
+      updateAuthUI(null);
+      openAuthModal();
+      toast('Esta conta não possui acesso ativo ao painel.', 'err');
+      return false;
+    }
+    const profile = await response.json();
+    updateAuthUI(profile.user);
     closeAuthModal();
     return true;
   } catch(e){
@@ -17410,7 +17737,7 @@ async function checkAuth(){
 
 async function login(){
   const emailInput = document.getElementById('auth-email');
-  const email = (emailInput?.value || '').trim() || AUTH_PROFILES[selectedAuthProfile]?.email || '';
+  const email = (emailInput?.value || '').trim();
   const password = document.getElementById('auth-password')?.value || '';
   const btn = document.getElementById('auth-login-btn');
   const originalText = btn?.textContent || 'Entrar';
@@ -17449,7 +17776,7 @@ async function login(){
     }
 
     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if(error) throw new Error(appAuthFailed || error.message);
+    if(error) throw new Error(error.message || appAuthFailed || 'Email ou senha inválidos');
 
     toast('✅ Login realizado com sucesso!', 'ok');
     closeAuthModal();
@@ -17463,6 +17790,32 @@ async function login(){
       btn.textContent = originalText;
     }
   }
+}
+
+async function requestAuthEmail(path){
+  const email = document.getElementById('auth-email')?.value.trim() || '';
+  if(!email){ toast('Informe seu e-mail.', 'err'); return; }
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email}) });
+    const payload = await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(payload.error || 'Não foi possível solicitar o e-mail.');
+    toast(payload.message || 'Se o e-mail estiver cadastrado, enviaremos as instruções.', 'ok');
+  } catch(e){ toast(e.message, 'err'); }
+}
+function requestMagicLink(){ return requestAuthEmail('/api/app-auth/magic-link'); }
+function requestPasswordRecovery(){ return requestAuthEmail('/api/app-auth/recovery'); }
+
+async function updateRecoveredPassword(){
+  const password = document.getElementById('recovery-password')?.value || '';
+  const confirmation = document.getElementById('recovery-password-confirm')?.value || '';
+  if(password.length < 8){ toast('A senha deve ter pelo menos 8 caracteres.', 'err'); return; }
+  if(password !== confirmation){ toast('As senhas não conferem.', 'err'); return; }
+  const { error } = await supabaseClient.auth.updateUser({ password });
+  if(error){ toast('Não foi possível alterar a senha: ' + error.message, 'err'); return; }
+  document.getElementById('password-recovery-modal')?.classList.remove('open');
+  history.replaceState({}, document.title, location.pathname);
+  toast('Senha atualizada com sucesso.', 'ok');
+  location.reload();
 }
 
 async function logout(){
@@ -17486,8 +17839,6 @@ async function logout(){
     location.reload();
   }
 }
-
-selectAuthProfile('admin');
 
 function closeModal(){
   const modal = document.getElementById('modal');
@@ -19842,6 +20193,27 @@ let lastSyncAt = null;
 let isProcessingQueue = false;
 const MAX_SUPABASE_RETRIES = 3;
 
+function blockLegacyUnlinkedServiceInserts() {
+  let changed = false;
+  offlineQueue.forEach(item => {
+    if (item?.op !== 'insert' || !item.service) return;
+    if (ensureQueuedServiceInsertEligibility(item)) changed = true;
+  });
+  if (changed) saveOfflineQueue();
+}
+
+function ensureQueuedServiceInsertEligibility(item) {
+  if (item?.op !== 'insert' || !item.service) return false;
+  if (item.service.cliente_id && item.service.customer_address_id) return false;
+  const wasBlocked = item.blocked === true;
+  item.blocked = true;
+  item.lastError = 'Serviço antigo sem cliente/unidade vinculados. Abra e complete antes de reenviar.';
+  item.failedAt = item.failedAt || new Date().toISOString();
+  return !wasBlocked;
+}
+
+blockLegacyUnlinkedServiceInserts();
+
 function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function saveOfflineQueue() { localStorage.setItem('offlineQueue', JSON.stringify(offlineQueue)); }
 function formatLastSync() {
@@ -19881,6 +20253,7 @@ function enqueueOffline(item) {
   item.queuedAt = item.queuedAt || new Date().toISOString();
   delete item.lastError;
   delete item.failedAt;
+  ensureQueuedServiceInsertEligibility(item);
   offlineQueue.push(item);
   saveOfflineQueue();
   toast('⏳ Aguardando conexão...', 'warn');
@@ -19904,6 +20277,7 @@ function mergeServiceIntoQueuedInsert(service) {
   queued.blocked = false;
   delete queued.lastError;
   delete queued.failedAt;
+  ensureQueuedServiceInsertEligibility(queued);
   saveOfflineQueue();
   return true;
 }
@@ -19923,6 +20297,7 @@ function compactOfflineQueue() {
       pendingInsert.blocked = false;
       delete pendingInsert.lastError;
       delete pendingInsert.failedAt;
+      ensureQueuedServiceInsertEligibility(pendingInsert);
       continue;
     }
     if (item.op === 'delete' && pendingInsert) {
@@ -20063,6 +20438,7 @@ async function processOfflineQueue() {
   while (offlineQueue.length > 0 && navigator.onLine && inspectedCount < maxInspect) {
     const item = offlineQueue[0];
     inspectedCount++;
+    if (ensureQueuedServiceInsertEligibility(item)) saveOfflineQueue();
     if (item?.blocked) {
       offlineQueue.push(offlineQueue.shift());
       saveOfflineQueue();
@@ -20219,7 +20595,7 @@ function renderOperationalDiagnosticsPanel() {
       <td>${item.status === 'bloqueada' ? diagnosticsChip('err', 'erro permanente') : diagnosticsChip('warn', 'pendente')}</td>
       <td>${sanitize(item.error || '—')}</td>
       <td class="mono">${diagnosticsTime(item.queuedAt)}</td>
-      <td>${item.status === 'bloqueada' ? `<button class="btn btn-ghost btn-xs" onclick="removeBlockedOfflineQueueItem(${item.index})">Remover bloqueada</button>` : '<span class="text-muted">preservada</span>'}</td>
+      <td>${item.status === 'bloqueada' ? `${item.op === 'insert' ? `<button class="btn btn-primary btn-xs" onclick="recoverBlockedServiceDraft(${item.index})">Abrir e corrigir</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="removeBlockedOfflineQueueItem(${item.index})">Remover</button>` : '<span class="text-muted">preservada</span>'}</td>
     </tr>
   `).join('') : '<tr><td colspan="6" class="text-muted">Nenhuma pendência offline.</td></tr>';
   const moduleRows = snapshot.modules.map(item => {
@@ -21213,7 +21589,10 @@ async function carregarUsuariosConfig() {
   if (!container) return;
   container.innerHTML = '<div class="text-muted">Carregando...</div>';
   try {
-    const users = await requestBackendJson('/api/app-users');
+    const [users, authAudit] = await Promise.all([
+      requestBackendJson('/api/app-users'),
+      requestBackendJson('/api/app-users/auth-audit').catch(() => [])
+    ]);
     container.innerHTML = `
       <div class="card" style="margin-bottom:16px;padding:16px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">
@@ -21221,7 +21600,7 @@ async function carregarUsuariosConfig() {
             <div class="card-label">🔐 Usuários internos (${users.length})</div>
             <div class="section-sub" style="font-size:12px;margin-top:4px">Acessos individuais para quem usa o painel administrativo.</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="formNovoUsuario()">+ Novo usuário</button>
+          <button class="btn btn-primary btn-sm" onclick="formNovoUsuario()">+ Convidar usuário</button>
         </div>
         <div id="form-novo-usuario" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg2);border-radius:var(--r2)">
           <div class="form-row fr-3 mb3">
@@ -21229,45 +21608,40 @@ async function carregarUsuariosConfig() {
             <div class="field"><label>Email</label><input type="email" id="cfg-user-email" placeholder="usuario@empresa.com"></div>
             <div class="field"><label>Perfil</label><select class="fsel" id="cfg-user-role"><option value="operador">Operador</option><option value="admin">Admin</option></select></div>
           </div>
-          <div class="form-row fr-2 mb3">
-            <div class="field"><label>Senha inicial</label><input type="text" id="cfg-user-password" placeholder="Mínimo 6 caracteres"></div>
-            <div class="field"><label>Status</label><select class="fsel" id="cfg-user-active"><option value="true">Ativo</option><option value="false">Inativo</option></select></div>
-          </div>
+          <div class="form-row fr-2 mb3"><div class="field"><label>Status</label><select class="fsel" id="cfg-user-active"><option value="true">Ativo</option><option value="false">Inativo</option></select></div></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="salvarUsuarioInterno()">Salvar usuário</button>
-            <button class="btn btn-ghost btn-sm" onclick="gerarSenhaUsuarioCampo()">Gerar senha</button>
+            <button class="btn btn-primary btn-sm" onclick="salvarUsuarioInterno()">Enviar convite</button>
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('form-novo-usuario').style.display='none'">Cancelar</button>
           </div>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Status</th><th>Senha</th><th>Ações</th></tr></thead>
+          <thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Status</th><th>Supabase Auth</th><th>Último acesso</th><th>Ações</th></tr></thead>
           <tbody>${users.map(u => `<tr>
             <td class="bold">${sanitize(u.name || '—')}</td>
             <td class="mono">${sanitize(u.email || '—')}</td>
             <td><span class="chip ${u.role === 'admin' ? 'chip-blue' : 'chip-green'}">${sanitize(u.role || '—')}</span></td>
             <td>${u.active ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td>
-            <td>${u.password_updated_at ? `<span class="chip chip-green">Configurada</span>` : '<span class="chip chip-orange">Sem senha</span>'}</td>
+            <td>${u.auth_linked ? `<span class="chip ${u.auth_status === 'confirmed' ? 'chip-green' : 'chip-orange'}">${u.auth_status === 'confirmed' ? 'Vinculado' : 'Convite pendente'}</span>` : '<span class="chip chip-orange">Sem vínculo</span>'}</td>
+            <td class="mono">${u.auth_last_sign_in_at ? sanitize(new Date(u.auth_last_sign_in_at).toLocaleString('pt-BR')) : '—'}</td>
             <td style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="editarUsuarioInterno(${jsArg(u.id)}, ${jsArg(u.name || '')}, ${jsArg(u.email || '')}, ${jsArg(u.role || 'operador')}, ${u.active ? 'true' : 'false'})">Editar</button>
-              <button class="btn btn-ghost btn-sm" onclick="trocarSenhaUsuarioInterno(${jsArg(u.id)}, ${jsArg(u.email || '')})">Trocar senha</button>
+              <button class="btn btn-ghost btn-sm" onclick="enviarRecuperacaoUsuario(${jsArg(u.email || '')})">Recuperar acesso</button>
               <button class="btn btn-ghost btn-sm" onclick="toggleUsuarioInterno(${jsArg(u.id)}, ${u.active ? 'false' : 'true'})">${u.active ? 'Desativar' : 'Ativar'}</button>
               <button class="btn btn-ghost btn-sm" onclick="revogarUsuarioInterno(${jsArg(u.id)})">Revogar</button>
             </td>
           </tr>`).join('')}</tbody>
         </table></div>
+      </div>
+      <div class="card" style="margin-bottom:16px;padding:16px">
+        <div class="card-label" style="margin-bottom:4px">Revisão de contas do Supabase Auth</div>
+        <div class="section-sub" style="font-size:12px;margin-bottom:12px">Contas não vinculadas são apenas classificadas; nenhuma conta é removida automaticamente.</div>
+        <div class="tbl-wrap"><table><thead><tr><th>Email</th><th>Classificação</th><th>Vínculo</th><th>Último acesso</th></tr></thead>
+          <tbody>${authAudit.map(item => `<tr><td class="mono">${sanitize(item.email || '—')}</td><td><span class="chip chip-gray">${sanitize(item.classification || 'unmapped')}</span></td><td>${item.linked_app_user ? '<span class="chip chip-green">Vinculada</span>' : item.email_match_app_user ? '<span class="chip chip-orange">Email corresponde; revisar</span>' : '—'}</td><td class="mono">${item.auth_last_sign_in_at ? sanitize(new Date(item.auth_last_sign_in_at).toLocaleString('pt-BR')) : '—'}</td></tr>`).join('')}</tbody>
+        </table></div>
       </div>`;
   } catch(e) {
     container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + sanitize(e.message) + '</div>';
   }
-}
-
-function gerarSenhaTemporariaUsuario() {
-  return `Letec@${Math.floor(100000 + Math.random() * 900000)}`;
-}
-
-function gerarSenhaUsuarioCampo() {
-  const el = document.getElementById('cfg-user-password');
-  if (el) el.value = gerarSenhaTemporariaUsuario();
 }
 
 function formNovoUsuario() {
@@ -21276,7 +21650,6 @@ function formNovoUsuario() {
   document.getElementById('cfg-user-email').value = '';
   document.getElementById('cfg-user-role').value = 'operador';
   document.getElementById('cfg-user-active').value = 'true';
-  document.getElementById('cfg-user-password').value = gerarSenhaTemporariaUsuario();
   document.getElementById('cfg-user-name').focus();
 }
 
@@ -21285,12 +21658,10 @@ async function salvarUsuarioInterno() {
   const email = document.getElementById('cfg-user-email')?.value.trim() || '';
   const role = document.getElementById('cfg-user-role')?.value || 'operador';
   const active = document.getElementById('cfg-user-active')?.value !== 'false';
-  const password = document.getElementById('cfg-user-password')?.value || '';
-  if (!email || !password) { toast('Preencha email e senha.', 'err'); return; }
+  if (!email) { toast('Preencha o e-mail.', 'err'); return; }
   try {
-    await requestBackendJson('/api/app-users', { method:'POST', body: JSON.stringify({ name, email, role, active, password }) });
-    toast('✅ Usuário criado!', 'ok');
-    alert(`Usuário criado:\nEmail: ${email}\nSenha: ${password}\n\nEntregue essa senha apenas para a pessoa responsável.`);
+    const result = await requestBackendJson('/api/app-users/invite', { method:'POST', body: JSON.stringify({ name, email, role, active }) });
+    toast(result.invited ? '✅ Convite enviado!' : '✅ Usuário Auth existente vinculado!', 'ok');
     await carregarUsuariosConfig();
   } catch(e) {
     toast('❌ Erro ao criar usuário: ' + e.message, 'err');
@@ -21302,6 +21673,7 @@ async function editarUsuarioInterno(id, name, email, role, active) {
   const novoEmail = prompt('Email do usuário:', email || '') ?? email;
   const novoRole = prompt('Perfil (admin ou operador):', role || 'operador') ?? role;
   if (!['admin','operador'].includes(String(novoRole).toLowerCase())) { toast('Perfil inválido.', 'err'); return; }
+  if (!confirmAction(`Confirmar alteração de ${email} para o perfil ${String(novoRole).toLowerCase()}?`)) return;
   try {
     await requestBackendJson(`/api/app-users/${encodeURIComponent(id)}`, {
       method:'PUT',
@@ -21314,18 +21686,25 @@ async function editarUsuarioInterno(id, name, email, role, active) {
   }
 }
 
-async function trocarSenhaUsuarioInterno(id, email) {
-  const password = prompt(`Nova senha para ${email}:`, gerarSenhaTemporariaUsuario());
-  if (!password) return;
-  if (password.length < 6) { toast('Senha deve ter pelo menos 6 caracteres.', 'err'); return; }
+async function enviarRecuperacaoUsuario(email) {
+  if (!confirmAction(`Enviar recuperação de acesso para ${email}?`)) return;
   try {
-    await requestBackendJson(`/api/app-users/${encodeURIComponent(id)}`, { method:'PUT', body: JSON.stringify({ password }) });
-    toast('✅ Senha alterada!', 'ok');
-    alert(`Nova senha de ${email}:\n${password}`);
-    await carregarUsuariosConfig();
+    await requestBackendJson('/api/app-auth/recovery', { method:'POST', body: JSON.stringify({ email }) });
+    toast('Se o e-mail estiver cadastrado, as instruções serão enviadas.', 'ok');
   } catch(e) {
-    toast('❌ Erro ao trocar senha: ' + e.message, 'err');
+    toast('❌ Erro ao solicitar recuperação: ' + e.message, 'err');
   }
+}
+
+function recoverBlockedServiceDraft(index) {
+  const item = offlineQueue[index];
+  if (!item?.blocked || item.op !== 'insert' || !item.service) return;
+  const draft = cloneServiceState(item.service);
+  saveNewServiceDraft(draft);
+  offlineQueue.splice(index, 1);
+  saveOfflineQueue();
+  closeModal();
+  setTimeout(() => openNewSvc(draft), 50);
 }
 
 async function toggleUsuarioInterno(id, active) {
