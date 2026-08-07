@@ -2,7 +2,7 @@ function createAppointmentService(deps) {
   const {
     normalizeServicePayload,
     runServiceWriteWithSchemaFallback,
-    ensureCustomerForServicePayload
+    resolveSchedulingCustomer
   } = deps;
 
   function normalizeAppointmentPayload(input = {}, options = {}) {
@@ -13,9 +13,6 @@ function createAppointmentService(deps) {
   }
 
   function validateAppointmentPayload(payload, options = {}) {
-    if (!options.partial && !payload.cliente) {
-      return { ok: false, status: 400, code: 'appointment_client_required', error: 'Cliente é obrigatório' };
-    }
     if (!options.partial && !(payload.date || payload.data)) {
       return { ok: false, status: 400, code: 'appointment_date_required', error: 'Data é obrigatória' };
     }
@@ -28,16 +25,6 @@ function createAppointmentService(deps) {
 
   function normalizeText(value) {
     return String(value || '').trim().toLowerCase();
-  }
-
-  function hasCompleteAddressInput(input = {}) {
-    const cep = String(input.cep || '').replace(/\D/g, '');
-    return cep.length === 8
-      && !!String(input.numero || '').trim()
-      && !!String(input.rua || '').trim()
-      && !!String(input.bairro || '').trim()
-      && !!String(input.cidade || '').trim()
-      && !!String(input.uf || '').trim();
   }
 
   function parseArrayLike(value) {
@@ -170,22 +157,22 @@ function createAppointmentService(deps) {
     const validation = validateAppointmentPayload(payload);
     if (!validation.ok) return { status: validation.status, error: validation };
 
-    let customerLink = null;
+    let schedulingContext = null;
     try {
-      const hasExplicitAddressChoice = Object.prototype.hasOwnProperty.call(input || {}, 'salvar_unidade_cliente')
-        || Object.prototype.hasOwnProperty.call(input || {}, 'save_customer_address');
-      const saveAddress = hasExplicitAddressChoice
-        ? (input?.salvar_unidade_cliente === true || input?.save_customer_address === true)
-        : hasCompleteAddressInput(input);
-      customerLink = await ensureCustomerForServicePayload(db, payload, { saveAddress, input });
+      schedulingContext = await resolveSchedulingCustomer(db, payload.cliente_id, payload.customer_address_id);
     } catch (error) {
-      return { status: error.statusCode || 500, error, customerLinkFailed: true };
+      return { status: error.statusCode || 500, error, schedulingValidationFailed: true };
     }
 
-    const linkedCustomer = customerLink?.customer || null;
-    if (linkedCustomer && !payload.phone_snapshot) {
-      payload.phone_snapshot = linkedCustomer.whatsapp || linkedCustomer.telefone || null;
-    }
+    const linkedCustomer = schedulingContext.customer;
+    const linkedAddress = schedulingContext.address;
+    payload.cliente_id = Number(linkedCustomer.id);
+    payload.customer_address_id = linkedAddress.id;
+    payload.cliente = linkedCustomer.nome;
+    payload.endereco = linkedAddress.endereco_completo || linkedAddress.endereco;
+    payload.client_name_snapshot = linkedCustomer.nome;
+    payload.address_snapshot = payload.endereco;
+    payload.phone_snapshot = schedulingContext.phone || null;
 
     const { data, error } = await runServiceWriteWithSchemaFallback(
       workingPayload => db.from('services').insert([workingPayload]).select(),
@@ -199,17 +186,9 @@ function createAppointmentService(deps) {
       status: 201,
       data: saved ? {
         ...saved,
-        customer_auto_link: customerLink ? {
-          created: !!customerLink.created,
-          customer_id: payload.cliente_id || null,
-          customer_address_id: payload.customer_address_id || null
-        } : null
+        scheduling_eligible: true
       } : null
     };
-  }
-
-  async function createAppointmentWithQuickClient(db, input = {}) {
-    return createAppointment(db, input);
   }
 
   async function updateAppointment(db, id, input = {}) {
@@ -264,7 +243,6 @@ function createAppointmentService(deps) {
   return {
     createAppointment,
     updateAppointment,
-    createAppointmentWithQuickClient,
     validateAppointmentPayload,
     normalizeAppointmentPayload
   };
