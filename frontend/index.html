@@ -4938,9 +4938,9 @@ async function carregarVeiculos(){
                 <input id="cli-form-nome-normalizado" type="text" class="finput" readonly placeholder="Gerado automaticamente">
               </div>
               <div class="client-field">
-                <label class="client-label">Telefone</label>
+                <label class="client-label">Telefone <span class="text-muted">(ou WhatsApp)</span></label>
                 <input id="cli-form-tel" type="text" class="finput" placeholder="(11) 99999-9999">
-                <div class="client-field-error" id="cli-error-tel">Telefone é obrigatório.</div>
+                <div class="client-field-error" id="cli-error-contact">Informe um telefone ou WhatsApp válido.</div>
               </div>
               <div class="client-field">
                 <label class="client-label">WhatsApp</label>
@@ -15033,6 +15033,16 @@ function clientAddressDraftFromForm() {
   };
 }
 
+function isCompleteClientAddressDraft(address = {}) {
+  const cep = String(address.cep || '').replace(/\D/g, '');
+  return cep.length === 8
+    && !!String(address.rua || '').trim()
+    && !!String(address.numero || '').trim()
+    && !!String(address.bairro || '').trim()
+    && !!String(address.cidade || '').trim()
+    && String(address.uf || '').trim().length === 2;
+}
+
 function renderClientAddressesDraft() {
   const list = document.getElementById('cli-addresses-list');
   if (!list) return;
@@ -15120,9 +15130,21 @@ async function saveClientAddresses(customerId) {
   if (!customerId) return false;
   const current = clientAddressDraftFromForm();
   const currentKey = normalizeAddressText(current.endereco_completo || current.endereco || buildClientAddress(current));
-  if (currentKey && !clienteEnderecosDraft.some(address => normalizeAddressText(address.endereco_completo || address.endereco || buildClientAddress(address)) === currentKey)) {
+  const matchingIndex = currentKey
+    ? clienteEnderecosDraft.findIndex(address => normalizeAddressText(address.endereco_completo || address.endereco || buildClientAddress(address)) === currentKey)
+    : -1;
+  if (matchingIndex >= 0) {
+    clienteEnderecosDraft[matchingIndex] = {
+      ...clienteEnderecosDraft[matchingIndex],
+      ...current,
+      id: clienteEnderecosDraft[matchingIndex].id || current.id || ''
+    };
+  } else if (currentKey) {
     clienteEnderecosDraft.unshift(current);
   }
+  // Unidades legadas incompletas permanecem no banco como inativas, mas nao
+  // podem bloquear a persistencia da unidade principal completa.
+  clienteEnderecosDraft = clienteEnderecosDraft.filter(isCompleteClientAddressDraft);
   if (clienteEnderecosDraft.length && !clienteEnderecosDraft.some(item => item.is_primary)) clienteEnderecosDraft[0].is_primary = true;
   const response = await fetch(`${API_BASE_URL}/api/customers/${encodeURIComponent(customerId)}/addresses`, {
     method: 'PUT',
@@ -15457,10 +15479,10 @@ async function saveQuickClient() {
 }
 
 function clearClientFormErrors() {
-  ['cli-form-nome','cli-form-tel','cli-form-periodicidade'].forEach(id => {
+  ['cli-form-nome','cli-form-tel','cli-form-whatsapp','cli-form-periodicidade'].forEach(id => {
     document.getElementById(id)?.classList.remove('field-invalid');
   });
-  ['cli-error-nome','cli-error-tel','cli-error-periodicidade'].forEach(id => {
+  ['cli-error-nome','cli-error-contact','cli-error-periodicidade'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -15722,8 +15744,8 @@ async function saveClient() {
     clearClientFormErrors();
     const isNewClient = !clienteEditando;
     const nome = document.getElementById('cli-form-nome').value.trim();
-    const telefone = document.getElementById('cli-form-tel').value.trim();
-    const whatsapp = document.getElementById('cli-form-whatsapp').value.trim();
+    let telefone = document.getElementById('cli-form-tel').value.trim();
+    let whatsapp = document.getElementById('cli-form-whatsapp').value.trim();
     const email = document.getElementById('cli-form-email').value.trim();
     const contato = document.getElementById('cli-form-contato').value.trim();
     const nome_fantasia = document.getElementById('cli-form-fantasia').value.trim();
@@ -15777,15 +15799,23 @@ async function saveClient() {
       markClientFieldInvalid('cli-form-nome', 'cli-error-nome');
       return;
     }
-    const contactDigits = String(whatsapp || telefone || '').replace(/\D/g, '');
-    const validContact = contactDigits.startsWith('55')
-      ? [12, 13].includes(contactDigits.length)
-      : [10, 11].includes(contactDigits.length);
+    const isValidContact = value => {
+      const digits = String(value || '').replace(/\D/g, '');
+      return digits.startsWith('55') ? [12, 13].includes(digits.length) : [10, 11].includes(digits.length);
+    };
+    const orderedContacts = [
+      ...clienteContatosDraft.filter(item => item.is_primary),
+      ...clienteContatosDraft.filter(item => !item.is_primary)
+    ];
+    if (!isValidContact(telefone)) telefone = orderedContacts.map(item => item.telefone).find(isValidContact) || '';
+    if (!isValidContact(whatsapp)) whatsapp = orderedContacts.map(item => item.whatsapp).find(isValidContact) || '';
+    const validContact = isValidContact(whatsapp) || isValidContact(telefone);
     if (!validContact) {
-      errorEl.textContent = 'Telefone ou WhatsApp válido é obrigatório para o cliente operacional';
+      errorEl.textContent = 'Informe um telefone ou WhatsApp válido no cadastro ou na aba Contatos';
       errorEl.style.display = 'block';
       switchClientTab('dados');
-      markClientFieldInvalid('cli-form-tel', 'cli-error-tel');
+      markClientFieldInvalid('cli-form-tel', 'cli-error-contact');
+      markClientFieldInvalid('cli-form-whatsapp');
       return;
     }
     if ((categoria === 'contrato' || recorrente) && !periodicidade) {

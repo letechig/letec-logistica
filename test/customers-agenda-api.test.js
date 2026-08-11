@@ -446,6 +446,50 @@ test('POST /api/customers cria cliente basico mesmo sem colunas opcionais legada
   });
 });
 
+test('POST /api/customers aceita telefone valido mesmo com WhatsApp invalido preenchido', async () => {
+  await withServer(async (baseUrl, state) => {
+    const response = await fetch(`${baseUrl}/api/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Cliente Telefone Valido',
+        telefone: '(11) 98888-2222',
+        whatsapp: 'sem numero',
+        ...requiredAddress({
+          endereco: 'Rua Telefone, 22',
+          endereco_completo: 'Rua Telefone, 22 - Centro - Sao Paulo / SP',
+          rua: 'Rua Telefone',
+          numero: '22'
+        })
+      })
+    });
+
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.nome, 'Cliente Telefone Valido');
+    assert.equal(state.customers.some(customer => customer.nome === 'Cliente Telefone Valido'), true);
+  });
+});
+
+test('POST /api/customers continua rejeitando cadastro sem telefone ou WhatsApp valido', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Cliente Sem Contato Valido',
+        telefone: '123',
+        whatsapp: '456',
+        ...requiredAddress({ endereco: 'Rua Sem Contato, 30', rua: 'Rua Sem Contato', numero: '30' })
+      })
+    });
+
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.equal(payload.code, 'client_contact_required');
+  });
+});
+
 test('POST /api/customers/quick cria cliente incompleto sem endereco obrigatorio', async () => {
   await withServer(async (baseUrl, state) => {
     const addressCount = state.customer_addresses.length;
