@@ -20,6 +20,12 @@ function createClientService(deps) {
 
   const hasOwn = (source, key) => Object.prototype.hasOwnProperty.call(source || {}, key);
 
+  function isValidOperationalContact(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('55')) return [12, 13].includes(digits.length);
+    return [10, 11].includes(digits.length);
+  }
+
   function normalizeClientPayload(input = {}) {
     const ufNormalizada = normalizeUf(input.uf);
     const enderecoEstruturado = buildCustomerAddress({
@@ -108,10 +114,7 @@ function createClientService(deps) {
 
   function validateClientPayload(payload) {
     if (!payload.nome) return { ok: false, status: 400, error: 'Nome é obrigatório', code: 'client_name_required' };
-    const contactDigits = String(payload.whatsapp || payload.telefone || '').replace(/\D/g, '');
-    const validContact = contactDigits.startsWith('55')
-      ? [12, 13].includes(contactDigits.length)
-      : [10, 11].includes(contactDigits.length);
+    const validContact = [payload.whatsapp, payload.telefone].some(isValidOperationalContact);
     if (!validContact) {
       return { ok: false, status: 400, error: 'Telefone ou WhatsApp valido e obrigatorio', code: 'client_contact_required' };
     }
