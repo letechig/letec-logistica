@@ -955,8 +955,30 @@
       return [];
     }
 
+    function loadRadarBearerToken() {
+      try {
+        const appSession = JSON.parse(localStorage.getItem('letec_app_auth_session_v1') || 'null');
+        if (appSession?.token && (!appSession.expires_at || new Date(appSession.expires_at).getTime() > Date.now())) {
+          return appSession.token;
+        }
+        for (let index = 0; index < localStorage.length; index += 1) {
+          const key = localStorage.key(index) || '';
+          if (!key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+          const stored = JSON.parse(localStorage.getItem(key) || 'null');
+          const session = stored?.currentSession || stored?.session || stored;
+          if (session?.access_token) return session.access_token;
+        }
+      } catch(e) {}
+      return '';
+    }
+
     async function requestBackendJson(path) {
-      const response = await fetch(`${API_BASE_URL}${path}`, { cache:'no-store' });
+      const token = loadRadarBearerToken();
+      if (!token) throw new Error('Acesso expirado. Abra o painel principal e faca login novamente.');
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        cache:'no-store',
+        headers: { Authorization: `Bearer ${token}` }
+      });
       const text = await response.text();
       let payload = {};
       try { payload = text ? JSON.parse(text) : {}; } catch(e) { payload = { error:text }; }

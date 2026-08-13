@@ -21,7 +21,8 @@ Checklist rapido antes de publicar:
 - Configurar variaveis:
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY`
-  - `SUPABASE_ANON_KEY` (se necessario)
+  - `API_AUTH_REQUIRED=true`
+  - `SUPABASE_ANON_KEY` (somente se alguma ferramenta de build exigir; a API nao usa esta chave)
   - `ALLOWED_ORIGINS` com dominio do frontend de staging
 
 2. Frontend (Vercel)

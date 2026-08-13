@@ -27,7 +27,8 @@ Eles ficam preservados para consulta, mas nao devem ser usados como entrada de p
 Backend:
 
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY` ou `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (obrigatoria no backend; nunca usar a anon como fallback)
+- `API_AUTH_REQUIRED=true`
 - `ALLOWED_ORIGINS`
 - `PORT`
 - `EVOLUTION_API_URL` ou `EVOLUTION_URL`
@@ -48,13 +49,7 @@ Arquivos `.env` e `evolution-api/.env` devem permanecer fora do Git. O `.gitigno
 
 ## Nota sobre Supabase no front
 
-O front ativo ainda usa publishable/anon key do Supabase em algumas rotinas. Isso e aceitavel temporariamente somente se as tabelas estiverem protegidas por RLS. A proxima fase de hardening deve mover escritas sensiveis para o backend, principalmente:
-
-- `services`
-- `checklists`
-- `technician_events`
-- `technician_messages`
-- `inventory_*`
+O front usa a publishable key somente para Supabase Auth. Leituras, escritas e sincronizacao de dados operacionais passam pelo backend autenticado. As tabelas do schema `public` ficam com RLS habilitado e sem policies para `anon`/`authenticated`, alem da revogacao de privilegios diretos.
 
 ## Ordem recomendada de banco
 
@@ -73,6 +68,8 @@ Para banco novo, use `supabase-setup.sql` como base. Para bancos existentes, apl
 11. `migration-logistica-whatsapp-fase1.sql`
 12. `migration-clientes-agenda-ux.sql`
 13. `migration-clientes-unidades.sql`
+14. demais migrations funcionais aplicaveis ao ambiente
+15. `migration-security-enable-rls.sql` (sempre por ultimo)
 
 `supabase-setup.sql` foi alinhado para manter `services.cliente_id` com FK para `customers(id)` usando `ON DELETE SET NULL`.
 
@@ -126,7 +123,9 @@ GET /api/evolution/status
 - `/api/evolution/status` responde pelo backend.
 - `.env` nao aparece no Git.
 - Nenhuma chave real foi commitada em docs ou arquivos legados.
-- RLS revisado nas tabelas acessadas pelo front.
+- `migration-security-enable-rls.sql` aplicada por ultimo e consulta final sem falhas.
+- Security Advisor sem `rls_disabled_in_public`.
+- Chave anon/publishable nao consegue ler dados das tabelas.
 
 ## Rotacao de chaves
 

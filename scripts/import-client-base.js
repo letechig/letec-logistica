@@ -11,7 +11,7 @@ const apply = process.argv.includes('--apply') ||
   String(process.env.IMPORT_APPLY || '').trim().toLowerCase() === 'true';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 const EVENTUAL_RECENT_YEARS = new Set([2025, 2026]);
@@ -262,7 +262,7 @@ async function main() {
   };
 
   if (apply && !supabase) {
-    throw new Error('SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY sao obrigatorios para --apply');
+    throw new Error('SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sao obrigatorios para --apply');
   }
 
   const existingCustomers = await fetchExistingCustomers();

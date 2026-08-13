@@ -21,6 +21,7 @@ A secure Node.js backend API for the Letec logistics system that proxies Supabas
    SUPABASE_URL=your_supabase_project_url
    SUPABASE_ANON_KEY=your_supabase_anon_key
    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+   API_AUTH_REQUIRED=true
    ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000,https://your-frontend-domain.vercel.app
    PORT=8000
    REQUEST_TIMEOUT_MS=12000

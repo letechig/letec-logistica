@@ -23,12 +23,19 @@ const NOMINATIM_USER_AGENT = String(process.env.NOMINATIM_USER_AGENT || 'LetecLo
 const GEOCODE_MIN_INTERVAL_MS = Math.max(1000, Number(process.env.GEOCODE_MIN_INTERVAL_MS || 1100));
 const CHECKLIST_PHOTO_BUCKET = process.env.CHECKLIST_PHOTO_BUCKET || 'checklist-photos';
 const CHECKLIST_PHOTO_MAX_BYTES = Number(process.env.CHECKLIST_PHOTO_MAX_BYTES || 5 * 1024 * 1024);
+const API_AUTH_REQUIRED = String(process.env.API_AUTH_REQUIRED || 'true').toLowerCase() !== 'false';
+if (process.env.NODE_ENV === 'production' && !API_AUTH_REQUIRED) {
+  throw new Error('API_AUTH_REQUIRED nao pode ser false em producao');
+}
 const CLIENT_IMPORT_WORKBOOK = process.env.CLIENT_IMPORT_WORKBOOK ||
   path.resolve(__dirname, '..', 'BASE_CLIENTES_TRATADA_LETEC (1).xlsx');
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
+if (process.env.NODE_ENV === 'production' && !allowedOrigins.length) {
+  throw new Error('ALLOWED_ORIGINS e obrigatoria em producao');
+}
 
 const corsOptions = {
   origin(origin, callback) {
@@ -1757,11 +1764,17 @@ app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '8mb' }));
 // 4. Global rate limiting (applies to all routes except /api/health)
 app.use(globalLimiter);
 
-// Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+// O backend opera como a fronteira confiavel do banco. A chave anon/publishable
+// pertence somente ao navegador e nunca pode ser usada como fallback aqui:
+// com RLS habilitado ela nao tem acesso aos dados, como deve ser.
+const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
+const supabaseServiceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  throw new Error('SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sao obrigatorios no backend');
+}
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
 app.locals.supabase = supabase;
 
 function getSupabaseClient() {
@@ -2263,6 +2276,88 @@ function auditActivityMiddleware(req, res, next) {
 }
 
 app.use(auditActivityMiddleware);
+
+const PUBLIC_API_ROUTES = new Set([
+  'GET /api/health',
+  'POST /api/app-auth/login',
+  'POST /api/app-auth/recovery',
+  'POST /api/app-auth/magic-link',
+  'POST /api/technician-auth/login'
+]);
+
+const TECHNICIAN_API_ROUTES = [
+  ['GET', /^\/api\/technician-auth\/me$/],
+  ['POST', /^\/api\/technician-auth\/(?:logout|change-pin)$/],
+  ['GET', /^\/api\/services$/],
+  ['PUT', /^\/api\/services\/[^/]+$/],
+  ['GET', /^\/api\/checklists$/],
+  ['POST', /^\/api\/checklists$/],
+  ['PUT', /^\/api\/checklists\/[^/]+$/],
+  ['POST', /^\/api\/checklists\/photos(?:\/signed-url)?$/],
+  ['GET', /^\/api\/technician-events$/],
+  ['POST', /^\/api\/technician-events$/],
+  ['GET', /^\/api\/technician-messages$/],
+  ['PUT', /^\/api\/technician-messages\/[^/]+\/read$/],
+  ['GET', /^\/api\/technicians$/],
+  ['GET', /^\/api\/veiculos$/]
+];
+
+function isPublicApiRequest(req) {
+  const routeKey = `${String(req.method || '').toUpperCase()} ${req.path}`;
+  if (PUBLIC_API_ROUTES.has(routeKey)) return true;
+  // A tela de login do portal precisa apenas de id e nome para selecionar o tecnico.
+  return req.method === 'GET'
+    && req.path === '/api/technicians'
+    && String(req.query.active ?? req.query.ativo ?? '').toLowerCase() === 'true'
+    && !extractBearerToken(req);
+}
+
+function technicianCanAccessApi(req) {
+  const method = String(req.method || '').toUpperCase();
+  return TECHNICIAN_API_ROUTES.some(([allowedMethod, pathPattern]) =>
+    method === allowedMethod && pathPattern.test(req.path)
+  );
+}
+
+async function requireProtectedApiAccess(req, res, next) {
+  if (!req.path.startsWith('/api/') || !API_AUTH_REQUIRED) {
+    return next();
+  }
+  if (isPublicApiRequest(req)) {
+    req.publicApiAccess = true;
+    return next();
+  }
+
+  try {
+    const technicianToken = extractTechnicianToken(req);
+    if (technicianToken) {
+      const technicianAuth = await authenticateTechnicianSession(req);
+      if (!technicianAuth) {
+        return res.status(401).json({ error: 'Sessao do tecnico invalida ou expirada', code: 'technician_session_required' });
+      }
+      if (!technicianCanAccessApi(req)) {
+        return res.status(403).json({ error: 'Acao nao permitida para o portal tecnico', code: 'technician_api_forbidden' });
+      }
+      req.apiTechnicianAuth = technicianAuth;
+      return next();
+    }
+
+    const actor = await resolveAppUserRole(req);
+    if (!actor) {
+      return res.status(401).json({ error: 'Autenticacao obrigatoria', code: 'authentication_required' });
+    }
+    if (!['admin', 'operador'].includes(String(actor.role || '').toLowerCase())) {
+      return res.status(403).json({ error: 'Perfil sem acesso a esta API', code: 'api_role_forbidden' });
+    }
+    req.apiActor = actor;
+    return next();
+  } catch (error) {
+    console.warn('[auth] Falha ao validar acesso da API:', error.message);
+    return res.status(401).json({ error: 'Nao foi possivel validar a sessao', code: 'authentication_failed' });
+  }
+}
+
+app.use(requireProtectedApiAccess);
 
 function getEvolutionConfig() {
   const apiUrl = String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL || '').replace(/\/$/, '');
@@ -3397,6 +3492,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
     message: 'Letec Logistics Backend is running',
+    securityMode: API_AUTH_REQUIRED ? 'authenticated-backend' : 'test-only-auth-disabled',
     mapsProvider: maps.provider,
     routingConfigured: maps.routingConfigured,
     geocodingConfigured: maps.geocodingConfigured,
@@ -3462,8 +3558,8 @@ app.get('/api/diagnostics/operational', async (req, res) => {
   const warnings = [];
 
   if (!process.env.SUPABASE_URL) warnings.push('SUPABASE_URL nao configurada no backend.');
-  if (!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)) {
-    warnings.push('Chave Supabase do backend nao configurada.');
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    warnings.push('SUPABASE_SERVICE_ROLE_KEY nao configurada no backend.');
   }
   if (failed.length) {
     warnings.push(`${failed.length} tabela(s) principal(is) com falha de consulta.`);
@@ -3476,7 +3572,7 @@ app.get('/api/diagnostics/operational', async (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     checks,
     features: {
-      supabaseConfigured: !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)),
+      supabaseConfigured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
       mapsProvider: getMapProviderConfig().provider,
       routingConfigured: getMapProviderConfig().routingConfigured,
       geocodingConfigured: getMapProviderConfig().geocodingConfigured,
@@ -4851,7 +4947,14 @@ app.get('/api/technicians', async (req, res) => {
 
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data || []);
+    if (req.publicApiAccess) {
+      return res.json((data || []).map(item => ({
+        id: item.id,
+        nome: item.nome,
+        portal_login_enabled: item.portal_login_enabled === true
+      })));
+    }
+    res.json((data || []).map(publicTechnician));
   } catch (error) {
     console.error('[GET /api/technicians] Error:', error.message);
     res.status(500).json({ error: 'Falha ao buscar tecnicos' });
@@ -5181,6 +5284,15 @@ app.get('/api/veiculos', async (req, res) => {
     if (req.query.ativo !== undefined) query = query.eq('ativo', cleanBoolean(req.query.ativo, true));
     const { data, error } = await query;
     if (error) throw error;
+    if (req.apiTechnicianAuth) {
+      return res.json((data || []).map(vehicle => ({
+        id: vehicle.id,
+        nome: vehicle.nome,
+        placa: vehicle.placa || null,
+        ativo: vehicle.ativo !== false,
+        status: vehicle.status || null
+      })));
+    }
     res.json((data || []).map(addVehicleComputedFields));
   } catch (error) {
     console.error('[GET /api/veiculos] Error:', error.message);
@@ -7204,6 +7316,71 @@ app.get('/api/evolution/status', async (req, res) => {
       state: matchedInstance?.state || '',
       error: error.message,
       details: error.payload || null
+    });
+  }
+});
+
+function normalizeCustomerReminderWrite(input = {}) {
+  const payload = {
+    service_id: cleanText(input.service_id, 120),
+    customer_id: cleanNullableText(input.customer_id, 120),
+    tipo: cleanText(input.tipo, 80),
+    canal: cleanText(input.canal || 'evolution_api', 80),
+    status: cleanText(input.status || 'pendente', 80),
+    destino: cleanNullableText(input.destino, 40),
+    mensagem: cleanNullableText(input.mensagem, 5000),
+    operador: cleanNullableText(input.operador, 200),
+    origem_contato: cleanNullableText(input.origem_contato, 100),
+    erro: cleanNullableText(input.erro, 1000),
+    metadata: input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+      ? buildAuditPayload(input.metadata)
+      : {},
+    updated_at: new Date().toISOString()
+  };
+  ['aberto_em', 'enviado_em'].forEach(key => {
+    if (input[key] !== undefined) payload[key] = cleanNullableText(input[key], 80);
+  });
+  if (!payload.service_id || !payload.tipo || !payload.canal) {
+    const error = new Error('service_id, tipo e canal sao obrigatorios');
+    error.status = 400;
+    throw error;
+  }
+  return payload;
+}
+
+app.get('/api/customer-reminders', async (req, res) => {
+  try {
+    const serviceIds = String(req.query.service_ids || '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean)
+      .slice(0, 500);
+    if (!serviceIds.length) return res.json([]);
+    const { data, error } = await getSupabaseClient()
+      .from('customer_reminders')
+      .select('*')
+      .in('service_id', serviceIds);
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('[GET /api/customer-reminders] Error:', error.message);
+    res.status(500).json({ error: 'Falha ao buscar lembretes de clientes' });
+  }
+});
+
+app.post('/api/customer-reminders', strictLimiter, async (req, res) => {
+  try {
+    const payload = normalizeCustomerReminderWrite(req.body || {});
+    const { data, error } = await getSupabaseClient()
+      .from('customer_reminders')
+      .upsert([payload], { onConflict: 'service_id,tipo,canal' })
+      .select();
+    if (error) throw error;
+    res.status(200).json(data?.[0] || payload);
+  } catch (error) {
+    console.error('[POST /api/customer-reminders] Error:', error.message);
+    res.status(error.status || 500).json({
+      error: error.status ? error.message : 'Falha ao registrar lembrete de cliente'
     });
   }
 });
