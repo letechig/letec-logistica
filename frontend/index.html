@@ -3345,12 +3345,10 @@ gap: 6px;
 
   window.testarSupabase = async function() {
     try {
-      // Fix: tabela correta é 'services', não 'check_lists'
-      const { data, error } = await supabaseClient.from('services').select('*').limit(1);
-      if (error) throw error;
-      console.log('✅ Supabase conectado! Dados de teste:', data);
+      const data = await requestBackendJson('/api/diagnostics/operational', { cache: 'no-store' });
+      console.log('✅ Backend seguro conectado:', data);
     } catch (e) {
-      console.error('❌ Erro no Supabase:', e.message);
+      console.error('❌ Erro na conexão segura com o backend:', e.message);
     }
   };
 
@@ -3525,6 +3523,29 @@ async function carregarVeiculos(){
       return {};
     }
   }
+
+  // Compatibilidade com chamadas legadas: toda requisicao para a API Letec
+  // recebe a sessao ativa, inclusive as rotinas que ainda usam fetch direto.
+  const nativeBrowserFetch = window.fetch.bind(window);
+  window.fetch = async function authenticatedBackendFetch(input, options = {}) {
+    const rawUrl = typeof input === 'string' || input instanceof URL ? String(input) : String(input?.url || '');
+    let isBackendApi = false;
+    try {
+      const requested = new URL(rawUrl, window.location.href);
+      const backend = new URL(API_BASE_URL, window.location.href);
+      isBackendApi = requested.origin === backend.origin && requested.pathname.startsWith('/api/');
+    } catch(e) {}
+    if (!isBackendApi) return nativeBrowserFetch(input, options);
+
+    const headers = new Headers(options.headers || (input instanceof Request ? input.headers : undefined));
+    if (!headers.has('Authorization')) {
+      const authHeaders = await getBackendAuthHeaders();
+      Object.entries(authHeaders).forEach(([key, value]) => {
+        if (value) headers.set(key, value);
+      });
+    }
+    return nativeBrowserFetch(input, { ...options, headers });
+  };
 
   async function requestBackendJson(path, options = {}) {
     const authHeaders = await getBackendAuthHeaders();
@@ -8314,6 +8335,7 @@ const CURRENT_PAGE_PREF_KEY = 'letec_current_page';
 const FIELD_OPS_SOUND_PREF_KEY = 'letec_field_ops_sound_enabled';
 const FIELD_OPS_ALERTED_IDS_KEY = 'letec_field_ops_alerted_ids';
 const FIELD_OPS_POLL_INTERVAL_MS = 15000;
+const SERVICES_POLL_INTERVAL_MS = 30000;
 const FIELD_OPS_WHATSAPP_ESCALATION_MIN = 3;
 let fieldOpsSoundEnabled = (() => {
   try { return localStorage.getItem(FIELD_OPS_SOUND_PREF_KEY) === '1'; }
@@ -8328,6 +8350,7 @@ let fieldOpsAlertedEventIds = (() => {
 })();
 let fieldOpsAudioContext = null;
 let fieldOpsPollingInFlight = false;
+let servicesPollingInFlight = false;
 let fieldOpsAudioAwaitingGesture = false;
 let inventoryProducts = [];
 let inventoryMovements = [];
@@ -18385,11 +18408,8 @@ async function carregarClientesParaLembretes() {
 async function carregarCustomerReminders(serviceIds = []) {
   if (!serviceIds.length) { customerReminders = []; return []; }
   try {
-    const { data, error } = await supabaseClient
-      .from('customer_reminders')
-      .select('*')
-      .in('service_id', serviceIds.map(String));
-    if (error) throw error;
+    const ids = serviceIds.map(String).slice(0, 500).join(',');
+    const data = await requestBackendJson(`/api/customer-reminders?service_ids=${encodeURIComponent(ids)}`);
     customerReminders = data || [];
     customerRemindersSchemaReady = true;
   } catch(e) {
@@ -18626,12 +18646,10 @@ async function registrarCustomerReminderManualAberto(item) {
     updated_at: now
   };
   try {
-    const { data, error } = await supabaseClient
-      .from('customer_reminders')
-      .upsert(payload, { onConflict: 'service_id,tipo,canal' })
-      .select();
-    if (error) throw error;
-    const saved = data?.[0] || payload;
+    const saved = await requestBackendJson('/api/customer-reminders', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
     const key = reminderKey(item.serviceId, item.tipo);
     customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'evolution_api') !== key), saved];
     return saved;
@@ -18669,12 +18687,10 @@ async function upsertCustomerReminderStatus(item, status, extra = {}) {
     ...extra
   };
   try {
-    const { data, error } = await supabaseClient
-      .from('customer_reminders')
-      .upsert(payload, { onConflict: 'service_id,tipo,canal' })
-      .select();
-    if (error) throw error;
-    const saved = data?.[0] || payload;
+    const saved = await requestBackendJson('/api/customer-reminders', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
     const key = reminderKey(item.serviceId, item.tipo);
     customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'evolution_api') !== key), saved];
     return saved;
@@ -18736,13 +18752,10 @@ async function enviarCustomerReminderEvolution(index) {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/customer-reminders/${encodeURIComponent(saved.id)}/send`, {
+    const payload = await requestBackendJson(`/api/customer-reminders/${encodeURIComponent(saved.id)}/send`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ destino: item.contato.numero, mensagem })
     });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || payload.erro || `HTTP ${response.status}`);
     const key = reminderKey(item.serviceId, item.tipo);
     customerReminders = [...(customerReminders || []).filter(r => reminderKey(String(r.service_id), r.tipo, r.canal || 'evolution_api') !== key), payload];
     toast('Lembrete enviado via Evolution', 'ok');
@@ -19965,7 +19978,7 @@ const CHANGELOG = {
     resumo: 'Melhorias rápidas v7.5 — footer dinâmico, realtime Supabase, modal calendário e indicador nuvem',
     mudancas: [
       { tipo:'UI',          desc:'Footer sidebar agora mostra contagem dinâmica de serviços (${services.length} serviços · Jan–Mar 2026)' },
-      { tipo:'Realtime',    desc:'listenSupabase(): escuta mudanças em tempo real na tabela services (insert/update/delete) e atualiza UI automaticamente' },
+      { tipo:'Sincronização', desc:'listenSupabase(): atualiza a agenda periodicamente pelo backend autenticado' },
       { tipo:'UI',          desc:'Calendário mensal: clique em células com serviços abre modal do dia (showDayDetail) com botões de ação' },
       { tipo:'UI',          desc:'Indicador de sincronização na topbar: "⏳ Sincronizando..." durante operações, "✓ Nuvem" quando online' },
     ],
@@ -20943,19 +20956,24 @@ function refreshPages() {
   if (currentPage === 'servicos-funcionario') renderServicosFuncionario();
 }
 
+async function pollServicesFromBackend() {
+  if (!USAR_SUPABASE || servicesPollingInFlight || !navigator.onLine || document.hidden) return;
+  servicesPollingInFlight = true;
+  try {
+    await carregarServicesDoSupabase();
+    lastSyncAt = Date.now();
+    setConnectionState('online');
+  } finally {
+    servicesPollingInFlight = false;
+  }
+}
+
 function listenSupabase() {
-  if (!USAR_SUPABASE) return;
-  supabaseClient
-    .channel('services_changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, (payload) => {
-      console.log('Supabase change:', payload);
-      syncServiceFromPayload(payload);
-      saveSvcs();
-      refreshPages();
-      lastSyncAt = Date.now();
-      setConnectionState('online');
-    })
-    .subscribe();
+  if (!USAR_SUPABASE || window._servicesBackendPolling) return;
+  window._servicesBackendPolling = setInterval(pollServicesFromBackend, SERVICES_POLL_INTERVAL_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) pollServicesFromBackend();
+  });
 }
 
 
