@@ -324,6 +324,23 @@ textarea:focus-visible,
   border: 1px solid var(--border);
   font-size: 11px !important;
 }
+.offline-access-banner {
+  display: none;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 24px;
+  background: var(--orange-bg);
+  border-bottom: 1px solid rgba(234,88,12,.22);
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.offline-access-banner.visible { display: flex; }
+.offline-access-banner strong { color: #7c2d12; }
+.offline-access-banner button {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
 
 /* ─── CONTENT ─────────────────────────────────── */
 .content { flex: 1; padding: 24px; }
@@ -2689,6 +2706,8 @@ textarea { max-width:100%; }
     padding-top:10px;
   }
   .content { padding:10px; }
+  .offline-access-banner { padding:10px 12px; flex-wrap:wrap; }
+  .offline-access-banner button { margin-left:26px; }
   .ui-page-head {
     padding:13px;
     border-radius:14px;
@@ -3266,6 +3285,7 @@ gap: 6px;
 <script src="js/shared/service-catalog.js"></script>
 <script src="js/shared/service-type-helpers.js"></script>
 <script src="js/shared/light-renderers.js"></script>
+<script src="js/shared/offline-auth.js"></script>
 <script>
   const SUPABASE_URL = 'https://zqrztixmrpnpehppylyr.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_TwfVUWjr87_VdHFzJURGmw_KVmXCiBq';
@@ -3385,6 +3405,10 @@ gap: 6px;
 
 async function carregarTecnicos(){
   const cached = loadCatalogCache().tecnicos || [];
+  if (typeof appAuthOfflineMode !== 'undefined' && appAuthOfflineMode) {
+    window._tecnicos = cached;
+    return window._tecnicos;
+  }
   try {
     const data = await requestBackendJson('/api/technicians?active=true');
     window._tecnicos = data || [];
@@ -3399,6 +3423,10 @@ async function carregarTecnicos(){
 
 async function carregarVeiculos(){
   const cached = loadCatalogCache().veiculos || [];
+  if (typeof appAuthOfflineMode !== 'undefined' && appAuthOfflineMode) {
+    window._veiculos = cached;
+    return window._veiculos;
+  }
   try {
     const data = await requestBackendJson('/api/veiculos?ativo=true');
     window._veiculos = data || [];
@@ -3413,6 +3441,10 @@ async function carregarVeiculos(){
 
   async function carregarTiposServico(){
     const cached = loadCatalogCache().tiposServico || [];
+    if (typeof appAuthOfflineMode !== 'undefined' && appAuthOfflineMode) {
+      window._tiposServico = cached;
+      return window._tiposServico;
+    }
     try {
       const response = await fetch(`${API_BASE_URL}/api/service-types`);
       if (!response.ok) throw new Error(`Erro ao carregar tipos: ${response.status}`);
@@ -3525,6 +3557,27 @@ async function carregarVeiculos(){
       return {};
     }
   }
+
+  // No modo de contingencia, nenhuma chamada de escrita pode sair do navegador.
+  const nativeBrowserFetch = window.fetch.bind(window);
+  window.fetch = async function guardedBackendFetch(input, options = {}) {
+    const rawUrl = typeof input === 'string' || input instanceof URL ? String(input) : String(input?.url || '');
+    let isBackendApi = false;
+    try {
+      const requested = new URL(rawUrl, window.location.href);
+      const backend = new URL(API_BASE_URL, window.location.href);
+      isBackendApi = requested.origin === backend.origin && requested.pathname.startsWith('/api/');
+    } catch(e) {}
+    if (!isBackendApi) return nativeBrowserFetch(input, options);
+
+    const method = String(options.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    if (typeof appAuthOfflineMode !== 'undefined' && appAuthOfflineMode && !window.LetecOfflineAuth?.isReadOnlyRequestMethod(method)) {
+      const error = new Error('Modo offline seguro: alterações ficam bloqueadas até a sessão ser validada novamente.');
+      error.code = 'offline_read_only';
+      throw error;
+    }
+    return nativeBrowserFetch(input, options);
+  };
 
   async function requestBackendJson(path, options = {}) {
     const authHeaders = await getBackendAuthHeaders();
@@ -3805,6 +3858,15 @@ async function carregarVeiculos(){
     <span id="auth-user-info" style="font-size:12px;color:var(--text2);margin-left:8px;display:none">👤 Logado como —</span>
     <button class="topbar-btn" id="auth-logout-btn" style="display:none" type="button">Sair</button>
     <button class="topbar-btn" onclick="exportCSV()">Exportar relatório</button>
+  </div>
+
+  <div id="offline-access-banner" class="offline-access-banner" role="status" aria-live="polite">
+    <span>⚠️</span>
+    <div>
+      <strong>Modo offline seguro.</strong>
+      <span id="offline-access-detail">Exibindo a última operação salva neste dispositivo. Somente consulta e envio de roteiros estão disponíveis.</span>
+    </div>
+    <button class="btn btn-ghost btn-xs" type="button" onclick="retryOfflineAuthValidation()">Tentar reconectar</button>
   </div>
 
   <div class="content">
@@ -8291,6 +8353,13 @@ let services = [];       // main service array (seed + user additions)
 // ===============================================
 
 async function carregarServicesDoSupabase() {
+  if (appAuthOfflineMode) {
+    agendaLoadedFromCache = true;
+    if (typeof refreshPages === 'function') refreshPages();
+    if (typeof updateBadges === 'function') updateBadges();
+    if (typeof normalizarTecnicosIdsServicos === 'function') normalizarTecnicosIdsServicos();
+    return services;
+  }
   try {
     await getServices();
     console.log(`✅ ${services.length} serviços carregados pelo backend/cache`);
@@ -9483,6 +9552,8 @@ function ordenarServicosCanonicos(list) {
 async function carregarServicosSupabase() {
   try {
     const data = await requestBackendJson(`/api/services?limit=${SERVICE_SYNC_LIMIT}`);
+    lastSyncAt = Date.now();
+    markOperationalCacheSynced();
     if (!data || !data.length) {
       clearSupabaseLoadWarnings();
       return null;
@@ -17622,6 +17693,154 @@ async function confirmNewSvc(){
 // ════════════════════════════════════════════════
 let authEventsBound = false;
 const APP_AUTH_SESSION_KEY = 'letec_app_auth_session_v1';
+const APP_AUTH_OFFLINE_PROOF_KEY = 'letec_app_auth_offline_proof_v1';
+const APP_AUTH_OFFLINE_MIGRATION_KEY = 'letec_app_auth_offline_migration_v1';
+const OPERATIONAL_CACHE_SYNC_KEY = 'letec_operational_cache_synced_at_v1';
+const APP_AUTH_LEGACY_OFFLINE_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+let appAuthOfflineMode = false;
+let appAuthOfflineProof = null;
+let appAuthOfflineToastShown = false;
+let appAuthOfflineExpiryTimer = null;
+
+function readLocalJson(key){
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); }
+  catch(e) { return null; }
+}
+
+function loadOfflineAuthProof(){
+  return readLocalJson(APP_AUTH_OFFLINE_PROOF_KEY);
+}
+
+function saveOfflineAuthProof(proof){
+  try {
+    if(proof) localStorage.setItem(APP_AUTH_OFFLINE_PROOF_KEY, JSON.stringify(proof));
+    else localStorage.removeItem(APP_AUTH_OFFLINE_PROOF_KEY);
+  } catch(e) {}
+}
+
+function clearOfflineAuthProof(){
+  saveOfflineAuthProof(null);
+  appAuthOfflineProof = null;
+  setOfflineAccessUI(false);
+}
+
+function hasOperationalCache(){
+  try {
+    return ['letec_svcs2', 'letec_cl2', 'letec_catalogos_cache_v1']
+      .some(key => {
+        const value = localStorage.getItem(key);
+        return value && value !== '[]' && value !== '{}';
+      });
+  } catch(e) {
+    return false;
+  }
+}
+
+function markOperationalCacheSynced(){
+  try { localStorage.setItem(OPERATIONAL_CACHE_SYNC_KEY, new Date().toISOString()); } catch(e) {}
+}
+
+function formatOfflineDate(value){
+  const date = new Date(value || 0);
+  if(!Number.isFinite(date.getTime())) return 'horário desconhecido';
+  return date.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+function setOfflineAccessUI(enabled, user = null, proof = null){
+  if(appAuthOfflineExpiryTimer){
+    clearTimeout(appAuthOfflineExpiryTimer);
+    appAuthOfflineExpiryTimer = null;
+  }
+  appAuthOfflineMode = !!enabled;
+  appAuthOfflineProof = enabled ? proof : null;
+  document.body?.classList.toggle('offline-auth-mode', !!enabled);
+  const banner = document.getElementById('offline-access-banner');
+  const detail = document.getElementById('offline-access-detail');
+  if(banner) banner.classList.toggle('visible', !!enabled);
+  if(enabled && detail){
+    const cacheAt = (() => { try { return localStorage.getItem(OPERATIONAL_CACHE_SYNC_KEY); } catch(e) { return ''; } })();
+    const verified = proof?.verified_at ? `Sessão confirmada em ${formatOfflineDate(proof.verified_at)}.` : '';
+    const cached = cacheAt ? ` Agenda sincronizada em ${formatOfflineDate(cacheAt)}.` : ' A agenda exibida vem do cache deste dispositivo.';
+    detail.textContent = `${verified}${cached} Somente consulta e envio de roteiros estão disponíveis; confirme os dados antes de enviar.`.trim();
+  }
+  if(enabled){
+    const expiresAt = Math.min(
+      new Date(proof?.offline_until || 0).getTime(),
+      new Date(proof?.session_expires_at || 0).getTime()
+    );
+    if(Number.isFinite(expiresAt) && expiresAt > Date.now()){
+      appAuthOfflineExpiryTimer = setTimeout(() => {
+        if(!appAuthOfflineMode) return;
+        saveOfflineAuthProof(null);
+        setOfflineAccessUI(false);
+        openAuthModal();
+        toast('A janela de contingência expirou. Reconecte para validar a sessão.', 'err');
+      }, expiresAt - Date.now());
+    }
+  }
+  updateAuthUI(user, { offline: !!enabled });
+}
+
+function buildAndSaveOfflineProof(session, user, authType, maxAgeMs){
+  const proof = window.LetecOfflineAuth?.buildProof({
+    session: { ...(session || {}), user },
+    user,
+    authType,
+    maxAgeMs
+  });
+  if(proof) saveOfflineAuthProof(proof);
+  return proof;
+}
+
+function markAuthVerified(session, user, authType = 'legacy_session'){
+  const now = new Date().toISOString();
+  const normalizedSession = { ...(session || {}), user, verified_at: now };
+  if(authType === 'legacy_session' && normalizedSession.token) saveAppAuthSession(normalizedSession);
+  const proof = buildAndSaveOfflineProof(normalizedSession, user, authType);
+  appAuthOfflineToastShown = false;
+  setOfflineAccessUI(false, user, proof);
+  updateAuthUI(user);
+  return proof;
+}
+
+function legacyMigrationProof(session){
+  if(!LETEC_BACKEND_CAPABILITIES.checked || LETEC_BACKEND_CAPABILITIES.available !== false) return null;
+  if(!/^app_[A-Za-z0-9_-]{40,}$/.test(String(session?.token || ''))) return null;
+  if(!window.LetecOfflineAuth?.isAllowedUser(session?.user) || !hasOperationalCache()) return null;
+  const sessionRef = window.LetecOfflineAuth.sessionReference(session, 'legacy_session');
+  const migration = readLocalJson(APP_AUTH_OFFLINE_MIGRATION_KEY);
+  if(migration?.session_ref === sessionRef) return null;
+  const proof = buildAndSaveOfflineProof(session, session.user, 'legacy_session', APP_AUTH_LEGACY_OFFLINE_MAX_AGE_MS);
+  if(!proof) return null;
+  proof.source = 'legacy_session_migration';
+  saveOfflineAuthProof(proof);
+  try {
+    localStorage.setItem(APP_AUTH_OFFLINE_MIGRATION_KEY, JSON.stringify({
+      session_ref: sessionRef,
+      migrated_at: new Date().toISOString()
+    }));
+  } catch(e) {}
+  return proof;
+}
+
+function tryOfflineAuth(session, authType = 'legacy_session', options = {}){
+  if(!session || !window.LetecOfflineAuth) return false;
+  let proof = loadOfflineAuthProof();
+  const proofSession = proof?.user ? { ...session, user: proof.user } : session;
+  let decision = window.LetecOfflineAuth.evaluateProof({ proof, session: proofSession, authType });
+  if(!decision.allowed && options.allowLegacyMigration){
+    proof = legacyMigrationProof(session);
+    decision = window.LetecOfflineAuth.evaluateProof({ proof, session: proof?.user ? { ...session, user: proof.user } : session, authType });
+  }
+  if(!decision.allowed) return false;
+  setOfflineAccessUI(true, decision.user, proof);
+  closeAuthModal();
+  if(!appAuthOfflineToastShown){
+    toast('Modo offline seguro: exibindo dados salvos neste dispositivo.', 'warn');
+    appAuthOfflineToastShown = true;
+  }
+  return true;
+}
 
 function loadAppAuthSession(){
   try {
@@ -17631,6 +17850,7 @@ function loadAppAuthSession(){
     if(!session?.token) return null;
     if(session.expires_at && new Date(session.expires_at).getTime() <= Date.now()){
       localStorage.removeItem(APP_AUTH_SESSION_KEY);
+      clearOfflineAuthProof();
       return null;
     }
     return session;
@@ -17644,7 +17864,11 @@ function saveAppAuthSession(session){
 }
 
 function clearAppAuthSession(){
-  try { localStorage.removeItem(APP_AUTH_SESSION_KEY); } catch(e) {}
+  try {
+    localStorage.removeItem(APP_AUTH_SESSION_KEY);
+    localStorage.removeItem(APP_AUTH_OFFLINE_MIGRATION_KEY);
+  } catch(e) {}
+  clearOfflineAuthProof();
 }
 
 function openAuthModal(){
@@ -17666,13 +17890,13 @@ function authDisplayName(user){
   return nome || user.email || 'usuário';
 }
 
-function updateAuthUI(user){
+function updateAuthUI(user, options = {}){
   const info = document.getElementById('auth-user-info');
   const btnLogout = document.getElementById('auth-logout-btn');
 
   if(user){
     if(info){
-      info.textContent = `👤 Logado como ${authDisplayName(user)}`;
+      info.textContent = `👤 Logado como ${authDisplayName(user)}${options.offline || appAuthOfflineMode ? ' · offline' : ''}`;
       info.style.display = 'inline';
     }
     if(btnLogout) btnLogout.style.display = 'inline-flex';
@@ -17718,21 +17942,39 @@ function bindAuthEvents(){
 }
 
 async function checkAuth(){
-  try {
-    const appSession = loadAppAuthSession();
-    if(appSession?.token){
+  const appSession = loadAppAuthSession();
+  if(appSession?.token){
+    try {
       const response = await fetch(`${API_BASE_URL}/api/app-auth/me`, {
         headers: { Authorization: `Bearer ${appSession.token}` }
       });
       if(response.ok){
         const payload = await response.json();
-        updateAuthUI(payload.user || appSession.user);
+        const user = payload.user || appSession.user;
+        markAuthVerified({
+          ...appSession,
+          expires_at: payload.session_expires_at || appSession.expires_at,
+          user
+        }, user, payload.auth_type || 'legacy_session');
         closeAuthModal();
         return true;
       }
-      clearAppAuthSession();
+      if(response.status === 401 || response.status === 403){
+        clearAppAuthSession();
+      } else if(window.LetecOfflineAuth?.isRetryableAuthFailure(response.status) &&
+        tryOfflineAuth(appSession, 'legacy_session', { allowLegacyMigration: true })){
+        return true;
+      }
+    } catch(e) {
+      if(window.LetecOfflineAuth?.isRetryableAuthFailure(0, e) &&
+        tryOfflineAuth(appSession, 'legacy_session', { allowLegacyMigration: true })){
+        return true;
+      }
+      console.warn('Sessão interna não pôde ser validada:', e.message || e);
     }
+  }
 
+  try {
     const { data, error } = await supabaseClient.auth.getSession();
     if(error) throw error;
 
@@ -17742,26 +17984,97 @@ async function checkAuth(){
       openAuthModal();
       return false;
     }
-    const response = await fetch(`${API_BASE_URL}/api/app-auth/me`, {
-      headers: { Authorization: `Bearer ${session.access_token}` }
-    });
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/app-auth/me`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+    } catch(e) {
+      if(window.LetecOfflineAuth?.isRetryableAuthFailure(0, e) && tryOfflineAuth(session, 'supabase_auth')) return true;
+      throw e;
+    }
     if(!response.ok){
+      if(window.LetecOfflineAuth?.isRetryableAuthFailure(response.status) && tryOfflineAuth(session, 'supabase_auth')) return true;
       await supabaseClient.auth.signOut();
+      clearOfflineAuthProof();
       updateAuthUI(null);
       openAuthModal();
       toast('Esta conta não possui acesso ativo ao painel.', 'err');
       return false;
     }
     const profile = await response.json();
-    updateAuthUI(profile.user);
+    markAuthVerified({
+      ...session,
+      expires_at: profile.session_expires_at || session.expires_at,
+      user: profile.user
+    }, profile.user, profile.auth_type || 'supabase_auth');
     closeAuthModal();
     return true;
   } catch(e){
     console.error('Erro ao verificar autenticação:', e);
     updateAuthUI(null);
     openAuthModal();
-    toast('Erro ao validar sessão. Faça login novamente.', 'err');
+    toast(appSession ? 'A sessão offline segura não está disponível ou expirou.' : 'Erro ao validar sessão. Faça login novamente.', 'err');
     return false;
+  }
+}
+
+async function retryOfflineAuthValidation(){
+  if(!appAuthOfflineMode || window._offlineAuthRetrying) return;
+  window._offlineAuthRetrying = true;
+  const bannerDetail = document.getElementById('offline-access-detail');
+  if(bannerDetail) bannerDetail.textContent = 'Tentando validar a sessão e atualizar a agenda...';
+  try {
+    await refreshBackendCapabilities();
+    if(!LETEC_BACKEND_CAPABILITIES.available) throw new Error('API ainda indisponível');
+
+    const appSession = loadAppAuthSession();
+    let session = appSession;
+    let authType = 'legacy_session';
+    let token = appSession?.token;
+    if(!token){
+      const { data, error } = await supabaseClient.auth.getSession();
+      if(error) throw error;
+      session = data?.session;
+      token = session?.access_token;
+      authType = 'supabase_auth';
+    }
+    if(!token) throw new Error('Sessão local ausente');
+
+    const response = await fetch(`${API_BASE_URL}/api/app-auth/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if(response.status === 401 || response.status === 403){
+      if(appSession) clearAppAuthSession();
+      else {
+        await supabaseClient.auth.signOut();
+        clearOfflineAuthProof();
+      }
+      openAuthModal();
+      throw new Error('A sessão foi revogada ou expirou');
+    }
+    if(!response.ok) throw new Error(`API respondeu ${response.status}`);
+    const payload = await response.json();
+    const user = payload.user || session.user;
+    markAuthVerified({ ...session, expires_at: payload.session_expires_at || session.expires_at, user }, user, payload.auth_type || authType);
+    _catalogosServicoPromise = null;
+    await carregarCatalogosServico();
+    await carregarServicesDoSupabase();
+    processOfflineQueue();
+    listenSupabase();
+    if (!window._fieldOpsPolling) {
+      window._fieldOpsPolling = setInterval(pollFieldOpsUpdates, FIELD_OPS_POLL_INTERVAL_MS);
+    }
+    setConnectionState('online');
+    nav(currentPage, null);
+    toast('Conexão restabelecida e agenda atualizada.', 'ok');
+  } catch(e) {
+    if(appAuthOfflineMode){
+      setOfflineAccessUI(true, appAuthOfflineProof?.user, appAuthOfflineProof);
+      toast(e.message || 'API ainda indisponível.', 'warn');
+    }
+  } finally {
+    window._offlineAuthRetrying = false;
   }
 }
 
@@ -17794,7 +18107,12 @@ async function login(){
       });
       const payload = await response.json().catch(() => null);
       if(response.ok && payload?.token){
-        saveAppAuthSession({ token: payload.token, expires_at: payload.expires_at, user: payload.user });
+        markAuthVerified({
+          token: payload.token,
+          expires_at: payload.expires_at,
+          session_id: payload.session_id,
+          user: payload.user
+        }, payload.user, 'legacy_session');
         toast('✅ Login realizado com sucesso!', 'ok');
         closeAuthModal();
         location.reload();
@@ -19047,9 +19365,15 @@ async function rotGerarDoSistema() {
       return;
     }
 
-    await carregarClientesParaLembretes();
-    await carregarCustomerReminders(daySvcs.map(reminderServiceId));
-    await carregarEvolutionStatus();
+    if (!appAuthOfflineMode) {
+      await carregarClientesParaLembretes();
+      await carregarCustomerReminders(daySvcs.map(reminderServiceId));
+      await carregarEvolutionStatus();
+    } else {
+      customerReminders = [];
+      customerRemindersSchemaReady = false;
+      evolutionStatus = { checked:true, configured:false, connected:false, offline:true };
+    }
 
     const daySvcsRoteiraveis = daySvcs.filter(serviceTemEquipe);
     if (!daySvcsRoteiraveis.length) {
@@ -19069,6 +19393,7 @@ async function rotGerarDoSistema() {
     }
 
     try {
+      if (appAuthOfflineMode) throw new Error('offline_cache_route');
       const backend = await simularAgendamentoBackend(daySvcsRoteiraveis, data);
       rotDados = (backend.routes || []).map(rota => {
         const veiculo = rotVeiculoPreferencial(rota.svcs || [], rota.veiculo || '');
@@ -19129,6 +19454,9 @@ async function rotGerarDoSistema() {
     renderCustomerRemindersPanel(daySvcs, data);
     renderMapaRoteiros(data);
     rotRenderizarLocal(rotDados, data);
+    if (appAuthOfflineMode) {
+      toast('Roteiro gerado com a agenda salva neste dispositivo. Confirme os dados antes de enviar.', 'warn');
+    }
     rotSetTab('mapa');
     rotUpdateFlowStatus();
   } catch (e) {
@@ -19753,9 +20081,15 @@ function rotCopiarEquipe(id) {
     .catch(() => { el.select(); toast('Ctrl+C para copiar', 'warn'); });
 }
 
+function rotConfirmOfflineSend() {
+  if (!appAuthOfflineMode) return true;
+  return confirmAction('O sistema está em modo offline. Este roteiro foi gerado com a última agenda salva neste dispositivo e pode não incluir alterações recentes. Deseja abrir o WhatsApp mesmo assim?');
+}
+
 function rotWhatsApp(id) {
   const el = document.getElementById(id);
   if (!el) return;
+  if (!rotConfirmOfflineSend()) return;
   const url = `https://wa.me/?text=${encodeURIComponent(el.value)}`;
   window.open(url, '_blank');
 }
@@ -19766,6 +20100,7 @@ function rotWhatsAppPortal(index) {
     toast('Defina equipe antes de enviar portal', 'warn');
     return;
   }
+  if (!rotConfirmOfflineSend()) return;
   const texto = eq.portalText || rotMontarTextoPortal(eq, document.getElementById('rot-data')?.value);
   const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
   window.open(url, '_blank');
@@ -19785,6 +20120,7 @@ function rotCopiarLinkPortal(index) {
 
 function rotWhatsAppTudo() {
   if (!rotDados.length) { toast('Gere o roteiro primeiro', 'err'); return; }
+  if (!rotConfirmOfflineSend()) return;
   const txt = rotDados.map(eq => eq.whatsappText).join('\n\n');
   const url = `https://wa.me/?text=${encodeURIComponent(txt.trim())}`;
   window.open(url, '_blank');
@@ -20219,7 +20555,14 @@ async function salvarEdicaoEquipe(id) {
 }
 
 let offlineQueue = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
-let lastSyncAt = null;
+let lastSyncAt = (() => {
+  try {
+    const saved = new Date(localStorage.getItem(OPERATIONAL_CACHE_SYNC_KEY) || 0).getTime();
+    return Number.isFinite(saved) && saved > 0 ? saved : null;
+  } catch(e) {
+    return null;
+  }
+})();
 let isProcessingQueue = false;
 const MAX_SUPABASE_RETRIES = 3;
 
@@ -20270,6 +20613,10 @@ function setSyncStatus(status) {
 }
 
 function setConnectionState(state) {
+  if (appAuthOfflineMode) {
+    setSyncStatus('🟠 Modo offline seguro — cache local');
+    return;
+  }
   if (state === 'online') setSyncStatus('🟢 Online');
   else if (state === 'reconnecting') setSyncStatus('🟡 Reconectando...');
   else if (state === 'offline') setSyncStatus('🔴 Offline');
@@ -20363,6 +20710,13 @@ async function safeSupabaseAction(actionFn, queueItem, rollbackFn, options) {
     : rollbackOnFailure;
   const queueOnFailure = opts.queueOnFailure !== undefined ? opts.queueOnFailure : true;
   if (!USAR_SUPABASE) return true; // No-op if disabled
+  if (appAuthOfflineMode) {
+    console.log('[Supabase] Modo offline seguro: alteração bloqueada até revalidar a sessão');
+    setConnectionState('offline');
+    if (rollbackFn) rollbackFn();
+    toast('Modo offline seguro: alterações estão bloqueadas até reconectar.', 'warn');
+    return false;
+  }
   if (!navigator.onLine) {
     console.log('[Supabase] Offline detected, queuing operation');
     setConnectionState('offline');
@@ -20457,7 +20811,7 @@ async function safeSupabaseAction(actionFn, queueItem, rollbackFn, options) {
 }
 
 async function processOfflineQueue() {
-  if (!USAR_SUPABASE || isProcessingQueue || offlineQueue.length === 0) return;
+  if (!USAR_SUPABASE || appAuthOfflineMode || isProcessingQueue || offlineQueue.length === 0) return;
   isProcessingQueue = true;
   setConnectionState('syncing');
   compactOfflineQueue();
@@ -22175,17 +22529,18 @@ window.addEventListener('load', async () => {
   await refreshBackendCapabilities();
   const autenticado = await checkAuth();
   if(!autenticado) return;
-  setConnectionState(navigator.onLine ? 'syncing' : 'offline');
-  listenSupabase();
+  setConnectionState(appAuthOfflineMode ? 'offline' : (navigator.onLine ? 'syncing' : 'offline'));
+  if (!appAuthOfflineMode) listenSupabase();
   await carregarCatalogosServico();
   await carregarServicesDoSupabase();
   markModuleLoaded('services');
-  processOfflineQueue();
-  if (!_supabaseLastRemoteLoadFailed && navigator.onLine) setConnectionState('online');
+  if (!appAuthOfflineMode) processOfflineQueue();
+  if (appAuthOfflineMode) setConnectionState('offline');
+  else if (!_supabaseLastRemoteLoadFailed && navigator.onLine) setConnectionState('online');
   prepareFieldOpsAudioAfterReload();
   nav(currentPage, null);
   scheduleIdleModulePreload();
-  if (!window._fieldOpsPolling) {
+  if (!appAuthOfflineMode && !window._fieldOpsPolling) {
     window._fieldOpsPolling = setInterval(pollFieldOpsUpdates, FIELD_OPS_POLL_INTERVAL_MS);
   }
 });
