@@ -110,11 +110,12 @@ test('POST /api/veiculos cria veiculo com placa normalizada e historico', async 
     const response = await fetch(`${baseUrl}/api/veiculos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: 'Saveiro', placa: 'abc-9d87', quilometragem_atual: 1200 })
+      body: JSON.stringify({ nome: 'Saveiro', placa: 'abc-9d87', renavam: '12345678901', quilometragem_atual: 1200 })
     });
     assert.equal(response.status, 201);
     const payload = await response.json();
     assert.equal(payload.placa, 'ABC9D87');
+    assert.equal(payload.renavam, '12345678901');
     assert.equal(payload.status, 'ativo');
     assert.equal(state.veiculo_historico.length, 1);
   });
@@ -167,11 +168,12 @@ test('PUT /api/veiculos/:id completa placa e KM em veículo existente sem duplic
     const response = await fetch(`${baseUrl}/api/veiculos/veh-2`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: 'Uno', placa: 'ghi-9j99', quilometragem_atual: 222, tecnico_responsavel_id: 'tec-1' })
+      body: JSON.stringify({ nome: 'Uno', placa: 'ghi-9j99', renavam: '98765432100', quilometragem_atual: 222, tecnico_responsavel_id: 'tec-1' })
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.equal(payload.placa, 'GHI9J99');
+    assert.equal(payload.renavam, '98765432100');
     assert.equal(payload.quilometragem_atual, 222);
     assert.equal(payload.tecnico_responsavel_id, 'tec-1');
     assert.equal(state.vehicles.length, 2);

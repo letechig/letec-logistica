@@ -32,6 +32,11 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
+  "overrides": {
+    "nodemon": {
+      "chokidar": "^4.0.3"
+    }
+  },
   "engines": {
     "node": ">=16.0.0"
   }
