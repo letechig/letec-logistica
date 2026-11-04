@@ -1881,6 +1881,24 @@
       ).map(item => String(item).trim()).filter(Boolean);
     }
 
+    function serviceTeamLabel(s) {
+      const team = String(s.equipe || s.eq || '').trim();
+      if (team) return team;
+
+      const technicians = serviceTechnicianIds(s).map(id => {
+        const technician = state.technicians.find(item => String(item.id || '').trim() === id);
+        return technician?.nome || technician?.name || id;
+      });
+      if (technicians.length) return Array.from(new Set(technicians)).join(', ');
+
+      const names = parseArrayLike(s.tecnicos || s.tecnicos_nomes || s.technicians || s.technician_names)
+        .map(item => typeof item === 'object' ? (item.nome || item.name || item.id || '') : String(item).trim())
+        .filter(Boolean);
+      if (names.length) return Array.from(new Set(names)).join(', ');
+
+      return String(s.tecnico_nome || s.technician_name || s.tecnico || s.technician || '').trim();
+    }
+
     function serviceTechnicianText(s) {
       return [
         s.equipe,
@@ -2156,6 +2174,7 @@
             <strong>${escapeHtml(s.horario || s.hr || '--:--')} - ${escapeHtml(s.cliente || s.cl || 'Cliente')}</strong>
             <span>${escapeHtml(serviceTypes(s))}${os ? ` - OS ${escapeHtml(os)}` : ''}</span>
             <span>${escapeHtml(shortAddress(serviceAddress(s)))}</span>
+            <span>Equipe: ${escapeHtml(serviceTeamLabel(s) || '-')}</span>
           </div>
           <span class="status-badge ${status}">${statusLabel(status)}</span>
         </div>`;
