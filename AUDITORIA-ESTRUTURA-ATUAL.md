@@ -66,13 +66,16 @@ Para banco novo, use `supabase-setup.sql` como base. Para bancos existentes, apl
 4. `migration-add-customer-contact-fields.sql`
 5. `migration-import-client-base.sql`
 6. `migration-add-inventory.sql`
-7. `migration-add-technician-portal.sql`
-8. `migration-field-ops-status.sql`
-9. `migration-field-ops-whatsapp-escalation.sql`
-10. `migration-customer-reminders.sql`
-11. `migration-logistica-whatsapp-fase1.sql`
-12. `migration-clientes-agenda-ux.sql`
-13. `migration-clientes-unidades.sql`
+7. `migration-inventory-purchase-details.sql`
+8. `migration-add-technician-portal.sql`
+9. `migration-field-ops-status.sql`
+10. `migration-field-ops-whatsapp-escalation.sql`
+11. `migration-customer-reminders.sql`
+12. `migration-logistica-whatsapp-fase1.sql`
+13. `migration-clientes-agenda-ux.sql`
+14. `migration-clientes-unidades.sql`
+15. demais migrations funcionais aplicaveis ao ambiente
+16. `migration-security-enable-rls.sql` (sempre por ultimo)
 
 `supabase-setup.sql` foi alinhado para manter `services.cliente_id` com FK para `customers(id)` usando `ON DELETE SET NULL`.
 
