@@ -1272,12 +1272,30 @@ function normalizeInventoryMovementPayload(input = {}) {
     error.status = 400;
     throw error;
   }
+  let precoUnitario = null;
+  const rawPrecoUnitario = input.preco_unitario;
+  if (tipo === 'entrada' && rawPrecoUnitario !== undefined && rawPrecoUnitario !== null && rawPrecoUnitario !== '') {
+    precoUnitario = cleanNumber(rawPrecoUnitario);
+    if (
+      !['number', 'string'].includes(typeof rawPrecoUnitario) ||
+      precoUnitario === null ||
+      precoUnitario < 0 ||
+      precoUnitario > 9999999999.99 ||
+      Math.abs(precoUnitario * 100 - Math.round(precoUnitario * 100)) > 1e-8
+    ) {
+      const error = new Error('Preco unitario invalido');
+      error.status = 400;
+      throw error;
+    }
+  }
   return {
     data: cleanDateText(input.data) || new Date().toISOString().slice(0, 10),
     tipo,
     product_id: cleanNumber(input.product_id),
     produto_nome: cleanText(input.produto_nome, 180),
     quantidade,
+    fornecedor: tipo === 'entrada' ? cleanNullableText(input.fornecedor, 200) : null,
+    preco_unitario: precoUnitario,
     vehicle_id: cleanNullableText(input.vehicle_id, 80),
     veiculo_nome: cleanText(input.veiculo_nome, 160),
     motivo_os: cleanText(input.motivo_os, 160),
@@ -5154,6 +5172,9 @@ app.post('/api/inventory/movements', strictLimiter, async (req, res) => {
     res.status(201).json(data?.[0] || null);
   } catch (error) {
     console.error('[POST /api/inventory/movements] Error:', error.message);
+    if (error.code === 'PGRST204' || error.code === '42703') {
+      return res.status(503).json({ error: 'Aplique a migration-inventory-purchase-details.sql no Supabase para registrar fornecedor e preco.' });
+    }
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao criar movimentacao' });
   }
 });

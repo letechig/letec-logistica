@@ -2124,7 +2124,7 @@ td.bold { color: var(--text); font-weight: 600; }
 .inventory-shell { display:flex; flex-direction:column; gap:14px; }
 .inventory-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .inventory-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-.inventory-kpis { display:grid; grid-template-columns:repeat(5,minmax(120px,1fr)); gap:8px; margin-bottom:2px; }
+.inventory-kpis { display:grid; grid-template-columns:repeat(6,minmax(120px,1fr)); gap:8px; margin-bottom:2px; }
 .inventory-metric { border:1px solid var(--border); background:var(--card); border-radius:var(--r); padding:10px 12px; min-height:68px; }
 .inventory-metric-label { font-size:10px; font-family:var(--mono); text-transform:uppercase; letter-spacing:1px; color:var(--text3); margin-bottom:5px; }
 .inventory-metric-value { font-size:22px; font-weight:850; color:var(--text); line-height:1; }
@@ -4554,9 +4554,26 @@ async function carregarVeiculos(){
               </select>
               <button class="btn btn-ghost btn-sm" onclick="clearInventoryFilters()">Limpar</button>
             </div>
+            <div class="inventory-panel" style="padding:12px;margin-bottom:12px">
+              <div class="inventory-panel-head">
+                <div>
+                  <div class="card-label">Comparar preços de compra</div>
+                  <div class="section-sub" style="font-size:12px">Compare entradas do mesmo produto pela unidade cadastrada.</div>
+                </div>
+                <select class="fsel" id="inventory-price-compare-product" onchange="handleInventoryPriceCompareChange()" style="min-width:220px">
+                  <option value="">Selecione um produto</option>
+                </select>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>Fornecedor</th><th>Data</th><th>Quantidade</th><th>Preço unitário</th><th>Total</th></tr></thead>
+                  <tbody id="inventory-price-comparison-tbody"><tr><td colspan="5" class="text-muted">Selecione um produto para comparar compras.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
             <div class="tbl-wrap inventory-movements-table-wrap">
               <table>
-                <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Veículo</th><th>Motivo/OS</th><th>Operador</th><th>Obs.</th></tr></thead>
+                <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Fornecedor</th><th>Preço unit.</th><th>Total</th><th>Veículo</th><th>Motivo/OS</th><th>Operador</th><th>Obs.</th></tr></thead>
                 <tbody id="inventory-movements-tbody"></tbody>
               </table>
             </div>
@@ -8410,6 +8427,8 @@ let fieldOpsAudioAwaitingGesture = false;
 let inventoryProducts = [];
 let inventoryMovements = [];
 let inventorySchemaReady = true;
+let inventorySpendMonth = '';
+let inventoryCompareProductId = '';
 let customerReminders = [];
 let customerRemindersSchemaReady = true;
 let evolutionStatus = { checked:false, configured:false, connected:false };
@@ -21390,6 +21409,26 @@ function inventoryFmtQty(value) {
   return n.toLocaleString('pt-BR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
 }
 
+function inventoryFmtCurrency(value) {
+  return new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(inventoryNum(value));
+}
+
+function inventoryCurrentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function updateInventoryPurchaseTotal() {
+  const quantity = Math.abs(inventoryNum(document.getElementById('inv-mov-qtd')?.value));
+  const rawPrice = document.getElementById('inv-mov-preco')?.value;
+  const price = rawPrice === undefined || rawPrice.trim() === '' ? null : Number(rawPrice);
+  const total = document.getElementById('inv-mov-total');
+  if (!total) return;
+  total.textContent = price === null || !Number.isFinite(price)
+    ? `Total da compra: ${inventoryFmtCurrency(0)}. Informe o preço unitário para calcular.`
+    : `Total da compra: ${inventoryFmtCurrency(Math.round(quantity * price * 100) / 100)}.`;
+}
+
 function inventoryFmtDate(dateStr) {
   if (!dateStr) return '—';
   const parts = String(dateStr).split('-');
@@ -21671,7 +21710,7 @@ function renderInventory() {
     const movementsPagination = document.getElementById('inventory-movements-pagination');
     if (movementsPagination) movementsPagination.innerHTML = '';
     productsBody.innerHTML = '<tr><td colspan="10" class="text-muted">Estoque indisponível até a migração ser aplicada.</td></tr>';
-    movementsBody.innerHTML = '<tr><td colspan="8" class="text-muted">Sem histórico disponível.</td></tr>';
+    movementsBody.innerHTML = '<tr><td colspan="11" class="text-muted">Sem histórico disponível.</td></tr>';
     return;
   }
 
@@ -21684,15 +21723,21 @@ function renderInventory() {
   const ok = productRows.filter(r => r.status.key === 'ok').length;
   const lowCritical = productRows.filter(r => ['baixo','critico'].includes(r.status.key)).length;
   const empty = productRows.filter(r => r.status.key === 'esgotado').length;
-  const monthKey = new Date().toISOString().slice(0, 7);
+  if (!inventorySpendMonth) inventorySpendMonth = inventoryCurrentMonth();
+  const monthKey = inventorySpendMonth;
   const saidasMes = inventoryMovements.filter(m => m.tipo === 'saida' && String(m.data || '').startsWith(monthKey)).length;
+  const gastosMesCentavos = inventoryMovements
+    .filter(m => m.tipo === 'entrada' && String(m.data || '').startsWith(monthKey) && m.preco_unitario !== null && m.preco_unitario !== undefined && String(m.preco_unitario).trim() !== '')
+    .reduce((total, m) => total + Math.round(Math.abs(inventoryNum(m.quantidade)) * inventoryNum(m.preco_unitario) * 100), 0);
+  const selectedMonthLabel = new Date(`${monthKey}-01T12:00:00`).toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
 
   kpis.innerHTML = `
     <div class="inventory-metric"><div class="inventory-metric-label">Produtos</div><div class="inventory-metric-value cv-blue">${total}</div><div class="inventory-metric-note">cadastrados</div></div>
     <div class="inventory-metric"><div class="inventory-metric-label">OK</div><div class="inventory-metric-value cv-green">${ok}</div><div class="inventory-metric-note">saldo adequado</div></div>
     <div class="inventory-metric"><div class="inventory-metric-label">Atenção</div><div class="inventory-metric-value cv-orange">${lowCritical}</div><div class="inventory-metric-note">baixo / crítico</div></div>
     <div class="inventory-metric"><div class="inventory-metric-label">Zerados</div><div class="inventory-metric-value cv-red">${empty}</div><div class="inventory-metric-note">saldo zerado</div></div>
-    <div class="inventory-metric"><div class="inventory-metric-label">Saídas</div><div class="inventory-metric-value">${saidasMes}</div><div class="inventory-metric-note">${new Date().toLocaleDateString('pt-BR', { month:'long' })}</div></div>`;
+    <div class="inventory-metric"><div class="inventory-metric-label">Saídas</div><div class="inventory-metric-value">${saidasMes}</div><div class="inventory-metric-note">${selectedMonthLabel}</div></div>
+    <div class="inventory-metric"><div class="inventory-metric-label">Gastos no mês</div><input type="month" class="finput" id="inventory-spend-month" value="${escapeHtmlAttr(monthKey)}" onchange="handleInventorySpendMonthChange()" aria-label="Mês para totalizar gastos"><div class="inventory-metric-value" style="font-size:18px;margin-top:6px">${inventoryFmtCurrency(gastosMesCentavos / 100)}</div><div class="inventory-metric-note">entradas com preço</div></div>`;
 
   renderInventoryCategorySummary(productRows);
   document.querySelectorAll('#inventory-product-filters .pill-btn').forEach(btn => {
@@ -21744,18 +21789,62 @@ function renderInventory() {
     const meta = inventoryMovementMeta(m.tipo);
     const qty = Math.abs(inventoryNum(m.quantidade));
     const signed = m.tipo === 'ajuste' ? inventoryFmtQty(inventoryNum(m.quantidade)) : `${meta.sign}${inventoryFmtQty(qty)}`;
+    const hasPrice = m.tipo === 'entrada' && m.preco_unitario !== null && m.preco_unitario !== undefined && String(m.preco_unitario).trim() !== '';
+    const total = hasPrice ? Math.round(qty * inventoryNum(m.preco_unitario) * 100) / 100 : null;
     return `<tr>
       <td class="mono">${inventoryFmtDate(m.data)}</td>
       <td><span class="chip ${meta.chip}">${meta.label}</span></td>
       <td class="bold">${sanitize(m.produto_nome || inventoryProductById(m.product_id)?.nome || '—')}</td>
       <td class="mono">${signed}</td>
+      <td>${sanitize(m.fornecedor || '—')}</td>
+      <td class="mono">${hasPrice ? inventoryFmtCurrency(m.preco_unitario) : '—'}</td>
+      <td class="mono">${hasPrice ? inventoryFmtCurrency(total) : '—'}</td>
       <td>${sanitize(m.veiculo_nome || '—')}</td>
       <td>${sanitize(m.motivo_os || '—')}</td>
       <td>${sanitize(m.operador || '—')}</td>
       <td>${sanitize(m.observacoes || '—')}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="8" class="text-muted">Nenhuma movimentação encontrada.</td></tr>';
+  }).join('') : '<tr><td colspan="11" class="text-muted">Nenhuma movimentação encontrada.</td></tr>';
   renderInventoryMovementPagination(movements.length, pagedMovements.length, movementPageCount, inventoryMovementPage);
+  renderInventoryPriceComparison();
+}
+
+function handleInventorySpendMonthChange() {
+  inventorySpendMonth = document.getElementById('inventory-spend-month')?.value || inventoryCurrentMonth();
+  renderInventory();
+}
+
+function handleInventoryPriceCompareChange() {
+  inventoryCompareProductId = document.getElementById('inventory-price-compare-product')?.value || '';
+  renderInventory();
+}
+
+function renderInventoryPriceComparison() {
+  const productSelect = document.getElementById('inventory-price-compare-product');
+  const body = document.getElementById('inventory-price-comparison-tbody');
+  if (!productSelect || !body) return;
+  if (inventoryCompareProductId && !inventoryProductById(inventoryCompareProductId)) inventoryCompareProductId = '';
+  productSelect.innerHTML = '<option value="">Selecione um produto</option>' + inventoryProducts
+    .map(p => `<option value="${escapeHtmlAttr(p.id)}">${sanitize(p.nome)}</option>`)
+    .join('');
+  productSelect.value = inventoryCompareProductId;
+  if (!inventoryCompareProductId) {
+    body.innerHTML = '<tr><td colspan="5" class="text-muted">Selecione um produto para comparar compras.</td></tr>';
+    return;
+  }
+  const purchases = inventoryMovements
+    .filter(m => m.tipo === 'entrada' && String(m.product_id) === String(inventoryCompareProductId) && m.preco_unitario !== null && m.preco_unitario !== undefined && String(m.preco_unitario).trim() !== '')
+    .sort((a, b) => inventoryNum(a.preco_unitario) - inventoryNum(b.preco_unitario) || String(b.data || '').localeCompare(String(a.data || '')));
+  body.innerHTML = purchases.length ? purchases.map(m => {
+    const total = Math.round(Math.abs(inventoryNum(m.quantidade)) * inventoryNum(m.preco_unitario) * 100) / 100;
+    return `<tr>
+      <td>${sanitize(m.fornecedor || '—')}</td>
+      <td class="mono">${inventoryFmtDate(m.data)}</td>
+      <td class="mono">${inventoryFmtQty(m.quantidade)}</td>
+      <td class="mono bold">${inventoryFmtCurrency(m.preco_unitario)}</td>
+      <td class="mono">${inventoryFmtCurrency(total)}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="5" class="text-muted">Nenhuma entrada com preço informado para este produto.</td></tr>';
 }
 
 function clearInventoryFilters() {
@@ -21819,6 +21908,7 @@ function openInventoryMovement(tipo = 'saida', productId = '') {
   const meta = inventoryMovementMeta(tipo);
   const today = new Date().toISOString().split('T')[0];
   const needsVehicle = tipo === 'saida';
+  const isPurchase = tipo === 'entrada';
   document.getElementById('inventory-modal-title').textContent = meta.label;
   document.getElementById('inventory-modal-body').innerHTML = `
     <input type="hidden" id="inv-mov-tipo" value="${escapeHtmlAttr(tipo)}">
@@ -21827,13 +21917,18 @@ function openInventoryMovement(tipo = 'saida', productId = '') {
       <div class="field"><label>Produto *</label><select class="fsel" id="inv-mov-produto" onchange="updateInventoryMovementWarning()">${inventoryProductOptions(productId)}</select></div>
     </div>
     <div class="form-row fr-2 mb3">
-      <div class="field"><label>${tipo === 'ajuste' ? 'Quantidade do ajuste *' : 'Quantidade *'}</label><input type="number" step="0.01" class="finput" id="inv-mov-qtd" placeholder="${tipo === 'ajuste' ? 'Ex: -2 ou 5' : 'Ex: 3'}" oninput="updateInventoryMovementWarning()"></div>
+      <div class="field"><label>${tipo === 'ajuste' ? 'Quantidade do ajuste *' : 'Quantidade *'}</label><input type="number" step="0.01" class="finput" id="inv-mov-qtd" placeholder="${tipo === 'ajuste' ? 'Ex: -2 ou 5' : 'Ex: 3'}" oninput="updateInventoryMovementWarning();updateInventoryPurchaseTotal()"></div>
       <div class="field"><label>Veículo ${needsVehicle ? '*' : ''}</label><select class="fsel" id="inv-mov-veiculo">${inventoryVehicleOptions()}</select></div>
     </div>
     <div class="form-row fr-2 mb3">
       <div class="field"><label>Motivo / OS</label><input class="finput" id="inv-mov-motivo" placeholder="Ex: OS 3537, reposição, ajuste..."></div>
       <div class="field"><label>Observações</label><input class="finput" id="inv-mov-obs" placeholder="Observação opcional"></div>
     </div>
+    ${isPurchase ? `<div class="form-row fr-2 mb3">
+      <div class="field"><label>Fornecedor</label><input class="finput" id="inv-mov-fornecedor" maxlength="200" placeholder="Nome do fornecedor"></div>
+      <div class="field"><label>Preço unitário</label><input type="number" min="0" step="0.01" class="finput" id="inv-mov-preco" placeholder="0,00" oninput="updateInventoryPurchaseTotal()"></div>
+    </div>
+    <div class="text-muted" id="inv-mov-total" style="font-size:12px;margin-bottom:10px">Total da compra: ${inventoryFmtCurrency(0)}. O valor será calculado pela quantidade e preço unitário.</div>` : ''}
     <div class="text-muted" style="font-size:12px">${tipo === 'saida' ? 'A saída é registrada por veículo e reduz o saldo calculado.' : tipo === 'entrada' ? 'A entrada aumenta o saldo calculado do produto.' : 'Ajuste positivo aumenta e ajuste negativo reduz o saldo.'}</div>`;
   document.getElementById('inventory-modal-warning').style.display = 'none';
   document.getElementById('inventory-modal-save').textContent = `Salvar ${meta.label.toLowerCase()}`;
@@ -21928,6 +22023,12 @@ async function saveInventoryMovement() {
   if (tipo === 'ajuste' ? qtdRaw === 0 : qtdRaw <= 0) { toast('Preencha uma quantidade válida', 'err'); return; }
   if (tipo === 'saida' && !vehicleName) { toast('Selecione o veículo da saída', 'err'); return; }
 
+  const rawPrice = document.getElementById('inv-mov-preco')?.value.trim();
+  const unitPrice = tipo === 'entrada' && rawPrice ? Number(rawPrice) : null;
+  if (unitPrice !== null && (!Number.isFinite(unitPrice) || unitPrice < 0)) {
+    toast('Preencha um preço unitário válido', 'err');
+    return;
+  }
   const quantity = tipo === 'ajuste' ? qtdRaw : Math.abs(qtdRaw);
   const payload = {
     data,
@@ -21935,6 +22036,8 @@ async function saveInventoryMovement() {
     product_id: product.id,
     produto_nome: product.nome,
     quantidade: quantity,
+    fornecedor: tipo === 'entrada' ? document.getElementById('inv-mov-fornecedor')?.value.trim() || '' : '',
+    preco_unitario: unitPrice,
     vehicle_id: vehicleId || null,
     veiculo_nome: vehicleName || '',
     motivo_os: document.getElementById('inv-mov-motivo')?.value.trim() || '',

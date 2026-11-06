@@ -239,6 +239,37 @@ test('rotas de estoque criam produto e movimentacao pelo backend', async () => {
     assert.equal(productResponse.status, 201);
     const product = await productResponse.json();
 
+    const purchaseResponse = await fetch(`${baseUrl}/api/inventory/movements`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: '2026-05-10',
+        tipo: 'entrada',
+        product_id: product.id,
+        produto_nome: product.nome,
+        quantidade: 3,
+        fornecedor: 'Fornecedor A',
+        preco_unitario: 12.5
+      })
+    });
+    assert.equal(purchaseResponse.status, 201);
+    const purchase = await purchaseResponse.json();
+    assert.equal(purchase.fornecedor, 'Fornecedor A');
+    assert.equal(purchase.preco_unitario, 12.5);
+
+    const invalidPurchaseResponse = await fetch(`${baseUrl}/api/inventory/movements`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: '2026-05-11',
+        tipo: 'entrada',
+        product_id: product.id,
+        quantidade: 1,
+        preco_unitario: -1
+      })
+    });
+    assert.equal(invalidPurchaseResponse.status, 400);
+
     const movementResponse = await fetch(`${baseUrl}/api/inventory/movements`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -246,12 +277,12 @@ test('rotas de estoque criam produto e movimentacao pelo backend', async () => {
     });
     assert.equal(movementResponse.status, 201);
     assert.equal(state.inventory_products.length, 1);
-    assert.equal(state.inventory_movements.length, 1);
+    assert.equal(state.inventory_movements.length, 2);
 
     const deleteResponse = await fetch(`${baseUrl}/api/inventory/products/${product.id}`, { method: 'DELETE' });
     assert.equal(deleteResponse.status, 200);
     assert.equal(state.inventory_products.length, 0);
-    assert.equal(state.inventory_movements.length, 1);
+    assert.equal(state.inventory_movements.length, 2);
   });
 });
 

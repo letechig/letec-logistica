@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   product_id BIGINT REFERENCES inventory_products(id) ON DELETE SET NULL,
   produto_nome TEXT,
   quantidade NUMERIC(12,2) NOT NULL DEFAULT 0,
+  fornecedor TEXT,
+  preco_unitario NUMERIC(12,2),
   vehicle_id TEXT,
   veiculo_nome TEXT,
   motivo_os TEXT,
@@ -47,6 +49,8 @@ ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS tipo TEXT;
 ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS product_id BIGINT REFERENCES inventory_products(id) ON DELETE SET NULL;
 ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS produto_nome TEXT;
 ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS quantidade NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS fornecedor TEXT;
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS preco_unitario NUMERIC(12,2);
 ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS vehicle_id TEXT;
 ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS veiculo_nome TEXT;
 ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS motivo_os TEXT;
@@ -61,6 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_inventory_movements_data ON inventory_movements(d
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_tipo ON inventory_movements(tipo);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_product ON inventory_movements(product_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_vehicle ON inventory_movements(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_purchase_compare ON inventory_movements(product_id, data)
+  WHERE tipo = 'entrada' AND preco_unitario IS NOT NULL;
 
 UPDATE inventory_products
 SET categoria = CASE
