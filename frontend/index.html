@@ -12683,7 +12683,7 @@ function fleetFilteredVehicles() {
   const status = String(fleetFilters.status || '');
   const alertMode = String(fleetFilters.alert || '');
   return (fleetVehicles || []).filter(vehicle => {
-    const text = [vehicle.nome, vehicle.placa, vehicle.marca, vehicle.modelo].join(' ').toLowerCase();
+    const text = [vehicle.nome, vehicle.placa, vehicle.renavam, vehicle.marca, vehicle.modelo].join(' ').toLowerCase();
     const vehicleStatus = String(vehicle.status || (vehicle.ativo === false ? 'inativo' : 'ativo'));
     const hasAlert = fleetVehicleAlerts(vehicle.id).length > 0;
     if (search && !text.includes(search)) return false;
@@ -12808,7 +12808,7 @@ function renderFrotaV1() {
         </div>
       </div>
       <div class="filter-bar ui-filter-panel fleet-filter-panel">
-        <input class="finput" placeholder="Buscar por placa, nome, marca ou modelo..." value="${escapeHtmlAttr(fleetFilters.search || '')}" oninput="setFleetFilter('search', this.value)">
+        <input class="finput" placeholder="Buscar por placa, RENAVAM, nome, marca ou modelo..." value="${escapeHtmlAttr(fleetFilters.search || '')}" oninput="setFleetFilter('search', this.value)">
         <select class="fsel" onchange="setFleetFilter('status', this.value)">
           <option value="" ${!fleetFilters.status ? 'selected' : ''}>Todos status</option>
           <option value="ativo" ${fleetFilters.status === 'ativo' ? 'selected' : ''}>Ativo</option>
@@ -12822,12 +12822,13 @@ function renderFrotaV1() {
         </select>
       </div>
       <div class="tbl-wrap ui-table-card"><table>
-        <thead><tr><th>Placa</th><th>Veículo</th><th>Técnico</th><th>KM atual</th><th>Status</th><th>Rodízio</th><th>Próximo alerta</th><th>Ações</th></tr></thead>
+        <thead><tr><th>Placa</th><th>RENAVAM</th><th>Veículo</th><th>Técnico</th><th>KM atual</th><th>Status</th><th>Rodízio</th><th>Próximo alerta</th><th>Ações</th></tr></thead>
         <tbody>${filteredVehicles.length ? filteredVehicles.map(v => {
           const alert = fleetVehicleAlert(v.id);
           const rodizioAtual = rodizioAssessment(v.nome, saoPauloNowParts().date, '', { useCurrentTime:true });
           return `<tr>
             <td class="mono">${sanitize(v.placa || '—')}</td>
+            <td class="mono">${sanitize(v.renavam || '—')}</td>
             <td class="fleet-vehicle-name"><strong>${sanitize(v.nome || [v.marca, v.modelo].filter(Boolean).join(' ') || '—')}</strong><span>${sanitize([v.marca, v.modelo, v.ano].filter(Boolean).join(' · ') || 'Dados gerais pendentes')}</span></td>
             <td>${sanitize((window._tecnicos || []).find(t => String(t.id) === String(v.tecnico_responsavel_id))?.nome || '—')}</td>
             <td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td>
@@ -12839,7 +12840,7 @@ function renderFrotaV1() {
               <button class="btn btn-ghost btn-xs" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)})">Editar</button>
             </div></td>
           </tr>`;
-        }).join('') : '<tr><td colspan="8"><div class="ui-empty-state"><div class="ui-empty-title">Nenhum veículo encontrado</div><div>Ajuste os filtros ou cadastre um novo veículo.</div></div></td></tr>'}</tbody>
+        }).join('') : '<tr><td colspan="9"><div class="ui-empty-state"><div class="ui-empty-title">Nenhum veículo encontrado</div><div>Ajuste os filtros ou cadastre um novo veículo.</div></div></td></tr>'}</tbody>
       </table></div>
     </div>`;
 
@@ -12867,7 +12868,7 @@ function renderDetalheVeiculo(v) {
       <div class="fleet-detail-hero">
         <div>
           <div class="fleet-detail-title">${sanitize(v.nome || 'Veículo')} ${v.placa ? `<span class="mono">· ${sanitize(v.placa)}</span>` : ''}</div>
-          <div class="fleet-detail-meta">${sanitize([v.marca, v.modelo, v.ano].filter(Boolean).join(' · ') || 'Dados gerais pendentes')} · KM ${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</div>
+          <div class="fleet-detail-meta">${sanitize([v.marca, v.modelo, v.ano].filter(Boolean).join(' · ') || 'Dados gerais pendentes')} · RENAVAM ${sanitize(v.renavam || '—')} · KM ${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</div>
         </div>
         <div class="fleet-actions">
           <button class="btn btn-ghost btn-sm" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)})">Editar veículo</button>
@@ -22277,8 +22278,8 @@ async function carregarVeiculosConfig() {
           <button class="btn btn-primary btn-sm" onclick="abrirCadastroVeiculoFrota(null, 'config')">Novo veículo</button>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Veículo</th><th>Placa</th><th>KM</th><th>Rodízio</th><th>Status</th><th>Ações</th></tr></thead>
-          <tbody>${items.map(v => `<tr><td class="bold">${sanitize(v.nome)}</td><td class="mono">${sanitize(v.placa || '—')}</td><td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td><td>${sanitize(v.rodizio?.dia_rodizio || '—')}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)}, 'config')">Editar</button><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${jsArg(v.id)}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button><button class="btn btn-ghost btn-sm" onclick="abrirVeiculoNaFrota(${jsArg(v.id)})">Abrir Frota</button></td></tr>`).join('')}</tbody>
+          <thead><tr><th>Veículo</th><th>Placa</th><th>RENAVAM</th><th>KM</th><th>Rodízio</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>${items.map(v => `<tr><td class="bold">${sanitize(v.nome)}</td><td class="mono">${sanitize(v.placa || '—')}</td><td class="mono">${sanitize(v.renavam || '—')}</td><td class="mono">${Number(v.quilometragem_atual || 0).toLocaleString('pt-BR')}</td><td>${sanitize(v.rodizio?.dia_rodizio || '—')}</td><td>${v.ativo ? '<span class="chip chip-green">Ativo</span>' : '<span class="chip chip-orange">Inativo</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="abrirCadastroVeiculoFrota(${jsArg(v.id)}, 'config')">Editar</button><button class="btn btn-ghost btn-sm" onclick="toggleVeiculo(${jsArg(v.id)}, ${!v.ativo})">${v.ativo ? 'Desativar' : 'Ativar'}</button><button class="btn btn-ghost btn-sm" onclick="abrirVeiculoNaFrota(${jsArg(v.id)})">Abrir Frota</button></td></tr>`).join('')}</tbody>
         </table></div>
       </div>`;
   } catch(e) { container.innerHTML = '<div class="text-muted" style="color:var(--red)">Erro: ' + e.message + '</div>'; }
