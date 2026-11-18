@@ -17410,9 +17410,77 @@ function bindNewSvcGuideSummary(){
     el.addEventListener('input', updateNewSvcGuideSummary);
     el.addEventListener('change', updateNewSvcGuideSummary);
   });
+  document.getElementById('ns-dt')?.addEventListener('change', suggestNewSvcVehicle);
+  document.getElementById('ns-hr')?.addEventListener('change', suggestNewSvcVehicle);
+  document.getElementById('ns-vei')?.addEventListener('change', () => {
+    const vehicle = document.getElementById('ns-vei');
+    if (!vehicle) return;
+    vehicle.dataset.vehicleManuallyChanged = 'true';
+    vehicle.dataset.vehicleAutoFilled = 'false';
+    const hint = document.getElementById('ns-vehicle-suggestion');
+    if (hint) hint.textContent = '';
+  });
   document.getElementById('ns-tipos-container')?.addEventListener('change', updateNewSvcGuideSummary);
-  document.getElementById('ns-tecnicos-container')?.addEventListener('change', updateNewSvcGuideSummary);
+  document.getElementById('ns-tecnicos-container')?.addEventListener('change', () => {
+    suggestNewSvcVehicle();
+    updateNewSvcGuideSummary();
+  });
+  suggestNewSvcVehicle();
   updateNewSvcGuideSummary();
+}
+
+function suggestNewSvcVehicle() {
+  const vehicleSelect = document.getElementById('ns-vei');
+  const hint = document.getElementById('ns-vehicle-suggestion');
+  if (!vehicleSelect) return;
+  if (vehicleSelect.dataset.vehicleManuallyChanged === 'true') return;
+  if (vehicleSelect.value && vehicleSelect.dataset.vehicleAutoFilled !== 'true') return;
+
+  const date = document.getElementById('ns-dt')?.value || '';
+  const technicianIds = new Set(
+    Array.from(document.querySelectorAll('#ns-tecnicos-container input:checked')).map(input => String(input.value))
+  );
+  const timeValue = document.getElementById('ns-hr')?.value || '';
+  const timeMatch = timeValue.match(/^(\d{1,2}):(\d{2})$/);
+  const targetMinutes = timeMatch ? Number(timeMatch[1]) * 60 + Number(timeMatch[2]) : null;
+
+  const candidates = [];
+  if (date && technicianIds.size) {
+    (services || []).forEach((service, index) => {
+      if (getServiceDateValue(service) !== date) return;
+      if (String(service.status || service.st || '').toLowerCase() === 'cancelado') return;
+
+      const vehicle = String(service.veiculo || '').trim();
+      const sharedTechnician = getServiceTecnicosIds(service).some(id => technicianIds.has(String(id)));
+      if (!vehicle || !sharedTechnician) return;
+
+      const serviceTime = String(service.horario || service.hr || '');
+      const match = serviceTime.match(/^(\d{1,2}):(\d{2})$/);
+      const minutes = match ? Number(match[1]) * 60 + Number(match[2]) : null;
+      if (targetMinutes !== null && (minutes === null || minutes >= targetMinutes)) return;
+      candidates.push({ vehicle, minutes, index });
+    });
+  }
+
+  candidates.sort((a, b) => {
+    if (a.minutes !== null && b.minutes !== null) return b.minutes - a.minutes;
+    if (a.minutes !== null) return -1;
+    if (b.minutes !== null) return 1;
+    return b.index - a.index;
+  });
+
+  const suggestion = candidates[0];
+  const hasOption = suggestion && Array.from(vehicleSelect.options).some(option => option.value === suggestion.vehicle);
+  if (hasOption) {
+    vehicleSelect.value = suggestion.vehicle;
+    vehicleSelect.dataset.vehicleAutoFilled = 'true';
+    const serviceTime = String((services || [])[suggestion.index]?.horario || (services || [])[suggestion.index]?.hr || '').trim();
+    if (hint) hint.textContent = `Sugerido do serviço anterior${serviceTime ? ` (${serviceTime})` : ''}. Você pode alterar.`;
+  } else {
+    if (vehicleSelect.dataset.vehicleAutoFilled === 'true') vehicleSelect.value = '';
+    vehicleSelect.dataset.vehicleAutoFilled = 'false';
+    if (hint) hint.textContent = '';
+  }
 }
 
 function openNewSvc(initialData = {}){
@@ -17543,6 +17611,7 @@ function openNewSvc(initialData = {}){
               <div class="svc-edit-field">
                 <label class="svc-edit-label">Veículo</label>
                 <select id="ns-vei">${getVeiculosOptions()}</select>
+                <div id="ns-vehicle-suggestion" class="svc-edit-help" aria-live="polite"></div>
               </div>
               <div class="svc-edit-field">
                 <label class="svc-edit-label">OS (Ordem de Serviço)</label>
@@ -17576,8 +17645,17 @@ function openNewSvc(initialData = {}){
   const draftTechnicians = Array.isArray(source.tecnicos_ids) ? source.tecnicos_ids : [];
   const draftTypes = Array.isArray(source.tipos) ? source.tipos : [];
   renderTecnicos(draftTechnicians, 'ns-tecnicos-container');
-  carregarTecnicos().then(() => { renderTecnicos(draftTechnicians, 'ns-tecnicos-container'); updateNewSvcGuideSummary(); });
-  carregarVeiculos().then(() => { renderVeiculosSelect('ns-vei', source.veiculo || ''); updateNewSvcGuideSummary(); });
+  carregarTecnicos().then(() => {
+    renderTecnicos(draftTechnicians, 'ns-tecnicos-container');
+    suggestNewSvcVehicle();
+    updateNewSvcGuideSummary();
+  });
+  carregarVeiculos().then(() => {
+    const vehicle = document.getElementById('ns-vei');
+    renderVeiculosSelect('ns-vei', vehicle?.value || source.veiculo || '');
+    suggestNewSvcVehicle();
+    updateNewSvcGuideSummary();
+  });
   renderTiposCheckbox(draftTypes, 'ns-tipos-container');
   bindTiposPreview('ns-tipos-preview', 'ns-tipos-container');
   initServicoClienteSelect('ns', defaults.clientId, defaults.cliente);
