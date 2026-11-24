@@ -2537,20 +2537,28 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
   const customerIds = services.map(service => serviceCustomerId(service)).filter(Boolean);
   const addressIds = services.map(service => service.customer_address_id).filter(Boolean);
 
-  const [customers, addressesByExplicitId, addressesByCustomer] = await Promise.all([
+  const [customers, addressesByExplicitId, addressesByCustomer, customerContacts] = await Promise.all([
     safeSelectByIds(db, 'customers', 'id', customerIds),
     safeSelectByIds(db, 'customer_addresses', 'id', addressIds),
-    safeSelectByIds(db, 'customer_addresses', 'customer_id', customerIds)
+    safeSelectByIds(db, 'customer_addresses', 'customer_id', customerIds),
+    safeSelectByIds(db, 'customer_contacts', 'customer_id', customerIds)
   ]);
 
   const customerById = new Map(customers.map(customer => [String(customer.id), customer]));
   const addressById = new Map(addressesByExplicitId.map(address => [String(address.id), address]));
   const addressesByCustomerId = new Map();
+  const contactsByCustomerId = new Map();
   addressesByCustomer.forEach(address => {
     const key = String(address.customer_id || '');
     if (!key) return;
     if (!addressesByCustomerId.has(key)) addressesByCustomerId.set(key, []);
     addressesByCustomerId.get(key).push(address);
+  });
+  customerContacts.forEach(contact => {
+    const key = String(contact.customer_id || '');
+    if (!key) return;
+    if (!contactsByCustomerId.has(key)) contactsByCustomerId.set(key, []);
+    contactsByCustomerId.get(key).push(contact);
   });
 
   return services.map(service => {
@@ -2558,6 +2566,11 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
     const customer = customerById.get(String(customerId || '')) || null;
     const explicitAddress = service.customer_address_id ? addressById.get(String(service.customer_address_id)) : null;
     const primaryAddress = customerId ? choosePrimaryAddress(addressesByCustomerId.get(String(customerId)) || []) : null;
+    const customerPhone = schedulingPhone(customer || {}, contactsByCustomerId.get(String(customerId || '')) || [])
+      || [service.contato_cliente, service.telefone_cliente, service.telefone, service.whatsapp]
+        .map(normalizeBrazilWhatsAppNumber)
+        .find(Boolean)
+      || '';
     const address = explicitAddress || primaryAddress || null;
     const addressCoords = validCoordinatePair(address?.latitude, address?.longitude);
     const customerCoords = validCoordinatePair(customer?.latitude, customer?.longitude);
@@ -2569,6 +2582,7 @@ async function enrichServicesWithCustomerLocations(db, rows = []) {
       ...service,
       cliente_id: service.cliente_id || customer?.id || null,
       customer_id: service.customer_id || service.cliente_id || customer?.id || null,
+      telefone_cliente: customerPhone || null,
       customer_address_id: service.customer_address_id || address?.id || null,
       latitude: selected?.latitude ?? null,
       longitude: selected?.longitude ?? null,

@@ -326,6 +326,34 @@
     .client { margin-top:12px; font-size:20px; font-weight:950; line-height:1.15; letter-spacing:-.01em; }
     .meta { margin-top:7px; color:var(--muted); font-size:13px; line-height:1.35; }
     .route-row { margin-top:9px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .customer-contact {
+      display:flex;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:9px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+    }
+    .customer-contact a {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:34px;
+      padding:0 11px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      background:#fff;
+      color:var(--text-2);
+      font-weight:900;
+      text-decoration:none;
+    }
+    .customer-contact a.whatsapp-link {
+      border-color:#bbf7d0;
+      background:#f0fdf4;
+      color:#15803d;
+    }
     .maps-link {
       display:inline-flex;
       align-items:center;
@@ -2151,6 +2179,7 @@
             </div>
             <div class="client">${escapeHtml(s.cliente || s.cl || 'Cliente')}</div>
             <div class="meta">${escapeHtml(s.endereco || 'Endereco nao informado')}</div>
+            ${renderCustomerContact(s)}
             ${renderMapsAction(s)}
             <div class="service-grid">
               <div class="mini">Tipo: ${escapeHtml(serviceTypes(s))}</div>
@@ -2174,6 +2203,7 @@
             <strong>${escapeHtml(s.horario || s.hr || '--:--')} - ${escapeHtml(s.cliente || s.cl || 'Cliente')}</strong>
             <span>${escapeHtml(serviceTypes(s))}${os ? ` - OS ${escapeHtml(os)}` : ''}</span>
             <span>${escapeHtml(shortAddress(serviceAddress(s)))}</span>
+            ${renderCustomerContact(s)}
             <span>Equipe: ${escapeHtml(serviceTeamLabel(s) || '-')}</span>
           </div>
           <span class="status-badge ${status}">${statusLabel(status)}</span>
@@ -2223,6 +2253,25 @@
       if (!address) return '';
       const url = buildGoogleMapsUrl(address);
       return `<div class="route-row"><a class="maps-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Maps</a></div>`;
+    }
+
+    function renderCustomerContact(s) {
+      const rawPhone = String(s.telefone_cliente || s.cliente_telefone || s.contato_cliente || s.telefone || s.whatsapp || '');
+      const digits = rawPhone.replace(/\D/g, '');
+      const whatsappNumber = digits.startsWith('55') && [12, 13].includes(digits.length)
+        ? digits
+        : [10, 11].includes(digits.length) ? `55${digits}` : '';
+      if (!whatsappNumber) return '<div class="customer-contact">Telefone/WhatsApp nao informado</div>';
+      const localNumber = whatsappNumber.slice(2);
+      const formattedPhone = localNumber.length === 11
+        ? `(${localNumber.slice(0, 2)}) ${localNumber.slice(2, 7)}-${localNumber.slice(7)}`
+        : `(${localNumber.slice(0, 2)}) ${localNumber.slice(2, 6)}-${localNumber.slice(6)}`;
+      return `
+        <div class="customer-contact">
+          <span>Telefone do cliente:</span>
+          <a href="tel:+${whatsappNumber}" aria-label="Ligar para ${formattedPhone}">${formattedPhone}</a>
+          <a class="whatsapp-link" href="https://wa.me/${whatsappNumber}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+        </div>`;
     }
 
     function renderServiceAction(s, status) {
