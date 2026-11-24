@@ -123,3 +123,27 @@ test('POST /api/services rejeita nome solto e nao cria cliente nem OS', async ()
     assert.equal(state.services.some(service => service.id === 104), false);
   });
 });
+
+test('GET /api/services inclui telefone do contato ativo do cliente', async () => {
+  await withServer(async (baseUrl, state) => {
+    state.customers[0].telefone = null;
+    state.services.push({
+      id: 105,
+      date: '2026-05-13',
+      cliente_id: 1,
+      cliente: 'Alpha Cliente'
+    });
+    state.customer_contacts.push({
+      id: 'contact-1',
+      customer_id: 1,
+      whatsapp: '(11) 98888-7777',
+      ativo: true
+    });
+
+    const response = await fetch(`${baseUrl}/api/services`);
+
+    assert.equal(response.status, 200);
+    const [service] = await response.json();
+    assert.equal(service.telefone_cliente, '5511988887777');
+  });
+});
